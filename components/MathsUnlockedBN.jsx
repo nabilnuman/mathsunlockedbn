@@ -343,6 +343,11 @@ const ACHIEVEMENTS = [
       const idx = (p.topics[t.id] || {}).highestRank;
       return idx !== undefined && idx >= RANK_ORDER.indexOf("A");
     }) },
+  { id: "mathemagician", name: "Mathemagician", icon: "🧙", desc: "Reach S+ rank in every topic",
+    check: (p) => TOPICS.every((t) => {
+      const idx = (p.topics[t.id] || {}).highestRank;
+      return idx !== undefined && idx >= RANK_ORDER.indexOf("S+");
+    }) },
   { id: "ace", name: "Ace It", icon: "🌟", desc: "Reach S rank in any topic",
     check: (p) => Object.values(p.topics || {}).some((t) => (t.highestRank ?? -1) >= RANK_ORDER.indexOf("S")) },
   { id: "unstoppable", name: "Unstoppable", icon: "🚀", desc: "Reach S+ in any topic (20 in a row)",
