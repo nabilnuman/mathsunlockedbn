@@ -392,7 +392,7 @@ const ACHIEVEMENTS = [
 
   /* ---------------- Platinum ---------------- */
   { id: "unlocked", tier: "Platinum", name: "Mathematics Unlocked", icon: "🏆", desc: "Reach S+ rank in every topic",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS, "S+") },
+    secret: true, check: (p) => allTopicsRankAtLeast(p, TOPICS, "S+") },
 ];
 
 /* Ranks are based on the TOTAL of the last 10 answers (10 correct = 100),
@@ -426,6 +426,67 @@ function rankDisplay(highestRankIdx) {
   if (highestRankIdx === undefined || highestRankIdx < 0) return { label: "—", color: "var(--muted)" };
   const label = RANK_ORDER[highestRankIdx];
   return { label, color: RANK_COLOR[label] };
+}
+
+/* ---------------------------------------------------------
+   Levelling (Mastery Challenge). EXP is earned ONLY when a
+   topic's grade ratchets up — ungraded→F, F→E, … S→S+. It's
+   a pure function of the current topic ranks, never stored,
+   so it can't drift and needs no migration for old profiles.
+   The total EXP available across all 30 topics is exactly the
+   amount needed for the Level-20 cap, so Level 20 ⇔ S+ in
+   every topic. Each level costs more than the last, and the
+   very first correct answer (ungraded→F) is enough for Lv 2.
+--------------------------------------------------------- */
+const LEVEL_CAP = 20;
+// EXP for entering each rank: F, E, D, C, B, A, A*, S, S+
+const RANK_STEP_EXP = [2, 3, 4, 6, 9, 14, 20, 28, 40];
+// RANK_CUM_EXP[k] = EXP a topic is worth once it has reached rank index k
+const RANK_CUM_EXP = RANK_STEP_EXP.reduce((acc, v) => [...acc, (acc[acc.length - 1] || 0) + v], []);
+// EXP to go from level L to L+1, for L = 1..19 (sums to 3780 = 30 topics × 126)
+const LEVEL_STEP_EXP = [2, 13, 25, 40, 56, 75, 95, 118, 142, 169, 198, 228, 261, 295, 332, 370, 411, 453, 497];
+// LEVEL_CUM_EXP[i] = total EXP required to be level (i + 1)
+const LEVEL_CUM_EXP = LEVEL_STEP_EXP.reduce((acc, v) => [...acc, acc[acc.length - 1] + v], [0]);
+
+function totalExp(profile) {
+  const topics = (profile && profile.topics) || {};
+  return TOPICS.reduce((sum, t) => {
+    const k = (topics[t.id] || {}).highestRank ?? -1;
+    return sum + (k >= 0 ? RANK_CUM_EXP[Math.min(k, RANK_CUM_EXP.length - 1)] : 0);
+  }, 0);
+}
+function levelFromExp(exp) {
+  let level = 1;
+  for (let i = 1; i < LEVEL_CUM_EXP.length; i++) {
+    if (exp >= LEVEL_CUM_EXP[i]) level = i + 1; else break;
+  }
+  return Math.min(level, LEVEL_CAP);
+}
+function levelProgress(exp) {
+  const level = levelFromExp(exp);
+  if (level >= LEVEL_CAP) return { level, into: 0, need: 0, pct: 100, capped: true };
+  const base = LEVEL_CUM_EXP[level - 1];
+  const need = LEVEL_CUM_EXP[level] - base;
+  const into = exp - base;
+  return { level, into, need, pct: Math.max(0, Math.min(100, Math.round((into / need) * 100))), capped: false };
+}
+function LevelBar({ exp }) {
+  const { level, into, need, pct, capped } = levelProgress(exp);
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "baseline", gap: 4 }}>
+        <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5 }}>LV</span>{level}
+      </div>
+      <div style={{ flex: 1, minWidth: 40 }}>
+        <div style={{ height: 8, background: "var(--locked)", borderRadius: 999, overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: capped ? "var(--amber)" : "var(--blue)", transition: "width 0.4s ease" }} />
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, fontWeight: 600 }}>
+        {capped ? "MAX · Level 20" : `${into} / ${need} XP`}
+      </div>
+    </div>
+  );
 }
 
 /* Achievement check helpers. A topic "counts" once its ratcheted
@@ -560,7 +621,7 @@ export default function MathsUnlockedBN() {
   // Short synthesised arpeggio (C–E–G–C) played when an achievement unlocks.
   // Built lazily off the click/keydown that triggered the answer, so the
   // AudioContext is allowed to start.
-  function playJingle() {
+  function playJingle(big) {
     if (!soundOn) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -572,8 +633,9 @@ export default function MathsUnlockedBN() {
       const master = ctx.createGain();
       master.gain.value = 0.13;
       master.connect(ctx.destination);
-      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-        const t = now + i * 0.11;
+      const seq = big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5];
+      seq.forEach((freq, i) => {
+        const t = now + i * 0.1;
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = "triangle";
@@ -648,6 +710,7 @@ export default function MathsUnlockedBN() {
     if (!answerInput.trim() || feedback) return;
     const elapsed = (Date.now() - startTimeRef.current) / 1000;
     const correct = checkEquivalent(answerInput, question.answer);
+    const expBefore = totalExp(profile);
     const next = JSON.parse(JSON.stringify(profile));
     const t = next.topics[activeTopic.id] || { history: [], highestRank: -1, streak: 0 };
     t.history = [...t.history, correct ? 1 : 0].slice(-10);
@@ -674,12 +737,16 @@ export default function MathsUnlockedBN() {
       next.streak = 0;
       next.consecWrong = (next.consecWrong || 0) + 1;
     }
+    const expAfter = totalExp(next);
+    const expGain = expAfter - expBefore;
+    const leveledTo = levelFromExp(expAfter) > levelFromExp(expBefore) ? levelFromExp(expAfter) : null;
+
     const unlocked = [];
     ACHIEVEMENTS.forEach((a) => {
       if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); unlocked.push(a); }
     });
-    if (unlocked.length > 0) playJingle();
-    setFeedback({ correct, unlocked });
+    if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
+    setFeedback({ correct, unlocked, expGain, leveledTo });
     saveProfile(next);
   }
 
@@ -788,7 +855,7 @@ export default function MathsUnlockedBN() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
             <span className="mub-display" style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>MathsUnlocked</span>
-            <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · practice engine</span>
+            <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
             {screen !== "login" && teacherMode && screen !== "admin" && (
@@ -848,11 +915,10 @@ export default function MathsUnlockedBN() {
         {/* DASHBOARD */}
         {screen === "dashboard" && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <div>
-                <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</div>
-              </div>
+            <div style={{ marginBottom: 18 }}>
+              <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</div>
+              <LevelBar exp={totalExp(profile)} />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 26 }}>
@@ -915,18 +981,19 @@ export default function MathsUnlockedBN() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                       {items.map((a) => {
                         const unlocked = profile.achievements.includes(a.id);
+                        const hidden = a.secret && !unlocked;
                         return (
-                          <div key={a.id} title={a.desc} style={{
+                          <div key={a.id} title={hidden ? "Secret achievement — revealed when earned" : a.desc} style={{
                             display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999,
                             background: unlocked ? "var(--card)" : "transparent",
                             border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
                             boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
                             opacity: unlocked ? 1 : 0.4, fontSize: 12.5,
                           }}>
-                            <span style={{ fontSize: 16, filter: unlocked ? "none" : "grayscale(1)" }}>{a.icon}</span>
+                            <span style={{ fontSize: 16, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
                             <div>
-                              <div style={{ fontWeight: 600 }}>{a.name}</div>
-                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{a.desc}</div>
+                              <div style={{ fontWeight: 600 }}>{hidden ? "???" : a.name}</div>
+                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{hidden ? "???" : a.desc}</div>
                             </div>
                           </div>
                         );
@@ -962,8 +1029,13 @@ export default function MathsUnlockedBN() {
                 const attempted = TOPICS.filter((t) => (s.topics[t.id] || {}).history?.length > 0);
                 return (
                   <div key={idx} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                        {s.name}
+                        <span className="mub-display" style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 8px" }}>
+                          LV {levelFromExp(totalExp(s))}
+                        </span>
+                      </div>
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>
                         {attempted.length}/{TOPICS.length} topics started · 🔥 best streak {s.bestStreak || 0} · 🏆 {(s.achievements || []).length} achievements
                       </div>
@@ -1173,6 +1245,17 @@ export default function MathsUnlockedBN() {
                   {feedback.unlocked.length > 0 && (
                     <div style={{ fontSize: 12.5, color: "var(--amber)", fontWeight: 600, marginBottom: 12 }}>
                       🎉 Achievement unlocked: {feedback.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
+                    </div>
+                  )}
+                  {feedback.leveledTo && (
+                    <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
+                      ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
+                    </div>
+                  )}
+                  {feedback.expGain > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4 }}>+{feedback.expGain} XP</div>
+                      <LevelBar exp={totalExp(profile)} />
                     </div>
                   )}
                   <div>
