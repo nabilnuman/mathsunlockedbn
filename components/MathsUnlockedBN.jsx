@@ -507,13 +507,13 @@ function LevelBar({ profile, onPrestige }) {
 }
 
 /* Rank titles shown under the student's name and on the profile card.
-   "Maths Specialist" covers Lv 15–20 — the extra flex past there comes
-   from Prestige, not a new title. */
+   Past Level 20 the extra flex comes from Prestige. */
 const TITLES = [
   { level: 1, name: "Novice" },
   { level: 5, name: "Apprentice" },
   { level: 10, name: "Scholar" },
   { level: 15, name: "Maths Specialist" },
+  { level: 20, name: "Maths Master" },
 ];
 function titleForLevel(level) {
   let name = TITLES[0].name;
@@ -604,6 +604,7 @@ const SCHOOLS = [
     "St Angela's School",
   ] },
 ];
+const ALL_SCHOOLS = SCHOOLS.flatMap((g) => g.items);
 
 /* Shareable summary of a student's progress. Pure display — takes a
    profile object, so the same card backs the (upcoming) Parent Link
@@ -766,6 +767,7 @@ export default function MathsUnlockedBN() {
   const [screen, setScreen] = useState("login");
   const [nameInput, setNameInput] = useState("");
   const [schoolInput, setSchoolInput] = useState(SOLO_SCHOOL);
+  const [schoolQuery, setSchoolQuery] = useState("");
   const [starting, setStarting] = useState(false);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
@@ -990,6 +992,7 @@ export default function MathsUnlockedBN() {
     setScreen("login");
     setNameInput("");
     setSchoolInput(SOLO_SCHOOL);
+    setSchoolQuery("");
   }
 
   function startTopic(topic) {
@@ -1298,18 +1301,40 @@ export default function MathsUnlockedBN() {
               placeholder="e.g. Amirah"
               style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the school leaderboard — optional)</span></label>
-            <select
-              value={schoolInput} onChange={(e) => setSchoolInput(e.target.value)}
-              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-            >
-              <option value={SOLO_SCHOOL}>Solo / Independent — not on a school</option>
-              {SCHOOLS.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.items.map((s) => <option key={s} value={s}>{s}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the leaderboard — optional)</span></label>
+            {schoolInput !== SOLO_SCHOOL ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
+                <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+                <span style={{ flex: 1, minWidth: 0 }}>{schoolInput}</span>
+                <button type="button" onClick={() => { setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); }} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>change</button>
+              </div>
+            ) : (
+              <div style={{ position: "relative", marginTop: 6, marginBottom: 16 }}>
+                <input
+                  value={schoolQuery} onChange={(e) => setSchoolQuery(e.target.value)}
+                  placeholder="Start typing your school… (leave blank for Solo)"
+                  style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                />
+                {schoolQuery.trim().length >= 1 && (() => {
+                  const q = schoolQuery.trim().toLowerCase();
+                  const hits = ALL_SCHOOLS.filter((s) => s.toLowerCase().includes(q)).slice(0, 8);
+                  return (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, marginTop: 4, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, maxHeight: 220, overflowY: "auto", boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+                      {hits.map((s) => (
+                        <button key={s} type="button" onClick={() => { setSchoolInput(s); setSchoolQuery(s); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 13, background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", color: "var(--ink)" }}>
+                          {s}
+                        </button>
+                      ))}
+                      {hits.length === 0 && (
+                        <div style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--muted)" }}>
+                          No match. You&rsquo;ll be entered as Solo — ask your teacher to add your school.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
             <button
               onClick={startSession}
               disabled={!nameInput.trim() || starting}
@@ -1359,7 +1384,7 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
                 <span style={{ fontSize: 15 }}>🔑</span>
                 <span><b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
-                <span style={{ opacity: 0.7 }}>· earned every 5 levels · opens a locked topic early</span>
+                <span style={{ opacity: 0.7 }}>· opens a locked topic early</span>
               </div>
             </div>
 
@@ -1805,9 +1830,7 @@ export default function MathsUnlockedBN() {
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
-            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
-              Each school is scored by the sum of its top 10 students — <b>Prestige × 20 + Level</b> each. Ties go to whichever school got there first.
-            </div>
+            <div style={{ marginBottom: 16 }} />
             {!board || board.loading ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
             ) : board.schools.length === 0 ? (
