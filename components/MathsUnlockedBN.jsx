@@ -987,18 +987,23 @@ export default function MathsUnlockedBN() {
     if (!/^\d{4}$/.test(pin)) { setStartError("Your PIN must be exactly 4 digits."); return; }
     setStartError("");
     setStarting(true);
+    const isBlank = (p) => !p || (Object.keys(p.topics || {}).length === 0 && !(p.prestige > 0) && !(p.totalCorrect > 0));
     let prof = null;
     try {
       const r = await storage.get(studentKey(nm, pin), true);
       if (r && r.value) prof = JSON.parse(r.value);
     } catch (e) { /* first time for this name + PIN */ }
-    // Legacy accounts (created before PINs) are keyed by name only. The
-    // first person to sign in as that name adopts it and sets its PIN.
+    // Legacy accounts (created before PINs) are keyed by name only. Adopt
+    // one when there's no real name+PIN account yet — also when a blank
+    // name+PIN account exists (e.g. from a failed recovery attempt).
     let adoptedLegacy = false;
-    if (!prof) {
+    if (isBlank(prof)) {
       try {
         const legacy = await storage.get(`student_${slug(nm)}`, true);
-        if (legacy && legacy.value) { prof = JSON.parse(legacy.value); adoptedLegacy = true; }
+        if (legacy && legacy.value) {
+          const legacyProf = JSON.parse(legacy.value);
+          if (!isBlank(legacyProf)) { prof = legacyProf; adoptedLegacy = true; }
+        }
       } catch (e) { /* no legacy account */ }
     }
     if (prof) {
