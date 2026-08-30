@@ -721,6 +721,9 @@ const emptyProfile = () => ({
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
+// A student is identified by name + 4-digit PIN, so two students who share
+// a name stay separate. slug() never yields "__", so it's a safe divider.
+const studentKey = (name, pin) => `student_${slug(name)}__${/^\d{4}$/.test(pin || "") ? pin : "0000"}`;
 const genToken = () => {
   try { return crypto.randomUUID().replace(/-/g, "").slice(0, 18); } catch (e) { /* fall through */ }
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -768,7 +771,11 @@ export default function MathsUnlockedBN() {
   const [nameInput, setNameInput] = useState("");
   const [schoolInput, setSchoolInput] = useState(SOLO_SCHOOL);
   const [schoolQuery, setSchoolQuery] = useState("");
+  const [pinInput, setPinInput] = useState("");
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
+  const [showSchool, setShowSchool] = useState(false);
+  const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
@@ -947,33 +954,39 @@ export default function MathsUnlockedBN() {
     if (next.name && !next.parentToken) next.parentToken = genToken();
     setProfile(next);
     try { await storage.set("profile", JSON.stringify(next)); } catch (e) { /* ignore */ }
-    if (next.name) {
-      try { await storage.set(`student_${slug(next.name)}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
+    if (next.name && next.pin) {
+      try { await storage.set(studentKey(next.name, next.pin), JSON.stringify(next), true); } catch (e) { /* ignore */ }
       if (next.parentToken) {
         try { await storage.set(`parent_${next.parentToken}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
       }
     }
   }
 
-  // Login. If a student with this name has practised before (their record
-  // lives in the shared scope and survives "Switch student"), resume it;
-  // otherwise create a fresh profile with the chosen school.
+  // Login by name + 4-digit PIN. An existing name+PIN resumes that
+  // student's progress (the shared record survives "Switch student");
+  // a new name+PIN creates a fresh profile with the chosen school.
   async function startSession() {
+    if (starting) return;
     const nm = nameInput.trim();
-    if (!nm || starting) return;
+    const pin = pinInput.trim();
+    if (!nm) { setStartError("Enter your name."); return; }
+    if (!/^\d{4}$/.test(pin)) { setStartError("Your PIN must be exactly 4 digits."); return; }
+    setStartError("");
     setStarting(true);
     let prof = null;
     try {
-      const r = await storage.get(`student_${slug(nm)}`, true);
+      const r = await storage.get(studentKey(nm, pin), true);
       if (r && r.value) prof = JSON.parse(r.value);
-    } catch (e) { /* first time for this name */ }
+    } catch (e) { /* first time for this name + PIN */ }
     if (prof) {
-      if (!prof.name) prof.name = nm;
+      prof.name = prof.name || nm;
+      prof.pin = pin;
       if (!prof.school) prof.school = schoolInput;
       if (!prof.achievedAt) prof.achievedAt = {};
     } else {
       prof = emptyProfile();
       prof.name = nm;
+      prof.pin = pin;
       prof.school = schoolInput;
       prof.createdAt = Date.now();
     }
@@ -983,7 +996,7 @@ export default function MathsUnlockedBN() {
   }
 
   // Non-destructive: forgets this device's session so the login screen
-  // shows, but the student's progress stays saved under their name and
+  // shows, but the student's progress stays saved (name + PIN) and
   // resumes when they sign back in.
   async function switchStudent() {
     try { await storage.delete("profile"); } catch (e) { /* ignore */ }
@@ -991,8 +1004,16 @@ export default function MathsUnlockedBN() {
     setActiveTopic(null);
     setScreen("login");
     setNameInput("");
+    setPinInput("");
+    setStartError("");
     setSchoolInput(SOLO_SCHOOL);
     setSchoolQuery("");
+  }
+
+  function setSchoolAndClose(s) {
+    saveProfile({ ...profile, school: s });
+    setShowSchool(false);
+    setSchoolEditQuery("");
   }
 
   function startTopic(topic) {
@@ -1293,7 +1314,7 @@ export default function MathsUnlockedBN() {
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name next time to pick up where you left off.</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name and PIN next time to pick up where you left off.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
             <input
               value={nameInput} onChange={(e) => setNameInput(e.target.value)}
@@ -1301,6 +1322,15 @@ export default function MathsUnlockedBN() {
               placeholder="e.g. Amirah"
               style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>4-digit PIN <span style={{ fontWeight: 400 }}>(pick one you'll remember)</span></label>
+            <input
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onKeyDown={(e) => { if (e.key === "Enter") startSession(); }}
+              inputMode="numeric" placeholder="e.g. 4051"
+              style={{ width: "100%", marginTop: 6, marginBottom: 4, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
+            />
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot it? Ask your teacher.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the leaderboard — optional)</span></label>
             {schoolInput !== SOLO_SCHOOL ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
@@ -1335,10 +1365,13 @@ export default function MathsUnlockedBN() {
                 })()}
               </div>
             )}
+            {startError && (
+              <div style={{ fontSize: 12, color: "var(--red)", fontWeight: 600, marginBottom: 8 }}>{startError}</div>
+            )}
             <button
               onClick={startSession}
-              disabled={!nameInput.trim() || starting}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || starting ? 0.6 : 1 }}
+              disabled={!nameInput.trim() || !/^\d{4}$/.test(pinInput) || starting}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{4}$/.test(pinInput) || starting ? 0.6 : 1 }}
             >
               {starting ? "Loading…" : "Start / continue"}
             </button>
@@ -1362,14 +1395,14 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
                 <div>
                   <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
-                    <span>
-                      {profile.school && profile.school !== SOLO_SCHOOL ? `· ${profile.school} ` : ""}
-                      · Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}
-                    </span>
+                    <span>· Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</span>
                   </div>
+                  <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 12, textDecoration: "underline" }}>
+                    🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
+                  </button>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
                   <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
@@ -1878,6 +1911,32 @@ export default function MathsUnlockedBN() {
           </div>
         </div>
       )}
+
+      {showSchool && (() => {
+        const q = schoolEditQuery.trim().toLowerCase();
+        const hits = q ? ALL_SCHOOLS.filter((s) => s.toLowerCase().includes(q)) : ALL_SCHOOLS;
+        const row = { display: "block", width: "100%", textAlign: "left", padding: "9px 12px", fontSize: 13, background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", color: "var(--ink)" };
+        return (
+          <div onClick={() => setShowSchool(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 400, width: "100%", fontFamily: "Inter, sans-serif" }}>
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Your school</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>Currently: {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Solo / Independent"}</div>
+              <input
+                autoFocus value={schoolEditQuery} onChange={(e) => setSchoolEditQuery(e.target.value)}
+                placeholder="Type to search…"
+                style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", marginBottom: 10 }}
+              />
+              <div style={{ maxHeight: 240, overflowY: "auto", border: "1px solid var(--grid)", borderRadius: 8 }}>
+                <button type="button" onClick={() => setSchoolAndClose(SOLO_SCHOOL)} style={{ ...row, fontWeight: 600 }}>Solo / Independent</button>
+                {hits.map((s) => (
+                  <button key={s} type="button" onClick={() => setSchoolAndClose(s)} style={row}>{s}</button>
+                ))}
+                {hits.length === 0 && <div style={{ padding: "9px 12px", fontSize: 12.5, color: "var(--muted)" }}>No match.</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showParentLink && (() => {
         const url = typeof window !== "undefined" && profile.parentToken ? `${window.location.origin}/?p=${profile.parentToken}` : "";
