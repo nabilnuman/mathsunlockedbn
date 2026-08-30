@@ -459,6 +459,29 @@ const emptyProfile = () => ({
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
+/* Two palettes keyed to the same CSS-variable names. The root <div> gets
+   whichever set the current theme selects, so every `var(--x)` downstream
+   flips automatically. Rank/tier badge colours are left as fixed hues —
+   they read acceptably on both grounds. */
+const THEMES = {
+  light: {
+    "--ink": "#1F2937", "--paper": "#F7F9FB", "--grid": "#DCE8F1",
+    "--card": "#FFFFFF", "--locked": "#EEF1F4", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#3B6FA0", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#8A97A6", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(31,41,55,0.10)", "--shadow-soft": "rgba(31,41,55,0.06)",
+    "--page-bg": "#F7F9FB",
+  },
+  dark: {
+    "--ink": "#E6EBF1", "--paper": "#141A22", "--grid": "#2A3644",
+    "--card": "#1C242F", "--locked": "#181E27", "--amber-wash": "#2E2617",
+    "--green": "#5EBE94", "--blue": "#7FB0DD", "--amber": "#E0A94E",
+    "--red": "#E38066", "--muted": "#8B98A7", "--on-accent": "#0E1319",
+    "--shadow": "rgba(0,0,0,0.5)", "--shadow-soft": "rgba(0,0,0,0.35)",
+    "--page-bg": "#0E1319",
+  },
+};
+
 export default function MathsUnlockedBN() {
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState(emptyProfile());
@@ -475,10 +498,24 @@ export default function MathsUnlockedBN() {
   const [qbForm, setQbForm] = useState({ prompt: "", answer: "", hint: "", steps: "" });
   const [qbEditingId, setQbEditingId] = useState(null);
   const [qbPreview, setQbPreview] = useState(null);
+  const [theme, setTheme] = useState("light");
+  const [soundOn, setSoundOn] = useState(true);
+  const [teacherMode, setTeacherMode] = useState(false);
   const startTimeRef = useRef(null);
+  const audioCtxRef = useRef(null);
 
   useEffect(() => {
     (async () => {
+      try {
+        const saved = window.localStorage.getItem("mub_theme");
+        if (saved === "light" || saved === "dark") setTheme(saved);
+        else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) setTheme("dark");
+        if (window.localStorage.getItem("mub_sound") === "0") setSoundOn(false);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("teacher") === "1") window.localStorage.setItem("mub_teacher", "1");
+        if (params.get("teacher") === "0") window.localStorage.removeItem("mub_teacher");
+        if (window.localStorage.getItem("mub_teacher") === "1") setTeacherMode(true);
+      } catch (e) { /* defaults are fine */ }
       try {
         const res = await storage.get("profile");
         if (res && res.value) {
@@ -490,6 +527,65 @@ export default function MathsUnlockedBN() {
       setReady(true);
     })();
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.style.background = THEMES[theme]["--page-bg"];
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
+  // Teacher-only screens are unreachable without the ?teacher=1 unlock.
+  useEffect(() => {
+    if (!teacherMode && (screen === "admin" || screen === "questions")) {
+      setScreen(profile.name ? "dashboard" : "login");
+    }
+  }, [teacherMode, screen, profile.name]);
+
+  function toggleTheme() {
+    setTheme((prev) => {
+      const nextT = prev === "dark" ? "light" : "dark";
+      try { window.localStorage.setItem("mub_theme", nextT); } catch (e) { /* ignore */ }
+      return nextT;
+    });
+  }
+
+  function toggleSound() {
+    setSoundOn((prev) => {
+      const nextS = !prev;
+      try { window.localStorage.setItem("mub_sound", nextS ? "1" : "0"); } catch (e) { /* ignore */ }
+      return nextS;
+    });
+  }
+
+  // Short synthesised arpeggio (C–E–G–C) played when an achievement unlocks.
+  // Built lazily off the click/keydown that triggered the answer, so the
+  // AudioContext is allowed to start.
+  function playJingle() {
+    if (!soundOn) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      let ctx = audioCtxRef.current;
+      if (!ctx) { ctx = new AC(); audioCtxRef.current = ctx; }
+      if (ctx.state === "suspended") ctx.resume();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.value = 0.13;
+      master.connect(ctx.destination);
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        const t = now + i * 0.11;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(1, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+        osc.connect(g); g.connect(master);
+        osc.start(t); osc.stop(t + 0.42);
+      });
+    } catch (e) { /* audio unavailable — no problem */ }
+  }
 
   async function loadCustomQuestions() {
     try {
@@ -582,6 +678,7 @@ export default function MathsUnlockedBN() {
     ACHIEVEMENTS.forEach((a) => {
       if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); unlocked.push(a); }
     });
+    if (unlocked.length > 0) playJingle();
     setFeedback({ correct, unlocked });
     saveProfile(next);
   }
@@ -659,11 +756,7 @@ export default function MathsUnlockedBN() {
     setNameInput("");
   }
 
-  const vars = {
-    "--ink": "#1F2937", "--paper": "#F7F9FB", "--grid": "#DCE8F1",
-    "--green": "#2F6B4F", "--blue": "#3B6FA0", "--amber": "#C97F1E",
-    "--red": "#B14A36", "--muted": "#8A97A6",
-  };
+  const vars = THEMES[theme] || THEMES.light;
 
   if (!ready) return <div style={{ ...vars, minHeight: 400 }} />;
 
@@ -685,7 +778,9 @@ export default function MathsUnlockedBN() {
         .mub-stamp { animation: stampIn 0.4s ease-out; }
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
         .mub-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-        .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(31,41,55,0.10); }
+        .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
+        .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
+        .mub-grid input::placeholder, .mub-grid textarea::placeholder { color: var(--muted); }
       `}</style>
 
       <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", minHeight: 560 }}>
@@ -695,28 +790,34 @@ export default function MathsUnlockedBN() {
             <span className="mub-display" style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>MathsUnlocked</span>
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · practice engine</span>
           </div>
-          {screen !== "login" && (
-            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
-              {screen !== "admin" && (
-                <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                  Admin view
-                </button>
-              )}
-              {screen !== "questions" && (
-                <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                  Question bank
-                </button>
-              )}
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
+            {screen !== "login" && teacherMode && screen !== "admin" && (
+              <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+                Admin view
+              </button>
+            )}
+            {screen !== "login" && teacherMode && screen !== "questions" && (
+              <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+                Question bank
+              </button>
+            )}
+            {screen !== "login" && (
               <button onClick={resetDemo} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 <RotateCcw size={13} /> reset demo
               </button>
-            </div>
-          )}
+            )}
+            <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+              {soundOn ? "🔊" : "🔇"}
+            </button>
+            <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+          </div>
         </div>
 
         {/* LOGIN */}
         {screen === "login" && (
-          <div style={{ maxWidth: 380, margin: "40px auto", background: "#fff", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px rgba(31,41,55,0.06)" }}>
+          <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
             <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
@@ -727,18 +828,20 @@ export default function MathsUnlockedBN() {
             />
             <button
               onClick={() => { if (!nameInput.trim()) return; const p = emptyProfile(); p.name = nameInput.trim(); saveProfile(p); setScreen("dashboard"); }}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}
             >
               Create profile & begin
             </button>
-            <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
-              <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                Admin view
-              </button>
-              <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
-                Question bank
-              </button>
-            </div>
+            {teacherMode && (
+              <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
+                <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  Admin view
+                </button>
+                <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                  Question bank
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -764,7 +867,7 @@ export default function MathsUnlockedBN() {
                     className={unlocked ? "mub-card" : ""}
                     title={unlocked ? undefined : lockedReason(t)}
                     style={{
-                      background: unlocked ? "#fff" : "#EEF1F4",
+                      background: unlocked ? "var(--card)" : "var(--locked)",
                       border: "1px solid var(--grid)", borderRadius: 14, padding: 14,
                       cursor: unlocked ? "pointer" : "not-allowed",
                       opacity: unlocked ? 1 : 0.55,
@@ -815,7 +918,7 @@ export default function MathsUnlockedBN() {
                         return (
                           <div key={a.id} title={a.desc} style={{
                             display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999,
-                            background: unlocked ? "#fff" : "transparent",
+                            background: unlocked ? "var(--card)" : "transparent",
                             border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
                             boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
                             opacity: unlocked ? 1 : 0.4, fontSize: 12.5,
@@ -858,7 +961,7 @@ export default function MathsUnlockedBN() {
               {students.map((s, idx) => {
                 const attempted = TOPICS.filter((t) => (s.topics[t.id] || {}).history?.length > 0);
                 return (
-                  <div key={idx} style={{ background: "#fff", border: "1px solid var(--grid)", borderRadius: 14, padding: 16 }}>
+                  <div key={idx} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</div>
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -924,7 +1027,7 @@ export default function MathsUnlockedBN() {
             </select>
 
             {/* Generator preview */}
-            <div style={{ background: "#fff", border: "1px solid var(--grid)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+            <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>Live generator example</div>
                 <button onClick={qbNewPreview} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer" }}>New example</button>
@@ -946,7 +1049,7 @@ export default function MathsUnlockedBN() {
                 <div style={{ fontSize: 12.5, color: "var(--muted)" }}>None yet — add one below.</div>
               )}
               {(customQuestions[qbTopicId] || []).map((q) => (
-                <div key={q.id} style={{ background: "#fff", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div key={q.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div className="mub-mono" style={{ fontSize: 13 }}>{q.prompt}</div>
                     <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Answer: <span className="mub-mono">{q.answer}</span>{q.steps && q.steps.length ? ` · ${q.steps.length} step(s)` : ""}</div>
@@ -960,7 +1063,7 @@ export default function MathsUnlockedBN() {
             </div>
 
             {/* Add / edit form */}
-            <div style={{ background: "#fff", border: "1px solid var(--grid)", borderRadius: 12, padding: 16 }}>
+            <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{qbEditingId ? "Edit question" : "Add a custom question"}</div>
               <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>Question text</label>
               <textarea
@@ -987,7 +1090,7 @@ export default function MathsUnlockedBN() {
                 style={{ width: "100%", marginTop: 4, marginBottom: 12, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, boxSizing: "border-box", fontFamily: "inherit" }}
               />
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={qbSaveQuestion} style={{ padding: "8px 16px", background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button onClick={qbSaveQuestion} style={{ padding: "8px 16px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   {qbEditingId ? "Save changes" : "Add question"}
                 </button>
                 {qbEditingId && (
@@ -1008,9 +1111,9 @@ export default function MathsUnlockedBN() {
             </button>
 
             <div style={{
-              maxWidth: 520, margin: "0 auto", background: "#fff", border: "1px solid var(--grid)",
+              maxWidth: 520, margin: "0 auto", background: "var(--card)", border: "1px solid var(--grid)",
               borderLeft: "4px solid var(--red)", borderRadius: 10, padding: "26px 26px 26px 30px",
-              transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px rgba(31,41,55,0.08)", position: "relative",
+              transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px var(--shadow-soft)", position: "relative",
             }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
                 <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{activeTopic.icon} {activeTopic.name}</div>
@@ -1023,7 +1126,7 @@ export default function MathsUnlockedBN() {
                       fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
                       color: live ? "var(--amber)" : "var(--muted)",
                       border: `1px solid ${live ? "var(--amber)" : "var(--grid)"}`,
-                      background: live ? "#FBF3E6" : "transparent",
+                      background: live ? "var(--amber-wash)" : "transparent",
                     }}>
                       {live ? "🔥" : "○"} {topicStreak} streak
                     </div>
@@ -1042,7 +1145,7 @@ export default function MathsUnlockedBN() {
               />
 
               {!feedback && (
-                <button onClick={submitAnswer} style={{ padding: "9px 18px", background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button onClick={submitAnswer} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   Check answer
                 </button>
               )}
@@ -1073,7 +1176,7 @@ export default function MathsUnlockedBN() {
                     </div>
                   )}
                   <div>
-                    <button onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    <button onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                       Next question →
                     </button>
                   </div>

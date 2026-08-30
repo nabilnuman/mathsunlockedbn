@@ -49,6 +49,20 @@ vercel
 vercel --prod
 ```
 
+## Teacher tools (Admin view + Question bank)
+
+These are hidden from students by default. To unlock them in a browser,
+visit the site once with `?teacher=1` on the URL, e.g.
+`https://your-project.vercel.app/?teacher=1`. The unlock is remembered in
+that browser's localStorage, so bookmark the plain URL afterwards. Visit
+`?teacher=0` to hide them again. Share the plain URL (no query string)
+with students.
+
+This is a convenience gate, not a security boundary — it lives in the
+browser, same as the client-ID model below. Anyone who knows the param
+can flip it. Don't put anything in the admin view you'd mind a student
+seeing.
+
 ## Known limitations (read before handing this to real students)
 
 - **Not real authentication.** "Private" student data is scoped by a random
