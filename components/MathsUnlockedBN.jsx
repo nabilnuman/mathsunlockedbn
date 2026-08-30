@@ -332,27 +332,67 @@ const TOPICS = [
 ];
 const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
 
+/* Achievements are grouped into four tiers. Each achievement's check(p)
+   runs against the whole profile after every answer; ids are permanent
+   (renaming/retiering an achievement keeps anyone who already earned it).
+   Rank checks read the ratcheted highestRank, so they never un-earn. */
+const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
+const TIER_COLOR = { Bronze: "#B07437", Silver: "#8A929E", Gold: "#C99A1E", Platinum: "#3E9CB8" };
+
 const ACHIEVEMENTS = [
-  { id: "onfire", name: "On Fire", icon: "🔥", desc: "5 correct answers in a row", check: (p) => (p.bestStreak || 0) >= 5 },
-  { id: "perfectionist", name: "Perfectionist", icon: "💯", desc: "100% average over 10 questions in one topic",
-    check: (p) => Object.values(p.topics || {}).some((t) => t.history.length >= 10 && t.history.slice(-10).every((v) => v === 1)) },
-  { id: "completionist", name: "Completionist", icon: "📚", desc: "Attempt at least one question in every topic",
-    check: (p) => TOPICS.every((t) => p.topics[t.id] && p.topics[t.id].history.length > 0) },
-  { id: "legend", name: "Mathematical Legend", icon: "👑", desc: "Reach rank A or above in every topic",
-    check: (p) => TOPICS.every((t) => {
-      const idx = (p.topics[t.id] || {}).highestRank;
-      return idx !== undefined && idx >= RANK_ORDER.indexOf("A");
-    }) },
-  { id: "mathemagician", name: "Mathemagician", icon: "🧙", desc: "Reach S+ rank in every topic",
-    check: (p) => TOPICS.every((t) => {
-      const idx = (p.topics[t.id] || {}).highestRank;
-      return idx !== undefined && idx >= RANK_ORDER.indexOf("S+");
-    }) },
-  { id: "ace", name: "Ace It", icon: "🌟", desc: "Reach S rank in any topic",
-    check: (p) => Object.values(p.topics || {}).some((t) => (t.highestRank ?? -1) >= RANK_ORDER.indexOf("S")) },
-  { id: "unstoppable", name: "Unstoppable", icon: "🚀", desc: "Reach S+ in any topic (20 in a row)",
-    check: (p) => Object.values(p.topics || {}).some((t) => (t.highestRank ?? -1) >= RANK_ORDER.indexOf("S+")) },
-  { id: "speedy", name: "Speed Demon", icon: "⚡", desc: "Answer correctly in under 8 seconds, 5 times", check: (p) => (p.fastCorrect || 0) >= 5 },
+  /* ---------------- Bronze ---------------- */
+  { id: "sobegins", tier: "Bronze", name: "So It Begins", icon: "🌱", desc: "Get one question right",
+    check: (p) => (p.totalCorrect || 0) >= 1 },
+  { id: "onfire", tier: "Bronze", name: "On Fire", icon: "🔥", desc: "5 correct answers in a row",
+    check: (p) => (p.bestStreak || 0) >= 5 },
+  { id: "sigma", tier: "Bronze", name: "Sigma Grindset", icon: "🗿", desc: "20 correct answers in total",
+    check: (p) => (p.totalCorrect || 0) >= 20 },
+  { id: "speedy", tier: "Bronze", name: "Speed Demon", icon: "⚡", desc: "Answer correctly in under 8 seconds, 5 times",
+    check: (p) => (p.fastCorrect || 0) >= 5 },
+  { id: "speedrunner", tier: "Bronze", name: "Speedrunner", icon: "🏃", desc: "Answer correctly in under 1 minute, 10 times",
+    check: (p) => (p.minuteCorrect || 0) >= 10 },
+  { id: "lethimcook", tier: "Bronze", name: "Let Him Cook", icon: "👨‍🍳", desc: "Reach rank A in any topic",
+    check: (p) => TOPICS.some((t) => topicRankAtLeast(p, t.id, "A")) },
+  { id: "nightowl", tier: "Bronze", name: "Night Owl", icon: "🦉", desc: "Answer a question between 12am and 4am",
+    check: (p) => !!p.nightOwl },
+  { id: "comeback", tier: "Bronze", name: "Comeback Kid", icon: "🧒", desc: "Get a question right after 3 wrong in a row",
+    check: (p) => !!p.comeback },
+  { id: "rootproblem", tier: "Bronze", name: "Root of the Problem", icon: "🫚", desc: "Answer a Surds question correctly",
+    check: (p) => !!p.solvedSurd },
+  { id: "sixtyseven", tier: "Bronze", name: "67", icon: "☯️", desc: "Correctly answer a question whose answer is 67",
+    check: (p) => !!p.got67 },
+  { id: "completionist", tier: "Bronze", name: "Completionist", icon: "📚", desc: "Get at least one question right in every topic",
+    check: (p) => TOPICS.every((t) => topicHasCorrect(p, t.id)) },
+
+  /* ---------------- Silver ---------------- */
+  { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
+    check: (p) => (p.totalCorrect || 0) >= 100 },
+  { id: "perfectionist", tier: "Silver", name: "Perfectionist", icon: "💯", desc: "Reach S rank in any topic",
+    check: (p) => TOPICS.some((t) => topicRankAtLeast(p, t.id, "S")) },
+  { id: "aristocrat", tier: "Silver", name: "Arithmetic Aristocrat", icon: "🎩", desc: "Reach rank A in the first 8 topics",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(0, 8), "A") },
+  { id: "aficionado", tier: "Silver", name: "Algebra Aficionado", icon: "🧮", desc: "Reach rank A in topics 9–14",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(8, 14), "A") },
+  { id: "grandmaster", tier: "Silver", name: "Graphical Grandmaster", icon: "📉", desc: "Reach rank A in topics 15–20",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(14, 20), "A") },
+  { id: "shapeshifter", tier: "Silver", name: "Shapeshifter", icon: "🔷", desc: "Reach rank A in topics 21–26",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(20, 26), "A") },
+  { id: "statslayer", tier: "Silver", name: "Statistics Slayer", icon: "🗡️", desc: "Reach rank A in topics 27–29",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(26, 29), "A") },
+  { id: "ohyeah", tier: "Silver", name: "OH YEAH!!!", icon: "🧡", desc: "Reach rank A in topic 30 (Vectors)",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(29, 30), "A") },
+
+  /* ---------------- Gold ---------------- */
+  { id: "unstoppable", tier: "Gold", name: "Unstoppable", icon: "🚀", desc: "Reach S+ rank in any topic",
+    check: (p) => TOPICS.some((t) => topicRankAtLeast(p, t.id, "S+")) },
+  { id: "mathemagician", tier: "Gold", name: "Mathemagician", icon: "🧙", desc: "Reach S rank in every topic",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS, "S") },
+  { id: "neversleep", tier: "Gold", name: "Numbers Never Sleep", icon: "🌙", desc: "500 correct answers in total",
+    check: (p) => (p.totalCorrect || 0) >= 500 },
+
+  /* ---------------- Platinum ---------------- */
+  { id: "unlocked", tier: "Platinum", name: "Mathematics Unlocked", icon: "🏆", desc: "Reach S+ rank in every topic",
+    check: (p) => allTopicsRankAtLeast(p, TOPICS, "S+") },
 ];
 
 /* Ranks are based on the TOTAL of the last 10 answers (10 correct = 100),
@@ -388,6 +428,19 @@ function rankDisplay(highestRankIdx) {
   return { label, color: RANK_COLOR[label] };
 }
 
+/* Achievement check helpers. A topic "counts" once its ratcheted
+   highestRank reaches the given label; topicHasCorrect looks for any
+   correct answer still in the rolling last-10 history. */
+function topicRankAtLeast(profile, topicId, label) {
+  return (((profile.topics || {})[topicId] || {}).highestRank ?? -1) >= RANK_ORDER.indexOf(label);
+}
+function allTopicsRankAtLeast(profile, topics, label) {
+  return topics.every((t) => topicRankAtLeast(profile, t.id, label));
+}
+function topicHasCorrect(profile, topicId) {
+  return ((((profile.topics || {})[topicId] || {}).history) || []).some((v) => v === 1);
+}
+
 /* A topic unlocks once every prerequisite topic has reached at least
    rank C (50%) — a "basic competency" bar, not full mastery. */
 const UNLOCK_RANK = RANK_ORDER.indexOf("C");
@@ -399,7 +452,11 @@ function lockedReason(topic) {
   return `Unlocks after reaching C in ${names.join(" & ")}`;
 }
 
-const emptyProfile = () => ({ name: "", topics: {}, achievements: [], streak: 0, bestStreak: 0, fastCorrect: 0 });
+const emptyProfile = () => ({
+  name: "", topics: {}, achievements: [], streak: 0, bestStreak: 0,
+  fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0, consecWrong: 0,
+  nightOwl: false, comeback: false, solvedSurd: false, got67: false,
+});
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
 export default function MathsUnlockedBN() {
@@ -503,12 +560,23 @@ export default function MathsUnlockedBN() {
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
     next.topics[activeTopic.id] = t;
+
+    const nowHour = new Date().getHours();
+    if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
+
     if (correct) {
       next.streak = (next.streak || 0) + 1;
       next.bestStreak = Math.max(next.bestStreak || 0, next.streak);
+      next.totalCorrect = (next.totalCorrect || 0) + 1;
       if (elapsed < 8) next.fastCorrect = (next.fastCorrect || 0) + 1;
+      if (elapsed < 60) next.minuteCorrect = (next.minuteCorrect || 0) + 1;
+      if ((next.consecWrong || 0) >= 3) next.comeback = true; // "Comeback Kid"
+      next.consecWrong = 0;
+      if (activeTopic.id === "surds") next.solvedSurd = true; // "Root of the Problem"
+      if (String(question.answer).trim() === "67") next.got67 = true; // "67"
     } else {
       next.streak = 0;
+      next.consecWrong = (next.consecWrong || 0) + 1;
     }
     const unlocked = [];
     ACHIEVEMENTS.forEach((a) => {
@@ -722,22 +790,44 @@ export default function MathsUnlockedBN() {
               })}
             </div>
 
-            <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
               <Trophy size={16} /> Achievements
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>
+                {profile.achievements.filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length}/{ACHIEVEMENTS.length}
+              </span>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {ACHIEVEMENTS.map((a) => {
-                const unlocked = profile.achievements.includes(a.id);
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {TIERS.map((tier) => {
+                const items = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                if (!items.length) return null;
+                const tc = TIER_COLOR[tier];
+                const earned = items.filter((a) => profile.achievements.includes(a.id)).length;
                 return (
-                  <div key={a.id} title={a.desc} style={{
-                    display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999,
-                    background: unlocked ? "#fff" : "transparent", border: `1px solid ${unlocked ? "var(--grid)" : "var(--grid)"}`,
-                    opacity: unlocked ? 1 : 0.4, fontSize: 12.5,
-                  }}>
-                    <span style={{ fontSize: 16, filter: unlocked ? "none" : "grayscale(1)" }}>{a.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{a.name}</div>
-                      <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{a.desc}</div>
+                  <div key={tier}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
+                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{items.length}</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                      {items.map((a) => {
+                        const unlocked = profile.achievements.includes(a.id);
+                        return (
+                          <div key={a.id} title={a.desc} style={{
+                            display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999,
+                            background: unlocked ? "#fff" : "transparent",
+                            border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
+                            boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
+                            opacity: unlocked ? 1 : 0.4, fontSize: 12.5,
+                          }}>
+                            <span style={{ fontSize: 16, filter: unlocked ? "none" : "grayscale(1)" }}>{a.icon}</span>
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{a.name}</div>
+                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{a.desc}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -794,11 +884,17 @@ export default function MathsUnlockedBN() {
                       </div>
                     )}
                     {(s.achievements || []).length > 0 && (
-                      <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
-                        {s.achievements.map((aid) => {
-                          const a = ACHIEVEMENTS.find((x) => x.id === aid);
-                          return a ? <span key={aid} title={a.name} style={{ fontSize: 14 }}>{a.icon}</span> : null;
-                        })}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 10 }}>
+                        {(s.achievements || [])
+                          .map((aid) => ACHIEVEMENTS.find((x) => x.id === aid))
+                          .filter(Boolean)
+                          .sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier))
+                          .map((a) => (
+                            <span key={a.id} title={`${a.name} · ${a.tier}`} style={{
+                              fontSize: 13, lineHeight: 1, padding: 3, borderRadius: "50%",
+                              boxShadow: `0 0 0 1.5px ${TIER_COLOR[a.tier]}`,
+                            }}>{a.icon}</span>
+                          ))}
                       </div>
                     )}
                   </div>
@@ -956,7 +1052,7 @@ export default function MathsUnlockedBN() {
                   )}
                   {feedback.unlocked.length > 0 && (
                     <div style={{ fontSize: 12.5, color: "var(--amber)", fontWeight: 600, marginBottom: 12 }}>
-                      🎉 Achievement unlocked: {feedback.unlocked.map((a) => a.name).join(", ")}
+                      🎉 Achievement unlocked: {feedback.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
                     </div>
                   )}
                   <div>
