@@ -135,12 +135,74 @@ function roundToSF(num, sf) {
   return Math.round(num * mag) / mag;
 }
 
+// "Instruction: expression" → drop the expression onto its own line so it
+// doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
+function splitPrompt(prompt) {
+  const i = (prompt || "").indexOf(":");
+  if (i === -1 || i > prompt.length - 3) return { lead: prompt || "", expr: "" };
+  return { lead: prompt.slice(0, i + 1).trim(), expr: prompt.slice(i + 1).trim() };
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
-      const a = randInt(2, 12), b = randInt(2, 9), c = randInt(2, 9), d = randInt(1, 10);
-      return { prompt: `Work out (follow order of operations):   ${a} + ${b} × ${c} − ${d}`, answer: `${a + b * c - d}`, hint: "Enter a number.",
-        steps: [`Multiply first: ${b} × ${c} = ${b * c}`, `Then add/subtract left to right: ${a} + ${b * c} − ${d} = ${a + b * c - d}`] };
+      // A mix of BODMAS shapes — brackets, orders (powers & roots),
+      // division, multiplication, add/subtract. Every answer is a
+      // non-negative whole number.
+      const forms = [
+        () => { // multiply, then add/subtract
+          const a = randInt(4, 20), b = randInt(2, 9), c = randInt(2, 9);
+          const d = randInt(1, Math.min(15, a + b * c - 1));
+          return { prompt: `${a} + ${b} × ${c} − ${d}`, answer: a + b * c - d,
+            steps: [`Multiply first: ${b} × ${c} = ${b * c}`, `Then left to right: ${a} + ${b * c} − ${d} = ${a + b * c - d}`] };
+        },
+        () => { // brackets, then multiply and subtract
+          const a = randInt(2, 12), b = randInt(2, 12), c = randInt(2, 6);
+          const d = randInt(1, Math.min(20, (a + b) * c - 1));
+          return { prompt: `(${a} + ${b}) × ${c} − ${d}`, answer: (a + b) * c - d,
+            steps: [`Brackets first: (${a} + ${b}) = ${a + b}`, `Multiply: ${a + b} × ${c} = ${(a + b) * c}`, `Subtract: ${(a + b) * c} − ${d} = ${(a + b) * c - d}`] };
+        },
+        () => { // multiply a bracket, then add
+          const a = randInt(3, 12), b = randInt(9, 20), c = randInt(2, 8), d = randInt(1, 20);
+          return { prompt: `${a} × (${b} − ${c}) + ${d}`, answer: a * (b - c) + d,
+            steps: [`Brackets first: (${b} − ${c}) = ${b - c}`, `Multiply: ${a} × ${b - c} = ${a * (b - c)}`, `Add: ${a * (b - c)} + ${d} = ${a * (b - c) + d}`] };
+        },
+        () => { // a square, then multiply and add
+          const a = randInt(3, 9), b = randInt(2, 9), c = randInt(2, 9);
+          return { prompt: `${a}² + ${b} × ${c}`, answer: a * a + b * c,
+            steps: [`Powers first: ${a}² = ${a * a}`, `Multiply: ${b} × ${c} = ${b * c}`, `Add: ${a * a} + ${b * c} = ${a * a + b * c}`] };
+        },
+        () => { // a cube, then subtract
+          const a = randInt(2, 5), cube = a * a * a, b = randInt(1, cube - 1);
+          return { prompt: `${a}³ − ${b}`, answer: cube - b,
+            steps: [`Powers first: ${a}³ = ${cube}`, `Subtract: ${cube} − ${b} = ${cube - b}`] };
+        },
+        () => { // a square root, then add or subtract
+          const r = randInt(3, 12), sq = r * r, add = Math.random() < 0.5;
+          const b = add ? randInt(1, 20) : randInt(1, r);
+          return { prompt: `√${sq} ${add ? "+" : "−"} ${b}`, answer: add ? r + b : r - b,
+            steps: [`Roots first: √${sq} = ${r}`, `${add ? "Add" : "Subtract"}: ${r} ${add ? "+" : "−"} ${b} = ${add ? r + b : r - b}`] };
+        },
+        () => { // divide and multiply, then add
+          const b = randInt(2, 9), k = randInt(2, 9), a = b * k, c = randInt(2, 9), d = randInt(2, 9);
+          return { prompt: `${a} ÷ ${b} + ${c} × ${d}`, answer: k + c * d,
+            steps: [`Divide and multiply first: ${a} ÷ ${b} = ${k},  ${c} × ${d} = ${c * d}`, `Add: ${k} + ${c * d} = ${k + c * d}`] };
+        },
+        () => { // brackets, then divide
+          const c = randInt(2, 8), q = randInt(2, 9), total = c * q, a = randInt(1, total - 1);
+          return { prompt: `(${a} + ${total - a}) ÷ ${c}`, answer: q,
+            steps: [`Brackets first: (${a} + ${total - a}) = ${total}`, `Divide: ${total} ÷ ${c} = ${q}`] };
+        },
+        () => { // multiply then divide, left to right
+          const a = randInt(2, 9), b = randInt(2, 9), prod = a * b;
+          const divisors = [2, 3, 4, 5, 6].filter((x) => prod % x === 0);
+          const cc = divisors.length ? divisors[randInt(0, divisors.length - 1)] : 1;
+          return { prompt: `${a} × ${b} ÷ ${cc}`, answer: prod / cc,
+            steps: [`Left to right: ${a} × ${b} = ${prod}`, `Divide: ${prod} ÷ ${cc} = ${prod / cc}`] };
+        },
+      ];
+      const q = forms[randInt(0, forms.length - 1)]();
+      return { prompt: `Work out (follow the order of operations):   ${q.prompt}`, answer: `${q.answer}`, hint: "Enter a number.", steps: q.steps };
     } },
   { id: "hcflcm", name: "HCF & LCM", icon: "➗", prereqs: ["arithmetic"],
     generate() {
@@ -813,6 +875,20 @@ export default function MathsUnlockedBN() {
   const [teacherMode, setTeacherMode] = useState(false);
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
+  const answerRef = useRef(null);
+
+  // Insert a symbol at the caret in the answer box (for keys not on a
+  // phone keyboard).
+  function insertSym(sym) {
+    const el = answerRef.current;
+    if (!el) { setAnswerInput((a) => a + sym); return; }
+    const start = el.selectionStart ?? answerInput.length;
+    const end = el.selectionEnd ?? answerInput.length;
+    setAnswerInput(answerInput.slice(0, start) + sym + answerInput.slice(end));
+    requestAnimationFrame(() => {
+      try { el.focus(); el.setSelectionRange(start + sym.length, start + sym.length); } catch (e) { /* noop */ }
+    });
+  }
 
   useEffect(() => {
     (async () => {
@@ -1790,16 +1866,45 @@ export default function MathsUnlockedBN() {
                   );
                 })()}
               </div>
-              <div className="mub-mono" style={{ fontSize: 17, lineHeight: 1.6, marginBottom: 18 }}>{question.prompt}</div>
+              {(() => {
+                const { lead, expr } = splitPrompt(question.prompt);
+                const mathOnly = expr && !/[a-z]{3,}/i.test(expr);
+                return (
+                  <div style={{ marginBottom: 18 }}>
+                    <div className="mub-mono" style={{ fontSize: expr ? 14 : 17, lineHeight: 1.55, color: expr ? "var(--muted)" : "var(--ink)" }}>{lead}</div>
+                    {expr && (
+                      <div className="mub-mono" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.5, marginTop: 8, color: "var(--ink)", ...(mathOnly ? { whiteSpace: "nowrap", overflowX: "auto" } : {}) }}>{expr}</div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <input
+                ref={answerRef}
                 autoFocus className="mub-mono" value={answerInput}
                 onChange={(e) => setAnswerInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                 placeholder={question.hint}
                 disabled={!!feedback}
-                style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", marginBottom: 14 }}
+                style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", marginBottom: 10 }}
               />
+
+              {!feedback && (() => {
+                const ctx = `${question.hint || ""} ${question.answer || ""}`;
+                const syms = [];
+                if (/π/.test(ctx)) syms.push("π");
+                if (/√|sqrt/i.test(ctx)) syms.push("√");
+                if (/\^/.test(ctx)) syms.push("^");
+                if (!syms.length) return null;
+                return (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)", alignSelf: "center" }}>insert:</span>
+                    {syms.map((s) => (
+                      <button key={s} type="button" onClick={() => insertSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 36, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {!feedback && (
                 <button onClick={submitAnswer} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
@@ -1910,13 +2015,14 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {board.schools.map((s, i) => {
                   const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
+                  const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
                   return (
                     <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, padding: "12px 14px", background: "var(--card)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: i < 3 ? "var(--amber)" : "var(--muted)", minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
+                        <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"} · {s.atMax} at Level 20</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"}</div>
                         </div>
                         <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.score}</div>
                       </div>
