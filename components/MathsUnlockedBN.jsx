@@ -474,11 +474,14 @@ function levelProgress(exp) {
   const into = exp - base;
   return { level, into, need, pct: Math.max(0, Math.min(100, Math.round((into / need) * 100))), capped: false };
 }
-function LevelBar({ exp }) {
-  const { level, into, need, pct, capped } = levelProgress(exp);
+function LevelBar({ profile, onPrestige }) {
+  const { level, into, need, pct, capped } = levelProgress(totalExp(profile));
+  const prestige = profile.prestige || 0;
+  const canPrestige = capped && prestige < PRESTIGE_CAP && typeof onPrestige === "function";
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12 }}>
-      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "baseline", gap: 4 }}>
+    <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+        <PrestigeBadge prestige={prestige} size={18} />
         <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5 }}>LV</span>{level}
       </div>
       <div style={{ flex: 1, minWidth: 40 }}>
@@ -487,8 +490,13 @@ function LevelBar({ exp }) {
         </div>
       </div>
       <div style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, fontWeight: 600 }}>
-        {capped ? "MAX · Level 20" : `${into} / ${need} XP`}
+        {capped ? (prestige >= PRESTIGE_CAP ? "MAX PRESTIGE" : "MAX · Level 20") : `${into} / ${need} XP`}
       </div>
+      {canPrestige && (
+        <button onClick={onPrestige} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", flexShrink: 0 }}>
+          Prestige →
+        </button>
+      )}
     </div>
   );
 }
@@ -506,6 +514,30 @@ function titleForLevel(level) {
   let name = TITLES[0].name;
   for (const t of TITLES) if (level >= t.level) name = t.name;
   return name;
+}
+
+/* Prestige — up to 10 resets. Each one wipes topic progress and level
+   but keeps achievements, lifetime stats and prestige rank. Leaderboard
+   score is prestige×20 + level, so every prestige rank counts as a full
+   extra 20 levels of standing. */
+const PRESTIGE_CAP = 10;
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+const PRESTIGE_COLORS = [
+  null, "#B07437", "#8A929E", "#C99A1E", "#2E7D6B", "#3B6FA0",
+  "#7A4FBF", "#B14A36", "#33383F", "#C9A227", "#3E9CB8",
+];
+function PrestigeBadge({ prestige, size = 20 }) {
+  const p = prestige || 0;
+  if (p < 1) return null;
+  const c = PRESTIGE_COLORS[Math.min(p, PRESTIGE_CAP)] || "var(--blue)";
+  return (
+    <span title={`Prestige ${p}`} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: size, height: size, borderRadius: Math.round(size * 0.28), transform: "rotate(45deg)", background: c, flexShrink: 0, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}>
+      <span className="mub-display" style={{ transform: "rotate(-45deg)", color: "#fff", fontSize: Math.round(size * 0.5), fontWeight: 700, lineHeight: 1 }}>{ROMAN[Math.min(p, PRESTIGE_CAP)]}</span>
+    </span>
+  );
+}
+function leaderboardScore(profile) {
+  return (profile.prestige || 0) * 20 + levelFromExp(totalExp(profile));
 }
 
 /* Starter list of Brunei secondary schools + sixth-form centres for the
@@ -594,13 +626,22 @@ function ProfileCard({ profile }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 14px" }}>
-        <div style={{ width: 58, height: 58, borderRadius: "50%", border: "2px solid var(--blue)", color: "var(--blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: 8, letterSpacing: 0.5 }}>LEVEL</span>
-          <span className="mub-display" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{level}</span>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <div style={{ width: 58, height: 58, borderRadius: "50%", border: "2px solid var(--blue)", color: "var(--blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 8, letterSpacing: 0.5 }}>LEVEL</span>
+            <span className="mub-display" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{level}</span>
+          </div>
+          {(profile.prestige || 0) > 0 && (
+            <div style={{ position: "absolute", right: -6, bottom: -4 }}>
+              <PrestigeBadge prestige={profile.prestige} size={22} />
+            </div>
+          )}
         </div>
         <div style={{ minWidth: 0 }}>
           <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
-          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600 }}>{title}</div>
+          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600 }}>
+            {title}{(profile.prestige || 0) > 0 ? ` · Prestige ${profile.prestige}` : ""}
+          </div>
           {profile.school && profile.school !== SOLO_SCHOOL && (
             <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 1, wordBreak: "break-word" }}>{profile.school}</div>
           )}
@@ -659,6 +700,7 @@ function topicHasCorrect(profile, topicId) {
    rank C (50%) — a "basic competency" bar, not full mastery. */
 const UNLOCK_RANK = RANK_ORDER.indexOf("C");
 function isUnlocked(topic, profile) {
+  if ((profile.keyedTopics || []).includes(topic.id)) return true; // opened early with a Skeleton Key
   return topic.prereqs.every((pid) => ((profile.topics[pid] || {}).highestRank ?? -1) >= UNLOCK_RANK);
 }
 function lockedReason(topic) {
@@ -670,6 +712,7 @@ const emptyProfile = () => ({
   name: "", school: SOLO_SCHOOL, topics: {}, achievements: [], achievedAt: {},
   streak: 0, bestStreak: 0, fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0,
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
+  prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
@@ -715,6 +758,8 @@ export default function MathsUnlockedBN() {
   const [qbEditingId, setQbEditingId] = useState(null);
   const [qbPreview, setQbPreview] = useState(null);
   const [showCard, setShowCard] = useState(false);
+  const [confirmPrestige, setConfirmPrestige] = useState(false);
+  const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
   const [teacherMode, setTeacherMode] = useState(false);
@@ -936,11 +981,14 @@ export default function MathsUnlockedBN() {
     const expGain = expAfter - expBefore;
     const lvlBefore = levelFromExp(expBefore);
     const lvlAfter = levelFromExp(expAfter);
+    let keysWon = 0;
     if (lvlAfter > lvlBefore) {
       next.levelReachedAt = next.levelReachedAt || {};
       for (let L = lvlBefore + 1; L <= lvlAfter; L++) {
         if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
+        if (L % 5 === 0) keysWon += 1; // a Skeleton Key every 5 levels (5, 10, 15, 20)
       }
+      if (keysWon) next.keys = (next.keys || 0) + keysWon;
     }
     const leveledTo = lvlAfter > lvlBefore ? lvlAfter : null;
 
@@ -954,8 +1002,36 @@ export default function MathsUnlockedBN() {
       }
     });
     if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
-    setFeedback({ correct, unlocked, expGain, leveledTo });
+    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon });
     saveProfile(next);
+  }
+
+  function doPrestige() {
+    const cur = JSON.parse(JSON.stringify(profile));
+    if ((cur.prestige || 0) >= PRESTIGE_CAP) return;
+    if (levelFromExp(totalExp(cur)) < LEVEL_CAP) return;
+    cur.prestige = (cur.prestige || 0) + 1;
+    cur.prestigeAt = [...(cur.prestigeAt || []), Date.now()];
+    cur.topics = {};            // grades wiped → XP and level reset to 1
+    cur.streak = 0;
+    cur.consecWrong = 0;
+    cur.levelReachedAt = {};
+    // kept: achievements, achievedAt, lifetime counters, keys, keyedTopics, name, school
+    setConfirmPrestige(false);
+    setActiveTopic(null);
+    setScreen("dashboard");
+    playJingle(true);
+    saveProfile(cur);
+  }
+
+  function useKeyOn(topic) {
+    const cur = JSON.parse(JSON.stringify(profile));
+    if ((cur.keys || 0) < 1) return;
+    if ((cur.keyedTopics || []).includes(topic.id)) return;
+    cur.keys -= 1;
+    cur.keyedTopics = [...(cur.keyedTopics || []), topic.id];
+    setKeyTarget(null);
+    saveProfile(cur);
   }
 
   async function loadStudents() {
@@ -1134,17 +1210,25 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
                 <div>
                   <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
-                    {profile.school && profile.school !== SOLO_SCHOOL ? ` · ${profile.school}` : ""}
-                    {" · "}Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}
+                    <span>
+                      {profile.school && profile.school !== SOLO_SCHOOL ? `· ${profile.school} ` : ""}
+                      · Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}
+                    </span>
                   </div>
                 </div>
                 <button onClick={() => setShowCard(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>
                   Share card
                 </button>
               </div>
-              <LevelBar exp={totalExp(profile)} />
+              <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+                <span style={{ fontSize: 15 }}>🔑</span>
+                <span><b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
+                <span style={{ opacity: 0.7 }}>· earned every 5 levels · opens a locked topic early</span>
+              </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 26 }}>
@@ -1180,6 +1264,14 @@ export default function MathsUnlockedBN() {
                     <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
                       {unlocked ? `${topicState.history.length} attempted` : lockedReason(t)}
                     </div>
+                    {!unlocked && (profile.keys || 0) > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setKeyTarget(t); }}
+                        style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
+                      >
+                        🔑 Use key
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -1258,6 +1350,7 @@ export default function MathsUnlockedBN() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
                       <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         {s.name}
+                        <PrestigeBadge prestige={s.prestige} size={16} />
                         <span className="mub-display" style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 8px" }}>
                           LV {levelFromExp(totalExp(s))}
                         </span>
@@ -1479,12 +1572,13 @@ export default function MathsUnlockedBN() {
                   {feedback.leveledTo && (
                     <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
                       ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
+                      {feedback.keysWon > 0 && ` · 🔑 +${feedback.keysWon} Skeleton Key${feedback.keysWon > 1 ? "s" : ""}`}
                     </div>
                   )}
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4 }}>+{feedback.expGain} XP</div>
-                      <LevelBar exp={totalExp(profile)} />
+                      <LevelBar profile={profile} />
                     </div>
                   )}
                   <div>
@@ -1507,6 +1601,47 @@ export default function MathsUnlockedBN() {
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <ProfileCard profile={profile} />
             <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Screenshot this to share · tap outside to close</div>
+          </div>
+        </div>
+      )}
+
+      {confirmPrestige && (
+        <div onClick={() => setConfirmPrestige(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 380, fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <PrestigeBadge prestige={(profile.prestige || 0) + 1} size={28} />
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>Prestige {(profile.prestige || 0) + 1}?</div>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
+              Every topic goes back to <b>ungraded</b> and your level resets to <b>1</b>. You keep your achievements, Skeleton Keys, and lifetime stats — and you move up to Prestige {(profile.prestige || 0) + 1} permanently. <b>This cannot be undone.</b>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmPrestige(false)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>
+                Cancel
+              </button>
+              <button onClick={doPrestige} style={{ fontSize: 13, fontWeight: 700, background: "var(--amber)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                Yes, prestige
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {keyTarget && (
+        <div onClick={() => setKeyTarget(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 360, fontFamily: "Inter, sans-serif" }}>
+            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>🔑 Use a Skeleton Key?</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
+              Unlock <b>{keyTarget.name}</b> now, skipping its prerequisite. You have <b>{profile.keys || 0}</b> key{(profile.keys || 0) === 1 ? "" : "s"}.
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setKeyTarget(null)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>
+                Cancel
+              </button>
+              <button onClick={() => useKeyOn(keyTarget)} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                Unlock it
+              </button>
+            </div>
           </div>
         </div>
       )}
