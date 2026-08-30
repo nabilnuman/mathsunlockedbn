@@ -720,6 +720,22 @@ const emptyProfile = () => ({
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
+const genToken = () => {
+  try { return crypto.randomUUID().replace(/-/g, "").slice(0, 18); } catch (e) { /* fall through */ }
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+};
+
+// A student's leaderboard standing "settled" at the latest moment they
+// improved — used to break school ties ("reached it first" wins).
+function lastImprovementAt(profile) {
+  const times = [
+    ...Object.values(profile.levelReachedAt || {}),
+    ...(profile.prestigeAt || []),
+    ...Object.values(profile.achievedAt || {}),
+    profile.createdAt || 0,
+  ].filter((n) => typeof n === "number");
+  return times.length ? Math.max(...times) : 0;
+}
 
 /* Two palettes keyed to the same CSS-variable names. The root <div> gets
    whichever set the current theme selects, so every `var(--x)` downstream
@@ -763,6 +779,10 @@ export default function MathsUnlockedBN() {
   const [qbEditingId, setQbEditingId] = useState(null);
   const [qbPreview, setQbPreview] = useState(null);
   const [showCard, setShowCard] = useState(false);
+  const [showParentLink, setShowParentLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
+  const [board, setBoard] = useState(null);           // { loading, schools: [...] }
   const [confirmPrestige, setConfirmPrestige] = useState(false);
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
@@ -783,6 +803,20 @@ export default function MathsUnlockedBN() {
         if (params.get("teacher") === "0") window.localStorage.removeItem("mub_teacher");
         if (window.localStorage.getItem("mub_teacher") === "1") setTeacherMode(true);
       } catch (e) { /* defaults are fine */ }
+
+      // Parent Link: ?p=<token> shows a read-only view of one student.
+      try {
+        const pTok = new URLSearchParams(window.location.search).get("p");
+        if (pTok) {
+          const r = await storage.get(`parent_${pTok}`, true);
+          if (r && r.value) setParentView(JSON.parse(r.value));
+          else setParentView({ __missing: true });
+          setScreen("parent");
+          setReady(true);
+          return;
+        }
+      } catch (e) { setParentView({ __missing: true }); setScreen("parent"); setReady(true); return; }
+
       try {
         const res = await storage.get("profile");
         if (res && res.value) {
@@ -908,10 +942,14 @@ export default function MathsUnlockedBN() {
   }
 
   async function saveProfile(next) {
+    if (next.name && !next.parentToken) next.parentToken = genToken();
     setProfile(next);
     try { await storage.set("profile", JSON.stringify(next)); } catch (e) { /* ignore */ }
     if (next.name) {
       try { await storage.set(`student_${slug(next.name)}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
+      if (next.parentToken) {
+        try { await storage.set(`parent_${next.parentToken}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
+      }
     }
   }
 
@@ -1083,6 +1121,64 @@ export default function MathsUnlockedBN() {
     loadStudents();
   }
 
+  function openLeaderboard() {
+    setScreen("leaderboard");
+    loadBoard();
+  }
+
+  function openParentLink() {
+    if (!profile.parentToken) saveProfile({ ...profile, parentToken: genToken() });
+    setLinkCopied(false);
+    setShowParentLink(true);
+  }
+  function copyParentLink(text) {
+    try {
+      navigator.clipboard.writeText(text).then(() => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      });
+    } catch (e) { /* clipboard unavailable — the link is shown for manual copy */ }
+  }
+
+  // Client-side aggregation: read every student record, group by school,
+  // rank by the sum of the school's top-10 leaderboard scores. Ties go to
+  // whichever school assembled that top-10 earliest.
+  async function loadBoard() {
+    setBoard({ loading: true, schools: [] });
+    let all = [];
+    try {
+      const listRes = await storage.list("student_", true);
+      for (const k of (listRes && listRes.keys) || []) {
+        try {
+          const r = await storage.get(k, true);
+          if (r && r.value) all.push(JSON.parse(r.value));
+        } catch (e) { /* skip */ }
+      }
+    } catch (e) { /* leave all empty */ }
+
+    const bySchool = {};
+    for (const s of all) {
+      if (!s || !s.school || s.school === SOLO_SCHOOL) continue;
+      (bySchool[s.school] = bySchool[s.school] || []).push(s);
+    }
+    const schools = Object.entries(bySchool).map(([name, members]) => {
+      const ranked = members
+        .map((m) => ({ name: m.name, score: leaderboardScore(m), prestige: m.prestige || 0, level: levelFromExp(totalExp(m)), at: lastImprovementAt(m) }))
+        .sort((a, b) => b.score - a.score || a.at - b.at);
+      const top = ranked.slice(0, 10);
+      return {
+        name,
+        members: members.length,
+        atMax: ranked.filter((r) => r.level >= LEVEL_CAP).length,
+        score: top.reduce((sum, r) => sum + r.score, 0),
+        assembledAt: top.length ? Math.max(...top.map((r) => r.at)) : Infinity,
+        top,
+      };
+    });
+    schools.sort((a, b) => b.score - a.score || a.assembledAt - b.assembledAt || a.name.localeCompare(b.name));
+    setBoard({ loading: false, schools });
+  }
+
   function openQuestionBank() {
     setScreen("questions");
     setQbPreview(TOPIC_BY_ID[qbTopicId].generate());
@@ -1161,17 +1257,22 @@ export default function MathsUnlockedBN() {
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
-            {screen !== "login" && teacherMode && screen !== "admin" && (
+            {screen !== "login" && screen !== "parent" && screen !== "leaderboard" && (
+              <button onClick={openLeaderboard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+                Leaderboard
+              </button>
+            )}
+            {screen !== "login" && screen !== "parent" && teacherMode && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
               </button>
             )}
-            {screen !== "login" && teacherMode && screen !== "questions" && (
+            {screen !== "login" && screen !== "parent" && teacherMode && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
             )}
-            {screen !== "login" && (
+            {screen !== "login" && screen !== "parent" && (
               <button onClick={switchStudent} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 <RotateCcw size={13} /> switch student
               </button>
@@ -1245,9 +1346,14 @@ export default function MathsUnlockedBN() {
                     </span>
                   </div>
                 </div>
-                <button onClick={() => setShowCard(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>
-                  Share card
-                </button>
+                <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+                  <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+                    Parent link
+                  </button>
+                  <button onClick={() => setShowCard(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+                    Share card
+                  </button>
+                </div>
               </div>
               <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} />
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
@@ -1652,6 +1758,90 @@ export default function MathsUnlockedBN() {
             </div>
           </div>
         )}
+
+        {/* PARENT LINK (read-only) */}
+        {screen === "parent" && (
+          <div>
+            {(!parentView || parentView.__missing) ? (
+              <div style={{ maxWidth: 420, margin: "48px auto", textAlign: "center" }}>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Link not found</div>
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>This progress link is invalid or has expired. Ask the student for a fresh one from their dashboard.</div>
+              </div>
+            ) : (
+              <div>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{parentView.name}&rsquo;s progress</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
+                  A read-only summary of practice on MathsUnlocked BN. Reload the page for the latest.
+                </div>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                  <ProfileCard profile={parentView} />
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Grade in every topic</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+                  {TOPICS.map((t) => {
+                    const r = rankDisplay(((parentView.topics || {})[t.id] || {}).highestRank);
+                    return (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
+                        <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
+                        <span style={{ fontWeight: 700, fontSize: 12, color: r.color, flexShrink: 0 }}>{r.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SCHOOL LEADERBOARD */}
+        {screen === "leaderboard" && (
+          <div>
+            <button onClick={() => setScreen(profile.name ? "dashboard" : "login")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+              <ArrowLeft size={14} /> back
+            </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 10, flexWrap: "wrap" }}>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>School Leaderboard</div>
+              <button onClick={loadBoard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                <RotateCcw size={12} /> refresh
+              </button>
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
+              Each school is scored by the sum of its top 10 students — <b>Prestige × 20 + Level</b> each. Ties go to whichever school got there first.
+            </div>
+            {!board || board.loading ? (
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+            ) : board.schools.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>No schools ranked yet — students choose a school when they register.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {board.schools.map((s, i) => {
+                  const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
+                  return (
+                    <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, padding: "12px 14px", background: "var(--card)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: i < 3 ? "var(--amber)" : "var(--muted)", minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"} · {s.atMax} at Level 20</div>
+                        </div>
+                        <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.score}</div>
+                      </div>
+                      {s.top.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                          {s.top.map((m, j) => (
+                            <span key={j} style={{ fontSize: 10.5, color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 7px" }}>
+                              {m.name} · {m.prestige ? `P${m.prestige} ` : ""}L{m.level}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {showCard && (
@@ -1665,6 +1855,29 @@ export default function MathsUnlockedBN() {
           </div>
         </div>
       )}
+
+      {showParentLink && (() => {
+        const url = typeof window !== "undefined" && profile.parentToken ? `${window.location.origin}/?p=${profile.parentToken}` : "";
+        return (
+          <div onClick={() => setShowParentLink(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 420, fontFamily: "Inter, sans-serif" }}>
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Parent Link</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 14 }}>
+                Send this to a parent. It opens a read-only page with your level, grade in every topic, and achievements — and it updates as you practise. Anyone with the link can view it, so only share it with people you want to see your progress.
+              </div>
+              <div style={{ fontSize: 12, wordBreak: "break-all", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontFamily: "monospace" }}>
+                {url || "Generating…"}
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => setShowParentLink(false)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>Close</button>
+                <button onClick={() => copyParentLink(url)} disabled={!url} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                  {linkCopied ? "Copied!" : "Copy link"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {confirmPrestige && (
         <div onClick={() => setConfirmPrestige(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
