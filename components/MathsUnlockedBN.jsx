@@ -934,7 +934,15 @@ export default function MathsUnlockedBN() {
     }
     const expAfter = totalExp(next);
     const expGain = expAfter - expBefore;
-    const leveledTo = levelFromExp(expAfter) > levelFromExp(expBefore) ? levelFromExp(expAfter) : null;
+    const lvlBefore = levelFromExp(expBefore);
+    const lvlAfter = levelFromExp(expAfter);
+    if (lvlAfter > lvlBefore) {
+      next.levelReachedAt = next.levelReachedAt || {};
+      for (let L = lvlBefore + 1; L <= lvlAfter; L++) {
+        if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
+      }
+    }
+    const leveledTo = lvlAfter > lvlBefore ? lvlAfter : null;
 
     const unlocked = [];
     next.achievedAt = next.achievedAt || {};
