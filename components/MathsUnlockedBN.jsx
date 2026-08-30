@@ -1158,6 +1158,13 @@ export default function MathsUnlockedBN() {
   function devAddKeys(n) {
     saveProfile({ ...profile, keys: (profile.keys || 0) + n });
   }
+  function devHardReset() {
+    if (typeof window !== "undefined" && !window.confirm("Reset this account to a blank Level 1 / Prestige 0? Progress, prestige, Skeleton Keys and achievements are all wiped. Name, school and PIN are kept.")) return;
+    const { name, school, pin, parentToken, createdAt } = profile;
+    saveProfile({ ...emptyProfile(), name, school, pin, parentToken, createdAt: createdAt || Date.now() });
+    setActiveTopic(null);
+    setScreen("dashboard");
+  }
 
   function startTopic(topic) {
     if (!isUnlocked(topic, profile)) return;
@@ -1577,6 +1584,7 @@ export default function MathsUnlockedBN() {
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
                           <button onClick={devMaxTopic} style={b}>Max selected → S+</button>
+                          <button onClick={devHardReset} style={{ ...b, color: "var(--red)", borderColor: "var(--red)" }}>Reset → Level 1, Prestige 0</button>
                         </>
                       );
                     })()}
