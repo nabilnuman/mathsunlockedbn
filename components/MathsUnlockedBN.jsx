@@ -1020,7 +1020,14 @@ export default function MathsUnlockedBN() {
     }
     await saveProfile(prof);
     if (adoptedLegacy) {
-      try { await storage.delete(`student_${slug(nm)}`, true); } catch (e) { /* leave the orphan */ }
+      // Only remove the legacy key once the new name+PIN record is
+      // confirmed saved — otherwise keep it as a fallback.
+      try {
+        const check = await storage.get(studentKey(nm, pin), true);
+        if (check && check.value && !isBlank(JSON.parse(check.value))) {
+          await storage.delete(`student_${slug(nm)}`, true);
+        }
+      } catch (e) { /* keep the legacy key */ }
     }
     setScreen("dashboard");
     setStarting(false);
