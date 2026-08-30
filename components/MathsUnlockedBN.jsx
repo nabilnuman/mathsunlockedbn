@@ -332,6 +332,11 @@ const TOPICS = [
 ];
 const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
 
+// Mixed Review — a level-3 reward: random questions drawn from every topic
+// the student has unlocked. Answers still score their source topic.
+const MIXED_TOPIC = { id: "__mixed__", name: "Mixed Review", icon: "🎲" };
+const MIXED_UNLOCK_LEVEL = 3;
+
 /* Achievements are grouped into four tiers. Each achievement's check(p)
    runs against the whole profile after every answer; ids are permanent
    (renaming/retiering an achievement keeps anyone who already earned it).
@@ -875,11 +880,31 @@ export default function MathsUnlockedBN() {
   // generator — roughly half the time, if any exist for this topic.
   function pickQuestion(topic) {
     const bank = customQuestions[topic.id] || [];
+    let q;
     if (bank.length && Math.random() < 0.5) {
-      const q = bank[randInt(0, bank.length - 1)];
-      return { prompt: q.prompt, answer: q.answer, hint: q.hint || "Enter your answer.", steps: q.steps && q.steps.length ? q.steps : ["Check your working carefully."] };
+      const c = bank[randInt(0, bank.length - 1)];
+      q = { prompt: c.prompt, answer: c.answer, hint: c.hint || "Enter your answer.", steps: c.steps && c.steps.length ? c.steps : ["Check your working carefully."] };
+    } else {
+      q = topic.generate();
     }
-    return topic.generate();
+    return { ...q, topicId: topic.id, topicName: topic.name, topicIcon: topic.icon };
+  }
+
+  // Mixed Review: a random question from any topic the student has unlocked.
+  function pickMixed() {
+    const pool = TOPICS.filter((t) => isUnlocked(t, profile));
+    const topic = pool[randInt(0, Math.max(0, pool.length - 1))] || TOPICS[0];
+    return pickQuestion(topic);
+  }
+
+  function startMixed() {
+    if (levelFromExp(totalExp(profile)) < MIXED_UNLOCK_LEVEL) return;
+    setActiveTopic(MIXED_TOPIC);
+    setQuestion(pickMixed());
+    setAnswerInput("");
+    setFeedback(null);
+    startTimeRef.current = Date.now();
+    setScreen("quiz");
   }
 
   async function saveProfile(next) {
@@ -940,7 +965,7 @@ export default function MathsUnlockedBN() {
   }
 
   function nextQuestion() {
-    setQuestion(pickQuestion(activeTopic));
+    setQuestion(activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
     setAnswerInput("");
     setFeedback(null);
     startTimeRef.current = Date.now();
@@ -951,14 +976,15 @@ export default function MathsUnlockedBN() {
     const elapsed = (Date.now() - startTimeRef.current) / 1000;
     const correct = checkEquivalent(answerInput, question.answer);
     const expBefore = totalExp(profile);
+    const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const next = JSON.parse(JSON.stringify(profile));
-    const t = next.topics[activeTopic.id] || { history: [], highestRank: -1, streak: 0 };
+    const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     t.history = [...t.history, correct ? 1 : 0].slice(-10);
     t.streak = correct ? (t.streak || 0) + 1 : 0;
     let candidateIdx = rankIndexForAvg(avgFromHistory(t.history));
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
-    next.topics[activeTopic.id] = t;
+    next.topics[scoredId] = t;
 
     const nowHour = new Date().getHours();
     if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
@@ -971,7 +997,7 @@ export default function MathsUnlockedBN() {
       if (elapsed < 60) next.minuteCorrect = (next.minuteCorrect || 0) + 1;
       if ((next.consecWrong || 0) >= 3) next.comeback = true; // "Comeback Kid"
       next.consecWrong = 0;
-      if (activeTopic.id === "surds") next.solvedSurd = true; // "Root of the Problem"
+      if (scoredId === "surds") next.solvedSurd = true; // "Root of the Problem"
       if (String(question.answer).trim() === "67") next.got67 = true; // "67"
     } else {
       next.streak = 0;
@@ -1230,6 +1256,36 @@ export default function MathsUnlockedBN() {
                 <span style={{ opacity: 0.7 }}>· earned every 5 levels · opens a locked topic early</span>
               </div>
             </div>
+
+            {(() => {
+              const lvl = levelFromExp(totalExp(profile));
+              const mixedOpen = lvl >= MIXED_UNLOCK_LEVEL;
+              return (
+                <button
+                  onClick={startMixed}
+                  disabled={!mixedOpen}
+                  className={mixedOpen ? "mub-card" : ""}
+                  style={{
+                    width: "100%", textAlign: "left", marginBottom: 20, cursor: mixedOpen ? "pointer" : "not-allowed",
+                    display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14,
+                    border: `1px solid ${mixedOpen ? "var(--blue)" : "var(--grid)"}`,
+                    background: mixedOpen ? "var(--card)" : "var(--locked)", opacity: mixedOpen ? 1 : 0.6,
+                  }}
+                >
+                  <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                      Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      {mixedOpen
+                        ? "Random questions from every topic you've unlocked — answers still count toward each topic."
+                        : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
+                    </span>
+                  </span>
+                </button>
+              );
+            })()}
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 26 }}>
               {TOPICS.map((t) => {
@@ -1510,9 +1566,14 @@ export default function MathsUnlockedBN() {
               transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px var(--shadow-soft)", position: "relative",
             }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
-                <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{activeTopic.icon} {activeTopic.name}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
+                  {activeTopic.icon} {activeTopic.name}
+                  {activeTopic.id === MIXED_TOPIC.id && question.topicName ? (
+                    <span style={{ fontWeight: 400 }}> · {question.topicIcon} {question.topicName}</span>
+                  ) : ""}
+                </div>
                 {(() => {
-                  const topicStreak = (profile.topics[activeTopic.id] || {}).streak || 0;
+                  const topicStreak = (profile.topics[question.topicId || activeTopic.id] || {}).streak || 0;
                   const live = topicStreak > 0;
                   return (
                     <div title="Correct answers in a row in this topic" style={{
