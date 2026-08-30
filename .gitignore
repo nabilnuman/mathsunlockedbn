@@ -1,5 +1,6 @@
 node_modules
 .next
+.claude
 .env*.local
 .env
 .DS_Store

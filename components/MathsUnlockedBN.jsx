@@ -688,15 +688,15 @@ export default function MathsUnlockedBN() {
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(31,41,55,0.10); }
       `}</style>
 
-      <div className="mub-grid" style={{ borderRadius: 20, padding: 28, minHeight: 560 }}>
+      <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", minHeight: 560 }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
             <span className="mub-display" style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>MathsUnlocked</span>
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · practice engine</span>
           </div>
           {screen !== "login" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
               {screen !== "admin" && (
                 <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                   Admin view
@@ -1012,7 +1012,24 @@ export default function MathsUnlockedBN() {
               borderLeft: "4px solid var(--red)", borderRadius: 10, padding: "26px 26px 26px 30px",
               transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px rgba(31,41,55,0.08)", position: "relative",
             }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, marginBottom: 4 }}>{activeTopic.icon} {activeTopic.name}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
+                <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{activeTopic.icon} {activeTopic.name}</div>
+                {(() => {
+                  const topicStreak = (profile.topics[activeTopic.id] || {}).streak || 0;
+                  const live = topicStreak > 0;
+                  return (
+                    <div title="Correct answers in a row in this topic" style={{
+                      display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
+                      fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                      color: live ? "var(--amber)" : "var(--muted)",
+                      border: `1px solid ${live ? "var(--amber)" : "var(--grid)"}`,
+                      background: live ? "#FBF3E6" : "transparent",
+                    }}>
+                      {live ? "🔥" : "○"} {topicStreak} streak
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="mub-mono" style={{ fontSize: 17, lineHeight: 1.6, marginBottom: 18 }}>{question.prompt}</div>
 
               <input

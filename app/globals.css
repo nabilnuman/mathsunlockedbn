@@ -14,4 +14,5 @@ main {
   max-width: 1000px;
   margin: 0 auto;
   padding: 24px 16px 64px;
+  overflow-x: hidden;
 }
