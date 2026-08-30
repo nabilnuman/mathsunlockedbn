@@ -545,63 +545,77 @@ function leaderboardScore(profile) {
   return (profile.prestige || 0) * 20 + levelFromExp(totalExp(profile));
 }
 
-/* Starter list of Brunei secondary schools + sixth-form centres for the
-   registration picker. NEEDS REVIEW — spellings are best-effort and the
-   list is not exhaustive. Add/fix here; the exact string is what gets
-   stored on the profile and grouped in the leaderboard, so keep entries
-   stable once students exist. "Solo" opts out of the school leaderboard. */
+/* Brunei secondary schools for the registration picker, grouped by
+   district. English names; a bracketed abbreviation is included where one
+   is commonly used, so the typeahead matches it. The exact string is
+   stored on the profile and grouped in the leaderboard — keep entries
+   stable once students exist. "Solo" opts out of the school leaderboard.
+   Sixth-form colleges are out of scope for this list. */
 const SOLO_SCHOOL = "Solo / Independent";
 const SCHOOLS = [
-  { group: "Government secondary", items: [
-    "Maktab Duli Pengiran Muda Al-Muhtadee Billah",
-    "Sekolah Menengah Sultan Omar Ali Saifuddien (SOAS)",
-    "PSR Secondary School (Pengiran Anak Puteri Rashidah Sa'adatul Bolkiah)",
-    "Sekolah Menengah Sayyidina Abu Bakar",
-    "Sekolah Menengah Sayyidina Umar Al-Khattab",
-    "Sekolah Menengah Sayyidina Ali",
-    "Sekolah Menengah Sayyidina Hussain",
-    "Sekolah Menengah Sayyidina Othman",
-    "Sekolah Menengah Sayyidina Hamzah",
-    "Sekolah Menengah Awang Semaun",
-    "Sekolah Menengah Pehin Datu Seri Maharaja (PDSM)",
-    "Sekolah Menengah Rimba",
-    "Sekolah Menengah Berakas",
-    "Sekolah Menengah Sengkurong",
-    "Sekolah Menengah PJN (Pengiran Jaya Negara Pengiran Haji Abu Bakar)",
-    "Sekolah Menengah Sufri Bolkiah, Tutong",
-    "Sekolah Menengah Muda Hashim, Tutong",
-    "Sekolah Menengah Sultan Hassan, Temburong",
-    "Sekolah Menengah Sungai Kebun",
-    "Sekolah Menengah Lambak Kanan",
-    "Sekolah Menengah Raja Isteri Pengiran Anak Damit",
-    "Sekolah Menengah Katok",
-    "Sekolah Menengah Tanjong Maya, Tutong",
-    "Sekolah Menengah Bukit Sawat, Belait",
-    "Sekolah Menengah Kuala Belait (SMKB)",
-    "Sekolah Menengah Perdana Wazir, Sungai Asam",
-  ] },
-  { group: "Sixth form centres", items: [
-    "Maktab Sains Paduka Seri Begawan Sultan (Maktab Sains)",
-    "Meragang Sixth Form Centre",
-    "Katok Sixth Form Centre",
-    "Tutong Sixth Form Centre",
-    "Belait Sixth Form Centre",
-  ] },
-  { group: "Religious / Arabic", items: [
+  { group: "Brunei-Muara", items: [
+    "Awang Semaun Secondary School (SMAS)",
+    "Berakas Secondary School (SMB)",
+    "Chung Hwa Middle School, Bandar Seri Begawan (CHMS BSB)",
     "Hassanal Bolkiah Boys' Arabic Secondary School",
-    "Raja Isteri Girls' Arabic College",
-    "Institut Tahfiz Al-Quran Sultan Haji Hassanal Bolkiah",
-  ] },
-  { group: "Private & international", items: [
-    "Jerudong International School (JIS)",
+    "Institut Tahfiz Al-Qur'an Sultan Haji Hassanal Bolkiah (ITQSHHB)",
     "International School Brunei (ISB)",
-    "Chung Hwa Middle School BSB (CHMS)",
-    "St Andrew's School",
-    "St George's School",
-    "St James' School, Kuala Belait",
-    "St John's School, Kuala Belait",
-    "St Michael's School, Seria",
-    "St Angela's School",
+    "Jerudong International School (JIS)",
+    "Katok Secondary School",
+    "Lambak Kiri Secondary School",
+    "Masin Secondary School",
+    "Menglait Secondary School (SMMG)",
+    "Paduka Seri Begawan Sultan Science College (MSPSBS)",
+    "Pehin Datu Seri Maharaja Secondary School (SMPDSM)",
+    "Pengiran Anak Puteri Hajah Masna Secondary School (SMPAPHM)",
+    "Pengiran Isteri Hajjah Mariam Secondary School (SMPIHM)",
+    "Raja Isteri Girls' High School (STPRI)",
+    "Raja Isteri Pengiran Anak Damit Girls' Arabic Religious Secondary School (SUAMPRIPAD)",
+    "Raja Isteri Pengiran Anak Damit Secondary School",
+    "Raja Isteri Pengiran Anak Hajah Saleha Girls' Secondary Arabic Religious School (SUAMPRIPAHS)",
+    "Rimba II Secondary School (SMRII)",
+    "Rimba Secondary School (SMR)",
+    "Sayyidina Abu Bakar Secondary School (SMSAB)",
+    "Sayyidina Hasan Secondary School",
+    "Sayyidina Husain Secondary School",
+    "Sayyidina Umar Al-Khattab Secondary School (SMSUA)",
+    "Sengkurong Secondary School",
+    "Seri Mulia Sarjana School (SMSS)",
+    "St. Andrew's School",
+    "St. George's School",
+    "Sultan Muhammad Jamalul Alam Secondary School (SM SMJA)",
+    "Sultan Omar Ali Saifuddien College (SOASC)",
+    "Sultan Sharif Ali Secondary School (SMSSA)",
+    "Yayasan Sultan Haji Hassanal Bolkiah Secondary School",
+  ] },
+  { group: "Belait", items: [
+    "Anthony Abell College (AAC)",
+    "Belait Arabic School",
+    "Bukit Sawat Secondary School",
+    "Chung Ching Middle School (CCMS)",
+    "Chung Hua Middle School, Kuala Belait (CHMS KB)",
+    "Kuala Belait Secondary School (SMKB)",
+    "Pengiran Anak Puteri Hajah Rashidah Sa'adatul Bolkiah Secondary School (SMPAPHRSB)",
+    "Pengiran Jaya Negara Pengiran Haji Abu Bakar Secondary School (SMPJNPHAB)",
+    "Perdana Wazir Secondary School",
+    "Sayyidina Ali Secondary School (SMSA)",
+    "St. Angela's School",
+    "St. James' School",
+    "St. John's School",
+    "St. Margaret's School (SMS)",
+    "St. Michael's School",
+  ] },
+  { group: "Tutong", items: [
+    "Ma'had Islam Brunei",
+    "Muda Hashim Secondary School (SMMHT)",
+    "Raja Isteri Pengiran Anak Saleha Secondary School (SM RIPAS)",
+    "Sayyidina 'Othman Secondary School (SMSO)",
+    "Sufri Bolkiah Secondary School (SMSB)",
+    "Tanjong Maya Secondary School (SMTM)",
+  ] },
+  { group: "Temburong", items: [
+    "Sultan Hassan Secondary School",
+    "Temburong Arabic Preparatory School",
   ] },
 ];
 const ALL_SCHOOLS = SCHOOLS.flatMap((g) => g.items);
