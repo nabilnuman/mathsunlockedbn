@@ -508,6 +508,66 @@ function titleForLevel(level) {
   return name;
 }
 
+/* Starter list of Brunei secondary schools + sixth-form centres for the
+   registration picker. NEEDS REVIEW — spellings are best-effort and the
+   list is not exhaustive. Add/fix here; the exact string is what gets
+   stored on the profile and grouped in the leaderboard, so keep entries
+   stable once students exist. "Solo" opts out of the school leaderboard. */
+const SOLO_SCHOOL = "Solo / Independent";
+const SCHOOLS = [
+  { group: "Government secondary", items: [
+    "Maktab Duli Pengiran Muda Al-Muhtadee Billah",
+    "Sekolah Menengah Sultan Omar Ali Saifuddien (SOAS)",
+    "PSR Secondary School (Pengiran Anak Puteri Rashidah Sa'adatul Bolkiah)",
+    "Sekolah Menengah Sayyidina Abu Bakar",
+    "Sekolah Menengah Sayyidina Umar Al-Khattab",
+    "Sekolah Menengah Sayyidina Ali",
+    "Sekolah Menengah Sayyidina Hussain",
+    "Sekolah Menengah Sayyidina Othman",
+    "Sekolah Menengah Sayyidina Hamzah",
+    "Sekolah Menengah Awang Semaun",
+    "Sekolah Menengah Pehin Datu Seri Maharaja (PDSM)",
+    "Sekolah Menengah Rimba",
+    "Sekolah Menengah Berakas",
+    "Sekolah Menengah Sengkurong",
+    "Sekolah Menengah PJN (Pengiran Jaya Negara Pengiran Haji Abu Bakar)",
+    "Sekolah Menengah Sufri Bolkiah, Tutong",
+    "Sekolah Menengah Muda Hashim, Tutong",
+    "Sekolah Menengah Sultan Hassan, Temburong",
+    "Sekolah Menengah Sungai Kebun",
+    "Sekolah Menengah Lambak Kanan",
+    "Sekolah Menengah Raja Isteri Pengiran Anak Damit",
+    "Sekolah Menengah Katok",
+    "Sekolah Menengah Tanjong Maya, Tutong",
+    "Sekolah Menengah Bukit Sawat, Belait",
+    "Sekolah Menengah Kuala Belait (SMKB)",
+    "Sekolah Menengah Perdana Wazir, Sungai Asam",
+  ] },
+  { group: "Sixth form centres", items: [
+    "Maktab Sains Paduka Seri Begawan Sultan (Maktab Sains)",
+    "Meragang Sixth Form Centre",
+    "Katok Sixth Form Centre",
+    "Tutong Sixth Form Centre",
+    "Belait Sixth Form Centre",
+  ] },
+  { group: "Religious / Arabic", items: [
+    "Hassanal Bolkiah Boys' Arabic Secondary School",
+    "Raja Isteri Girls' Arabic College",
+    "Institut Tahfiz Al-Quran Sultan Haji Hassanal Bolkiah",
+  ] },
+  { group: "Private & international", items: [
+    "Jerudong International School (JIS)",
+    "International School Brunei (ISB)",
+    "Chung Hwa Middle School BSB (CHMS)",
+    "St Andrew's School",
+    "St George's School",
+    "St James' School, Kuala Belait",
+    "St John's School, Kuala Belait",
+    "St Michael's School, Seria",
+    "St Angela's School",
+  ] },
+];
+
 /* Shareable summary of a student's progress. Pure display — takes a
    profile object, so the same card backs the (upcoming) Parent Link
    page. Sized to screenshot cleanly. */
@@ -541,6 +601,9 @@ function ProfileCard({ profile }) {
         <div style={{ minWidth: 0 }}>
           <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
           <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600 }}>{title}</div>
+          {profile.school && profile.school !== SOLO_SCHOOL && (
+            <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 1, wordBreak: "break-word" }}>{profile.school}</div>
+          )}
         </div>
       </div>
 
@@ -604,9 +667,9 @@ function lockedReason(topic) {
 }
 
 const emptyProfile = () => ({
-  name: "", topics: {}, achievements: [], streak: 0, bestStreak: 0,
-  fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0, consecWrong: 0,
-  nightOwl: false, comeback: false, solvedSurd: false, got67: false,
+  name: "", school: SOLO_SCHOOL, topics: {}, achievements: [], achievedAt: {},
+  streak: 0, bestStreak: 0, fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0,
+  consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
@@ -638,6 +701,8 @@ export default function MathsUnlockedBN() {
   const [profile, setProfile] = useState(emptyProfile());
   const [screen, setScreen] = useState("login");
   const [nameInput, setNameInput] = useState("");
+  const [schoolInput, setSchoolInput] = useState(SOLO_SCHOOL);
+  const [starting, setStarting] = useState(false);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
@@ -780,6 +845,45 @@ export default function MathsUnlockedBN() {
     }
   }
 
+  // Login. If a student with this name has practised before (their record
+  // lives in the shared scope and survives "Switch student"), resume it;
+  // otherwise create a fresh profile with the chosen school.
+  async function startSession() {
+    const nm = nameInput.trim();
+    if (!nm || starting) return;
+    setStarting(true);
+    let prof = null;
+    try {
+      const r = await storage.get(`student_${slug(nm)}`, true);
+      if (r && r.value) prof = JSON.parse(r.value);
+    } catch (e) { /* first time for this name */ }
+    if (prof) {
+      if (!prof.name) prof.name = nm;
+      if (!prof.school) prof.school = schoolInput;
+      if (!prof.achievedAt) prof.achievedAt = {};
+    } else {
+      prof = emptyProfile();
+      prof.name = nm;
+      prof.school = schoolInput;
+      prof.createdAt = Date.now();
+    }
+    await saveProfile(prof);
+    setScreen("dashboard");
+    setStarting(false);
+  }
+
+  // Non-destructive: forgets this device's session so the login screen
+  // shows, but the student's progress stays saved under their name and
+  // resumes when they sign back in.
+  async function switchStudent() {
+    try { await storage.delete("profile"); } catch (e) { /* ignore */ }
+    setProfile(emptyProfile());
+    setActiveTopic(null);
+    setScreen("login");
+    setNameInput("");
+    setSchoolInput(SOLO_SCHOOL);
+  }
+
   function startTopic(topic) {
     if (!isUnlocked(topic, profile)) return;
     setActiveTopic(topic);
@@ -912,13 +1016,6 @@ export default function MathsUnlockedBN() {
     saveCustomQuestions(qbTopicId, (customQuestions[qbTopicId] || []).filter((q) => q.id !== id));
   }
 
-  async function resetDemo() {
-    try { await storage.delete("profile"); } catch (e) { /* ignore */ }
-    setProfile(emptyProfile());
-    setScreen("login");
-    setNameInput("");
-  }
-
   const vars = THEMES[theme] || THEMES.light;
 
   if (!ready) return <div style={{ ...vars, minHeight: 400 }} />;
@@ -965,8 +1062,8 @@ export default function MathsUnlockedBN() {
               </button>
             )}
             {screen !== "login" && (
-              <button onClick={resetDemo} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                <RotateCcw size={13} /> reset demo
+              <button onClick={switchStudent} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+                <RotateCcw size={13} /> switch student
               </button>
             )}
             <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -982,18 +1079,32 @@ export default function MathsUnlockedBN() {
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C.</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name next time to pick up where you left off.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
             <input
               value={nameInput} onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") startSession(); }}
               placeholder="e.g. Amirah"
-              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
-            <button
-              onClick={() => { if (!nameInput.trim()) return; const p = emptyProfile(); p.name = nameInput.trim(); p.createdAt = Date.now(); saveProfile(p); setScreen("dashboard"); }}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the school leaderboard — optional)</span></label>
+            <select
+              value={schoolInput} onChange={(e) => setSchoolInput(e.target.value)}
+              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             >
-              Create profile & begin
+              <option value={SOLO_SCHOOL}>Solo / Independent — not on a school</option>
+              {SCHOOLS.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.items.map((s) => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              onClick={startSession}
+              disabled={!nameInput.trim() || starting}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || starting ? 0.6 : 1 }}
+            >
+              {starting ? "Loading…" : "Start / continue"}
             </button>
             {teacherMode && (
               <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
@@ -1017,6 +1128,7 @@ export default function MathsUnlockedBN() {
                   <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
                   <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
+                    {profile.school && profile.school !== SOLO_SCHOOL ? ` · ${profile.school}` : ""}
                     {" · "}Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}
                   </div>
                 </div>
@@ -1136,11 +1248,14 @@ export default function MathsUnlockedBN() {
                 return (
                   <div key={idx} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         {s.name}
                         <span className="mub-display" style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 8px" }}>
                           LV {levelFromExp(totalExp(s))}
                         </span>
+                        {s.school && s.school !== SOLO_SCHOOL && (
+                          <span style={{ fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>{s.school}</span>
+                        )}
                       </div>
                       <div style={{ fontSize: 12, color: "var(--muted)" }}>
                         {attempted.length}/{TOPICS.length} topics started · 🔥 best streak {s.bestStreak || 0} · 🏆 {(s.achievements || []).length} achievements
