@@ -992,6 +992,15 @@ export default function MathsUnlockedBN() {
       const r = await storage.get(studentKey(nm, pin), true);
       if (r && r.value) prof = JSON.parse(r.value);
     } catch (e) { /* first time for this name + PIN */ }
+    // Legacy accounts (created before PINs) are keyed by name only. The
+    // first person to sign in as that name adopts it and sets its PIN.
+    let adoptedLegacy = false;
+    if (!prof) {
+      try {
+        const legacy = await storage.get(`student_${slug(nm)}`, true);
+        if (legacy && legacy.value) { prof = JSON.parse(legacy.value); adoptedLegacy = true; }
+      } catch (e) { /* no legacy account */ }
+    }
     if (prof) {
       prof.name = prof.name || nm;
       prof.pin = pin;
@@ -1005,6 +1014,9 @@ export default function MathsUnlockedBN() {
       prof.createdAt = Date.now();
     }
     await saveProfile(prof);
+    if (adoptedLegacy) {
+      try { await storage.delete(`student_${slug(nm)}`, true); } catch (e) { /* leave the orphan */ }
+    }
     setScreen("dashboard");
     setStarting(false);
   }
