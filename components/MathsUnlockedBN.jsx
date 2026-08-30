@@ -852,6 +852,7 @@ export default function MathsUnlockedBN() {
   const [startError, setStartError] = useState("");
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
+  const [devTopic, setDevTopic] = useState(TOPICS[0].id);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
@@ -1128,6 +1129,34 @@ export default function MathsUnlockedBN() {
     saveProfile({ ...profile, school: s });
     setShowSchool(false);
     setSchoolEditQuery("");
+  }
+
+  /* Teacher/dev shortcuts (only reachable with ?teacher=1) for testing
+     level, prestige and Skeleton Key behaviour without grinding. */
+  const S_PLUS_IDX = RANK_ORDER.length - 1;
+  function devApplyMax(next, topicIds) {
+    topicIds.forEach((id) => { next.topics[id] = { history: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], highestRank: S_PLUS_IDX, streak: STREAK_FOR_S_PLUS }; });
+    next.achievedAt = next.achievedAt || {};
+    ACHIEVEMENTS.forEach((a) => {
+      if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); next.achievedAt[a.id] = Date.now(); }
+    });
+    next.levelReachedAt = next.levelReachedAt || {};
+    const lvl = levelFromExp(totalExp(next));
+    for (let L = 2; L <= lvl; L++) if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
+  }
+  function devMaxTopic() {
+    const next = JSON.parse(JSON.stringify(profile));
+    devApplyMax(next, [devTopic]);
+    saveProfile(next);
+  }
+  function devMaxAll() {
+    const next = JSON.parse(JSON.stringify(profile));
+    devApplyMax(next, TOPICS.map((t) => t.id));
+    next.keys = Math.max(next.keys || 0, 4); // as if the 5/10/15/20 milestones were hit
+    saveProfile(next);
+  }
+  function devAddKeys(n) {
+    saveProfile({ ...profile, keys: (profile.keys || 0) + n });
   }
 
   function startTopic(topic) {
@@ -1533,6 +1562,27 @@ export default function MathsUnlockedBN() {
                 <span><b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
                 <span style={{ opacity: 0.7 }}>· opens a locked topic early</span>
               </div>
+
+              {teacherMode && (
+                <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
+                  <div style={{ fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>🛠 Teacher / dev tools <span style={{ fontWeight: 400, color: "var(--muted)" }}>— affects your own account</span></div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {(() => {
+                      const b = { fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" };
+                      return (
+                        <>
+                          <button onClick={devMaxAll} style={b}>Max all topics → S+ (Level 20)</button>
+                          <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
+                          <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
+                            {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
+                          </select>
+                          <button onClick={devMaxTopic} style={b}>Max selected → S+</button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             {(() => {
