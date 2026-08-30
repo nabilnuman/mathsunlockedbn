@@ -439,14 +439,18 @@ function rankDisplay(highestRankIdx) {
    very first correct answer (ungraded→F) is enough for Lv 2.
 --------------------------------------------------------- */
 const LEVEL_CAP = 20;
-// EXP for entering each rank: F, E, D, C, B, A, A*, S, S+
-const RANK_STEP_EXP = [2, 3, 4, 6, 9, 14, 20, 28, 40];
-// RANK_CUM_EXP[k] = EXP a topic is worth once it has reached rank index k
+// XP for entering each rank: F, E, D, C, B, A, A*, S, S+  (arithmetic, +10)
+const RANK_STEP_EXP = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+// RANK_CUM_EXP[k] = XP a topic is worth once it has reached rank index k
+//   → [10, 30, 60, 100, 150, 210, 280, 360, 450]; a maxed topic = 450, ×30 = 13500
 const RANK_CUM_EXP = RANK_STEP_EXP.reduce((acc, v) => [...acc, (acc[acc.length - 1] || 0) + v], []);
-// EXP to go from level L to L+1, for L = 1..19 (sums to 3780 = 30 topics × 126)
-const LEVEL_STEP_EXP = [2, 13, 25, 40, 56, 75, 95, 118, 142, 169, 198, 228, 261, 295, 332, 370, 411, 453, 497];
-// LEVEL_CUM_EXP[i] = total EXP required to be level (i + 1)
-const LEVEL_CUM_EXP = LEVEL_STEP_EXP.reduce((acc, v) => [...acc, acc[acc.length - 1] + v], [0]);
+// LEVEL_CUM_EXP[i] = total XP required to be level (i + 1). Per-level cost is
+// 10·L·(L+1)/2 (10, 30, 60, 100, 150, 210 …) with a 2100 final push, so every
+// threshold is a multiple of 10 and the total is exactly 13500 = all topics S+.
+const LEVEL_CUM_EXP = [
+  0, 10, 40, 100, 200, 350, 560, 840, 1200, 1650,
+  2200, 2860, 3640, 4550, 5600, 6800, 8160, 9690, 11400, 13500,
+];
 
 function totalExp(profile) {
   const topics = (profile && profile.topics) || {};
@@ -485,6 +489,92 @@ function LevelBar({ exp }) {
       <div style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, fontWeight: 600 }}>
         {capped ? "MAX · Level 20" : `${into} / ${need} XP`}
       </div>
+    </div>
+  );
+}
+
+/* Rank titles shown under the student's name and on the profile card.
+   "Maths Specialist" covers Lv 15–20 — the extra flex past there comes
+   from Prestige, not a new title. */
+const TITLES = [
+  { level: 1, name: "Novice" },
+  { level: 5, name: "Apprentice" },
+  { level: 10, name: "Scholar" },
+  { level: 15, name: "Maths Specialist" },
+];
+function titleForLevel(level) {
+  let name = TITLES[0].name;
+  for (const t of TITLES) if (level >= t.level) name = t.name;
+  return name;
+}
+
+/* Shareable summary of a student's progress. Pure display — takes a
+   profile object, so the same card backs the (upcoming) Parent Link
+   page. Sized to screenshot cleanly. */
+function ProfileCard({ profile }) {
+  const exp = totalExp(profile);
+  const { level, into, need, pct, capped } = levelProgress(exp);
+  const title = titleForLevel(level);
+  const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
+  const ranked = TOPICS.filter((t) => ((profile.topics || {})[t.id] || {}).highestRank >= 0);
+  const best = [...ranked]
+    .sort((a, b) => ((profile.topics[b.id] || {}).highestRank ?? -1) - ((profile.topics[a.id] || {}).highestRank ?? -1))
+    .slice(0, 5);
+  const stat = (label, value) => (
+    <div style={{ textAlign: "center" }}>
+      <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
+      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div className="mub-grid" style={{ width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22, color: "var(--ink)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>MathsUnlocked</span>
+        <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 14px" }}>
+        <div style={{ width: 58, height: 58, borderRadius: "50%", border: "2px solid var(--blue)", color: "var(--blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 8, letterSpacing: 0.5 }}>LEVEL</span>
+          <span className="mub-display" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{level}</span>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
+          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600 }}>{title}</div>
+        </div>
+      </div>
+
+      <div style={{ height: 8, background: "var(--locked)", borderRadius: 999, overflow: "hidden", marginBottom: 4 }}>
+        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: capped ? "var(--amber)" : "var(--blue)" }} />
+      </div>
+      <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, marginBottom: 16 }}>
+        {capped ? "MAX · Level 20" : `${into} / ${need} XP to next level`}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-around", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "12px 8px", marginBottom: 14 }}>
+        {stat("Best streak", profile.bestStreak || 0)}
+        {stat("Correct", profile.totalCorrect || 0)}
+        {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
+      </div>
+
+      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+        Top topics
+      </div>
+      {best.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>No topics ranked yet.</div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {best.map((t) => {
+            const r = rankDisplay((profile.topics[t.id] || {}).highestRank);
+            return (
+              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, border: `1px solid ${r.color}`, fontSize: 11, background: "var(--card)" }}>
+                <span>{t.icon}</span>
+                <span style={{ fontWeight: 700, color: r.color }}>{r.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -559,6 +649,7 @@ export default function MathsUnlockedBN() {
   const [qbForm, setQbForm] = useState({ prompt: "", answer: "", hint: "", steps: "" });
   const [qbEditingId, setQbEditingId] = useState(null);
   const [qbPreview, setQbPreview] = useState(null);
+  const [showCard, setShowCard] = useState(false);
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
   const [teacherMode, setTeacherMode] = useState(false);
@@ -742,8 +833,13 @@ export default function MathsUnlockedBN() {
     const leveledTo = levelFromExp(expAfter) > levelFromExp(expBefore) ? levelFromExp(expAfter) : null;
 
     const unlocked = [];
+    next.achievedAt = next.achievedAt || {};
     ACHIEVEMENTS.forEach((a) => {
-      if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); unlocked.push(a); }
+      if (!next.achievements.includes(a.id) && a.check(next)) {
+        next.achievements.push(a.id);
+        next.achievedAt[a.id] = Date.now();
+        unlocked.push(a);
+      }
     });
     if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
     setFeedback({ correct, unlocked, expGain, leveledTo });
@@ -894,7 +990,7 @@ export default function MathsUnlockedBN() {
               style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
             <button
-              onClick={() => { if (!nameInput.trim()) return; const p = emptyProfile(); p.name = nameInput.trim(); saveProfile(p); setScreen("dashboard"); }}
+              onClick={() => { if (!nameInput.trim()) return; const p = emptyProfile(); p.name = nameInput.trim(); p.createdAt = Date.now(); saveProfile(p); setScreen("dashboard"); }}
               style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}
             >
               Create profile & begin
@@ -916,8 +1012,18 @@ export default function MathsUnlockedBN() {
         {screen === "dashboard" && (
           <div>
             <div style={{ marginBottom: 18 }}>
-              <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
-              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
+                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
+                    <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
+                    {" · "}Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}
+                  </div>
+                </div>
+                <button onClick={() => setShowCard(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>
+                  Share card
+                </button>
+              </div>
               <LevelBar exp={totalExp(profile)} />
             </div>
 
@@ -1269,6 +1375,18 @@ export default function MathsUnlockedBN() {
           </div>
         )}
       </div>
+
+      {showCard && (
+        <div
+          onClick={() => setShowCard(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <ProfileCard profile={profile} />
+            <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Screenshot this to share · tap outside to close</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
