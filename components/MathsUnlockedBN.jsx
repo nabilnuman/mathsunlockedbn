@@ -25,7 +25,7 @@ function tokenize(str) {
     if (c === "π") { tokens.push({ type: "num", value: Math.PI }); i++; continue; }
     if (str.slice(i, i + 4).toLowerCase() === "sqrt") { tokens.push({ type: "op", value: "√" }); i += 4; continue; }
     if (str.slice(i, i + 2).toLowerCase() === "pi") { tokens.push({ type: "num", value: Math.PI }); i += 2; continue; }
-    if (c === "x" || c === "X") { tokens.push({ type: "var" }); i++; continue; }
+    if (c === "x" || c === "X" || c === "n" || c === "N") { tokens.push({ type: "var" }); i++; continue; } // one variable, spelled x or n
     if ("+-*/^()".includes(c)) { tokens.push({ type: "op", value: c }); i++; continue; }
     i++;
   }
@@ -928,9 +928,59 @@ const TOPICS = [
     } },
   { id: "sequences", name: "Number Sequences", icon: "🔢", prereqs: ["algebra"],
     generate() {
-      const a1 = randInt(-10, 10); let d = randInt(-9, 9); if (d === 0) d = 3;
-      return { prompt: `Find the next term:   ${a1}, ${a1 + d}, ${a1 + 2 * d}, ${a1 + 3 * d}, ...`, answer: `${a1 + 4 * d}`, hint: "Enter a number.",
-        steps: [`Find the common difference: ${a1 + d} − ${a1} = ${d}`, `Add it to the last given term: ${a1 + 3 * d} + ${d} = ${a1 + 4 * d}`] };
+      const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+      const pick = (arr) => arr[randInt(0, arr.length - 1)];
+      const linRule = (m, c) => {
+        const mt = m === 1 ? "n" : m === -1 ? "-n" : `${m}n`;
+        return c === 0 ? mt : `${mt} ${c > 0 ? "+" : "-"} ${Math.abs(c)}`;
+      };
+      const quadRule = (a, b, c) => {
+        const at = a === 1 ? "n²" : a === -1 ? "-n²" : `${a}n²`;
+        const bt = b === 0 ? "" : ` ${b > 0 ? "+" : "-"} ${Math.abs(b) === 1 ? "" : Math.abs(b)}n`;
+        const ct = c === 0 ? "" : ` ${c > 0 ? "+" : "-"} ${Math.abs(c)}`;
+        return `${at}${bt}${ct}`;
+      };
+
+      const makeSeq = () => {
+        const kind = pick(["arith", "arith", "arith", "geo", "geo", "quad", "quad", "sqShift", "sqShift"]);
+        if (kind === "arith") {
+          const a1 = nz(-10, 10), d = nz(-9, 9);
+          return { kind, term: (n) => a1 + (n - 1) * d, rule: linRule(d, a1 - d),
+            how: `Constant difference of ${d}, so nth term = ${linRule(d, a1 - d)}` };
+        }
+        if (kind === "geo") {
+          const a = pick([1, 1, 2, -1, 2, 3]), r = pick([2, 2, 3, -2]);
+          const aPart = a === 1 ? "" : a === -1 ? "-" : `${a}×`;
+          const rTxt = r < 0 ? `(${r})` : `${r}`;
+          return { kind, term: (n) => a * Math.pow(r, n - 1), rule: `${aPart}${rTxt}^(n-1)`,
+            how: `Each term is ${r}× the previous one, so nth term = ${aPart}${rTxt}^(n-1)` };
+        }
+        if (kind === "quad") {
+          const a = pick([1, 1, 2, 2, 3, -1]), b = nz(-6, 6), c = nz(-8, 8);
+          return { kind, term: (n) => a * n * n + b * n + c, rule: quadRule(a, b, c),
+            how: `Second difference is ${2 * a} (constant → quadratic), so nth term = ${quadRule(a, b, c)}` };
+        }
+        const s = nz(-9, 9);
+        return { kind: "sqShift", term: (n) => n * n + s, rule: `n² ${s > 0 ? "+" : "-"} ${Math.abs(s)}`,
+          how: `Compare with 1, 4, 9, 16, … — every term is ${Math.abs(s)} ${s > 0 ? "more" : "less"}, so nth term = n² ${s > 0 ? "+" : "-"} ${Math.abs(s)}` };
+      };
+
+      const seq = makeSeq();
+      const shown = [1, 2, 3, 4, 5].map(seq.term);
+      const seqStr = `${shown.join(", ")}, ...`;
+      const mode = Math.random() < 0.4 ? "next" : Math.random() < 0.5 ? "rule" : "kth";
+
+      if (mode === "next") {
+        return { prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
+          steps: [seq.how, `Next term = ${seq.term(6)}`] };
+      }
+      if (mode === "rule") {
+        return { prompt: `Write the nth-term rule, in terms of n:   ${seqStr}`, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1",
+          steps: [seq.how, `nth term = ${seq.rule}`] };
+      }
+      const k = seq.kind === "geo" ? pick([7, 8, 9, 10]) : pick([12, 15, 20, 25, 30, 40, 50, 60, 100]);
+      return { prompt: `Find the ${k}th term:   ${seqStr}`, answer: `${seq.term(k)}`, hint: "work out the rule first",
+        steps: [seq.how, `Substitute n = ${k}:  ${seq.term(k)}`] };
     } },
   { id: "proportionality", name: "Proportionality", icon: "⚖️", prereqs: ["algebra"],
     generate() {
@@ -2964,7 +3014,7 @@ export default function MathsUnlockedBN() {
                 if (/π/.test(ctx)) syms.push("π");
                 if (/√|sqrt/i.test(ctx)) syms.push("√");
                 if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
-                else if (/\^/.test(ctx)) syms.push("^");
+                else if (/\^|²/.test(ctx)) syms.push("^");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
