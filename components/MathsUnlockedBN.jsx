@@ -453,9 +453,24 @@ const TOPICS = [
     } },
   { id: "sigfig", name: "Significant Figures", icon: "🎯", prereqs: [],
     generate() {
-      const scale = [1, 0.1, 0.01][randInt(0, 2)], raw = (randInt(1000, 9999) * scale) / 100, sf = randInt(1, 3), ans = roundToSF(raw, sf);
-      return { prompt: `Round ${raw} to ${sf} significant figure${sf > 1 ? "s" : ""}`, answer: `${ans}`, hint: "Enter a number.",
-        steps: [`Identify the first ${sf} significant figure${sf > 1 ? "s" : ""} of ${raw}`, `Look at the next digit to round up or keep it as is`, `Rounded: ${ans}`] };
+      // The number to round has 2–6 significant figures (built as a
+      // string so there's no floating-point noise), then round to fewer.
+      const d = randInt(2, 6);
+      let digs = String(randInt(1, 9));
+      for (let i = 1; i < d; i++) digs += i === d - 1 ? randInt(1, 9) : randInt(0, 9);
+      const styles = d >= 3 ? [0, 1, 2, 3, 4] : [0, 1, 3, 4];
+      const style = styles[randInt(0, styles.length - 1)];
+      const rawStr =
+        style === 0 ? digs
+        : style === 1 ? `${digs[0]}.${digs.slice(1)}`
+        : style === 2 ? `${digs.slice(0, 2)}.${digs.slice(2)}`
+        : style === 3 ? `0.${digs}`
+        : `0.00${digs}`;
+      const raw = parseFloat(rawStr);
+      const sf = randInt(1, d - 1);
+      const ans = Number(roundToSF(raw, sf).toPrecision(12));
+      return { prompt: `Round ${rawStr} to ${sf} significant figure${sf > 1 ? "s" : ""}`, answer: `${ans}`, hint: "Enter a number.",
+        steps: [`Count from the first non-zero digit and keep ${sf}`, `Use the next digit to decide whether to round up`, `Answer: ${ans}`] };
     } },
   { id: "limits", name: "Limits of Accuracy", icon: "📏", prereqs: ["sigfig"],
     generate() {
