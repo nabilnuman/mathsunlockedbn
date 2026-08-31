@@ -809,9 +809,62 @@ const TOPICS = [
     } },
   { id: "functions", name: "Functions", icon: "🔀", prereqs: ["algebra"],
     generate() {
-      const a = randInt(2, 9), b = randInt(-10, 10), k = randInt(-8, 8);
-      return { prompt: `f(x) = ${a}x ${spaced(b)}.   Find f(${k})`, answer: `${a * k + b}`, hint: "Enter a number.",
-        steps: [`Substitute x = ${k} into f(x) = ${a}x ${spaced(b)}`, `f(${k}) = ${a}×${k} ${spaced(b)} = ${a * k} ${spaced(b)} = ${a * k + b}`] };
+      const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
+      const build = () => {
+        const r = Math.random();
+
+        // 20% — write the inverse function
+        if (r < 0.20) {
+          const a = randInt(2, 6), b = nz(-9, 9);
+          return {
+            prompt: `f(x) = ${a}x ${spaced(b)}\nWrite f⁻¹(x)`,
+            answer: `(x${tight(-b)})/${a}`,
+            answerDisplay: frac(`x ${spaced(-b)}`, `${a}`),
+            hint: "leave your answer in terms of x",
+            steps: [
+              `Let y = ${a}x ${spaced(b)}, then swap x and y:  x = ${a}y ${spaced(b)}`,
+              `${a}y = x ${spaced(-b)}`,
+              `f⁻¹(x) = (x ${spaced(-b)}) ÷ ${a}`,
+            ],
+          };
+        }
+
+        // 15% — composite function, evaluated at a number
+        if (r < 0.35) {
+          const a = randInt(2, 6), b = nz(-9, 9), c = randInt(2, 6), d = nz(-9, 9), k = nz(-6, 6);
+          const outer = Math.random() < 0.5 ? "f" : "g"; // which function is applied last
+          const innerName = outer === "f" ? "g" : "f";
+          const [ic, id] = innerName === "f" ? [a, b] : [c, d];
+          const [oc, od] = outer === "f" ? [a, b] : [c, d];
+          const inner = ic * k + id;
+          if (inner === 0) return null;
+          const ans = oc * inner + od;
+          if (ans === 0) return null;
+          return {
+            prompt: `f(x) = ${a}x ${spaced(b)}\ng(x) = ${c}x ${spaced(d)}\nFind ${outer}(${innerName}(${k}))`,
+            answer: `${ans}`,
+            hint: "work from the inside out",
+            steps: [
+              `${innerName}(${k}) = ${ic}×${k} ${spaced(id)} = ${inner}`,
+              `${outer}(${inner}) = ${oc}×${inner} ${spaced(od)} = ${ans}`,
+            ],
+          };
+        }
+
+        // 65% — substitute a value
+        const a = randInt(2, 9), b = nz(-10, 10), k = nz(-8, 8);
+        const ans = a * k + b;
+        if (ans === 0) return null;
+        return {
+          prompt: `f(x) = ${a}x ${spaced(b)}\nFind f(${k})`,
+          answer: `${ans}`,
+          hint: "Enter a number.",
+          steps: [`Substitute x = ${k}:  f(${k}) = ${a}×${k} ${spaced(b)}`, `= ${a * k} ${spaced(b)} = ${ans}`],
+        };
+      };
+      let q;
+      for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
+      return q;
     } },
   { id: "sequences", name: "Number Sequences", icon: "🔢", prereqs: ["algebra"],
     generate() {
@@ -2902,7 +2955,7 @@ export default function MathsUnlockedBN() {
                       <ol style={{ margin: 0, paddingLeft: 18 }}>
                         {question.steps.map((s, i) => <li key={i} className="mub-mono" style={{ marginBottom: 4 }}><MathText text={s} /></li>)}
                       </ol>
-                      <div style={{ marginTop: 6 }}>Answer: <span className="mub-mono" style={{ fontWeight: 700 }}>{question.answer}</span></div>
+                      <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>Answer: <span className="mub-mono" style={{ fontWeight: 700 }}><MathText text={question.answerDisplay || question.answer} /></span></div>
                     </div>
                   )}
                   {feedback.unlocked.length > 0 && (
