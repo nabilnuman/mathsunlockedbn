@@ -1922,6 +1922,10 @@ export default function MathsUnlockedBN() {
               );
             })()}
 
+            {(() => {
+              const anyKeyButton = (profile.keys || 0) > 0 && TOPICS.some((t) => !isUnlocked(t, profile));
+              const cardHeight = anyKeyButton ? 134 : 108;
+              return (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))", gap: 10, marginBottom: 24 }}>
               {TOPICS.map((t) => {
                 const topicState = profile.topics[t.id] || { history: [], highestRank: -1, streak: 0 };
@@ -1938,7 +1942,7 @@ export default function MathsUnlockedBN() {
                       border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 11px",
                       cursor: unlocked ? "pointer" : "not-allowed",
                       opacity: unlocked ? 1 : 0.55,
-                      position: "relative",
+                      minHeight: cardHeight, display: "flex", flexDirection: "column",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
@@ -1951,7 +1955,7 @@ export default function MathsUnlockedBN() {
                         <div style={{ fontSize: 13, color: "var(--muted)" }}>🔒</div>
                       )}
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 5, lineHeight: 1.2 }}>{t.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 5, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.name}</div>
                     <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {unlocked
                         ? `${(topicState.streak || 0) > 0 ? "🔥 " : ""}${topicState.streak || 0} streak`
@@ -1960,7 +1964,7 @@ export default function MathsUnlockedBN() {
                     {!unlocked && (profile.keys || 0) > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setKeyTarget(t); }}
-                        style={{ marginTop: 6, fontSize: 10.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
+                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
                       >
                         🔑 Use key
                       </button>
@@ -1969,6 +1973,8 @@ export default function MathsUnlockedBN() {
                 );
               })}
             </div>
+              );
+            })()}
 
             <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
               <Trophy size={16} /> Achievements
