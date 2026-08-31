@@ -542,7 +542,8 @@ function levelProgress(exp) {
 function LevelBar({ profile, onPrestige }) {
   const { level, into, need, pct, capped } = levelProgress(totalExp(profile));
   const prestige = profile.prestige || 0;
-  const canPrestige = capped && prestige < PRESTIGE_CAP && typeof onPrestige === "function";
+  const belowC = TOPICS.filter((t) => !topicRankAtLeast(profile, t.id, "C"));
+  const prestigeSlot = capped && prestige < PRESTIGE_CAP && typeof onPrestige === "function";
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
       <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -557,11 +558,15 @@ function LevelBar({ profile, onPrestige }) {
       <div style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, fontWeight: 600 }}>
         {capped ? (prestige >= PRESTIGE_CAP ? "MAX PRESTIGE" : "MAX · Level 20") : `${into} / ${need} XP`}
       </div>
-      {canPrestige && (
+      {prestigeSlot && (belowC.length === 0 ? (
         <button onClick={onPrestige} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", flexShrink: 0 }}>
           Prestige →
         </button>
-      )}
+      ) : (
+        <span title={`Below C: ${belowC.map((t) => t.name).join(", ")}`} style={{ fontSize: 10.5, fontWeight: 700, color: "var(--amber)", flexShrink: 0 }}>
+          🔒 Reach C in every topic to prestige · {belowC.length} to go
+        </span>
+      ))}
     </div>
   );
 }
@@ -1433,6 +1438,7 @@ export default function MathsUnlockedBN() {
     const cur = JSON.parse(JSON.stringify(profile));
     if ((cur.prestige || 0) >= PRESTIGE_CAP) return;
     if (levelFromExp(totalExp(cur)) < LEVEL_CAP) return;
+    if (!allTopicsRankAtLeast(cur, TOPICS, "C")) return; // must be at least C in every topic
     cur.prestige = (cur.prestige || 0) + 1;
     cur.prestigeAt = [...(cur.prestigeAt || []), Date.now()];
     cur.topics = {};            // grades wiped → XP and level reset to 1
