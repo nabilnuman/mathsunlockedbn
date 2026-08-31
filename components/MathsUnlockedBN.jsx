@@ -682,18 +682,60 @@ const SCHOOLS = [
 ];
 const ALL_SCHOOLS = SCHOOLS.flatMap((g) => g.items);
 
+/* Five mastery areas for the radar chart on the profile card. Each is a
+   bundle of topics; the axis reaches the edge when every topic in it is
+   S+. Ungraded counts as zero. */
+const STAT_GROUPS = [
+  { name: "Arithmetic", ids: TOPICS.slice(0, 8).map((t) => t.id) },
+  { name: "Algebra", ids: [...TOPICS.slice(8, 14), TOPICS[29]].map((t) => t.id) },
+  { name: "Graphs", ids: TOPICS.slice(14, 20).map((t) => t.id) },
+  { name: "Shapes", ids: TOPICS.slice(20, 26).map((t) => t.id) },
+  { name: "Statistics", ids: TOPICS.slice(26, 29).map((t) => t.id) },
+];
+function statGroupValue(profile, ids) {
+  const topics = (profile && profile.topics) || {};
+  const maxIdx = RANK_ORDER.length - 1; // S+
+  const sum = ids.reduce((s, id) => s + Math.max(0, Math.min((topics[id] || {}).highestRank ?? -1, maxIdx)), 0);
+  return ids.length ? sum / (ids.length * maxIdx) : 0; // 0..1
+}
+function RadarChart({ profile }) {
+  const cx = 120, cy = 104, R = 62, labelR = 82;
+  const groups = STAT_GROUPS.map((g) => ({ name: g.name, v: statGroupValue(profile, g.ids) }));
+  const at = (i, frac) => {
+    const a = (-90 + i * 72) * Math.PI / 180;
+    return [cx + Math.cos(a) * R * frac, cy + Math.sin(a) * R * frac];
+  };
+  const ring = (frac) => groups.map((_, i) => at(i, frac).join(",")).join(" ");
+  const data = groups.map((g, i) => at(i, Math.max(0.02, g.v)).join(",")).join(" ");
+  return (
+    <svg viewBox="-28 -6 296 232" width="100%" style={{ display: "block", maxWidth: 300, margin: "0 auto" }}>
+      {[0.34, 0.67, 1].map((f, k) => <polygon key={k} points={ring(f)} fill="none" stroke="var(--grid)" strokeWidth="1" />)}
+      {groups.map((_, i) => { const [x, y] = at(i, 1); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--grid)" strokeWidth="1" />; })}
+      <polygon points={data} fill="var(--green)" fillOpacity="0.32" stroke="var(--green)" strokeWidth="1.5" strokeLinejoin="round" />
+      {groups.map((g, i) => { const [x, y] = at(i, Math.max(0.02, g.v)); return <circle key={i} cx={x} cy={y} r="2.4" fill="var(--green)" />; })}
+      {groups.map((g, i) => {
+        const a = (-90 + i * 72) * Math.PI / 180;
+        const x = cx + Math.cos(a) * labelR, y = cy + Math.sin(a) * labelR;
+        const anchor = Math.abs(x - cx) < 3 ? "middle" : x < cx ? "end" : "start";
+        return (
+          <text key={i} x={x} y={y} textAnchor={anchor} fill="var(--muted)">
+            <tspan fontSize="9" fontWeight="700">{g.name}</tspan>
+            <tspan x={x} dy="10" fontSize="8" fontWeight="700" fill="var(--green)">{Math.round(g.v * 100)}%</tspan>
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
 /* Shareable summary of a student's progress. Pure display — takes a
-   profile object, so the same card backs the (upcoming) Parent Link
-   page. Sized to screenshot cleanly. */
+   profile object, so the same card backs the Parent Link and friend
+   search pages. Sized to screenshot cleanly. */
 function ProfileCard({ profile }) {
   const exp = totalExp(profile);
   const { level, into, need, pct, capped } = levelProgress(exp);
   const title = titleForLevel(level);
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
-  const ranked = TOPICS.filter((t) => ((profile.topics || {})[t.id] || {}).highestRank >= 0);
-  const best = [...ranked]
-    .sort((a, b) => ((profile.topics[b.id] || {}).highestRank ?? -1) - ((profile.topics[a.id] || {}).highestRank ?? -1))
-    .slice(0, 5);
   const stat = (label, value) => (
     <div style={{ textAlign: "center" }}>
       <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
@@ -743,24 +785,10 @@ function ProfileCard({ profile }) {
         {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
       </div>
 
-      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-        Top topics
+      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+        Mastery
       </div>
-      {best.length === 0 ? (
-        <div style={{ fontSize: 12, color: "var(--muted)" }}>No topics ranked yet.</div>
-      ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {best.map((t) => {
-            const r = rankDisplay((profile.topics[t.id] || {}).highestRank);
-            return (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999, border: `1px solid ${r.color}`, fontSize: 11, background: "var(--card)" }}>
-                <span>{t.icon}</span>
-                <span style={{ fontWeight: 700, color: r.color }}>{r.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <RadarChart profile={profile} />
     </div>
   );
 }
