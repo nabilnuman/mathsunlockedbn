@@ -2157,7 +2157,9 @@ export default function MathsUnlockedBN() {
                   </button>
                 </div>
               </div>
-              <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} />
+              <div style={{ marginTop: 14 }}>
+                <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} />
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
                 <span style={{ fontSize: 15 }}>🔑</span>
                 <span><b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
