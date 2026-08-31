@@ -237,9 +237,9 @@ function MathText({ text, style }) {
       {parts.map((p, i) => p.t !== undefined
         ? <span key={i} style={{ whiteSpace: "pre-wrap" }}>{p.t}</span>
         : (
-          <span key={i} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle", margin: "0 4px" }}>
-            <span style={{ padding: "0 5px 1px" }}>{p.n}</span>
-            <span style={{ padding: "1px 5px 0", borderTop: "1.5px solid currentColor" }}>{p.d}</span>
+          <span key={i} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle", margin: "0 4px", textAlign: "center" }}>
+            <span style={{ padding: "0 6px 1px" }}>{p.n}</span>
+            <span style={{ alignSelf: "stretch", padding: "1px 6px 0", borderTop: "1.5px solid currentColor" }}>{p.d}</span>
           </span>
         ))}
     </span>
