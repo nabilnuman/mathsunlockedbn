@@ -608,9 +608,44 @@ const TOPICS = [
     } },
   { id: "algebra", name: "Algebra", icon: "🧮", prereqs: [],
     generate() {
-      const a = randInt(2, 9), xTarget = randInt(-10, 10), b = randInt(-10, 10), c = a * xTarget + b;
-      return { prompt: `Solve for x:   ${a}x ${spaced(b)} = ${c}`, answer: `${xTarget}`, hint: "Enter a number.",
-        steps: [`Subtract ${b} from both sides: ${a}x = ${c - b}`, `Divide both sides by ${a}: x = ${xTarget}`] };
+      const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
+      const xt = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
+      const moveText = (k) => (k > 0 ? `Subtract ${k} from both sides` : `Add ${-k} to both sides`);
+      const divText = (k, x) => (k === 1 ? `x = ${x}` : k === -1 ? `Multiply both sides by −1:  x = ${x}` : `Divide both sides by ${k}:  x = ${x}`);
+      const build = () => {
+        const r = Math.random();
+        if (r < 0.34) {
+          // a x + b = c
+          const a = nz(-9, 9), x = nz(-9, 9), b = nz(-9, 9), c = a * x + b;
+          if (c === 0) return null;
+          return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
+            steps: [`${moveText(b)}:  ${xt(a)} = ${c - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
+        }
+        if (r < 0.62) {
+          // a x + b = c x + d
+          const a = nz(-9, 9), c = nz(-9, 9);
+          if (a === c) return null;
+          const x = nz(-9, 9), b = nz(-9, 9), d = (a - c) * x + b;
+          if (d === 0) return null;
+          return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${xt(c)} ${spaced(d)}`, answer: `${x}`,
+            steps: [`Bring the x-terms to one side:  ${xt(a - c)} ${spaced(b)} = ${d}`, `${moveText(b)}:  ${xt(a - c)} = ${d - b}`, ...(a - c === 1 ? [] : [divText(a - c, x)])] };
+        }
+        if (r < 0.81) {
+          // x / den + b = c
+          const den = randInt(2, 9), k = nz(-6, 6), x = den * k, b = nz(-9, 9), c = k + b;
+          if (c === 0) return null;
+          return { prompt: `Solve for x:   x/${den} ${spaced(b)} = ${c}`, answer: `${x}`,
+            steps: [`${moveText(b)}:  x/${den} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
+        }
+        // (a x + b) / den = c
+        const den = randInt(2, 9), a = nz(-6, 6), x = nz(-9, 9), c = nz(-6, 6), b = c * den - a * x;
+        if (b === 0) return null;
+        return { prompt: `Solve for x:   (${xt(a)} ${spaced(b)})/${den} = ${c}`, answer: `${x}`,
+          steps: [`Multiply both sides by ${den}:  ${xt(a)} ${spaced(b)} = ${c * den}`, `${moveText(b)}:  ${xt(a)} = ${c * den - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
+      };
+      let q;
+      for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
+      return { ...q, hint: "Enter a whole number." };
     } },
   { id: "factorization", name: "Factorisation", icon: "🧩", prereqs: ["algebra"],
     generate() {
