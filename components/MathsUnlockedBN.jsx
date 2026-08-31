@@ -486,7 +486,8 @@ const TOPICS = [
       let a = randInt(1, 5), b = randInt(1, 5), c = randInt(1, 5), d = randInt(1, 5);
       while (a * d - b * c === 0) { c = randInt(1, 5); d = randInt(1, 5); }
       const e = a * xSol + b * ySol, f = c * xSol + d * ySol;
-      return { prompt: `Solve for x:   ${a}x + ${b}y = ${e}   and   ${c}x + ${d}y = ${f}`, answer: `${xSol}`, hint: "Enter a number.",
+      const co = (n) => (n === 1 ? "" : `${n}`);
+      return { prompt: `Solve for x:   ${co(a)}x + ${co(b)}y = ${e},  ${co(c)}x + ${co(d)}y = ${f}`, answer: `${xSol}`, hint: "Enter a number.",
         steps: [`Scale the equations so the y-coefficients match, then subtract to eliminate y`, `Solve the resulting equation for x`, `x = ${xSol} (then y = ${ySol})`] };
     } },
   { id: "functions", name: "Functions", icon: "🔀", prereqs: ["algebra"],
@@ -2433,8 +2434,8 @@ export default function MathsUnlockedBN() {
 
             <div style={{
               maxWidth: 520, margin: "0 auto", background: "var(--card)", border: "1px solid var(--grid)",
-              borderLeft: "4px solid var(--red)", borderRadius: 10, padding: "26px 26px 26px 30px",
-              transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px var(--shadow-soft)", position: "relative",
+              borderLeft: "4px solid var(--red)", borderRadius: 10, padding: "18px 16px 18px 18px",
+              transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px var(--shadow-soft)", position: "relative", overflow: "hidden",
             }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
                 <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
@@ -2461,12 +2462,14 @@ export default function MathsUnlockedBN() {
               </div>
               {(() => {
                 const { lead, expr } = splitPrompt(question.prompt);
-                const mathOnly = expr && !/[a-z]{3,}/i.test(expr);
+                // Shrink the expression's font as it gets longer so it wraps
+                // gracefully instead of forcing a horizontal scroll.
+                const exprSize = expr ? Math.max(13, Math.min(20, Math.round(290 / (expr.length * 0.62)))) : 17;
                 return (
-                  <div style={{ marginBottom: 18 }}>
-                    <div className="mub-mono" style={{ fontSize: expr ? 14 : 17, lineHeight: 1.55, color: expr ? "var(--muted)" : "var(--ink)" }}>{lead}</div>
+                  <div style={{ marginBottom: 16 }}>
+                    <div className="mub-mono" style={{ fontSize: expr ? 13 : 17, lineHeight: 1.5, color: expr ? "var(--muted)" : "var(--ink)", overflowWrap: "break-word" }}>{lead}</div>
                     {expr && (
-                      <div className="mub-mono" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.5, marginTop: 8, color: "var(--ink)", ...(mathOnly ? { whiteSpace: "nowrap", overflowX: "auto" } : {}) }}>{expr}</div>
+                      <div className="mub-mono" style={{ fontSize: exprSize, fontWeight: 600, lineHeight: 1.4, marginTop: 6, color: "var(--ink)", overflowWrap: "break-word" }}>{expr}</div>
                     )}
                   </div>
                 );
