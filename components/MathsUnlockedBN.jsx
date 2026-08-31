@@ -228,11 +228,13 @@ const TOPICS = [
     } },
   { id: "hcflcm", name: "HCF & LCM", icon: "➗", prereqs: ["arithmetic"],
     generate() {
-      // a and b always share a factor > 1, so the HCF is never 1 and the
-      // LCM is never just a × b.
+      // a and b share a factor > 1 (HCF is never 1, LCM is never a × b),
+      // and neither divides the other (so the answer is never one of the
+      // two numbers).
       const base = [2, 3, 4, 5, 6][randInt(0, 4)];
-      let m = randInt(2, 8), n = randInt(2, 8);
-      while (m === n) n = randInt(2, 8);
+      let m = randInt(2, 8), n = randInt(2, 8), tries = 0;
+      while ((m === n || m % n === 0 || n % m === 0) && tries++ < 50) { m = randInt(2, 8); n = randInt(2, 8); }
+      if (m === n || m % n === 0 || n % m === 0) { m = 4; n = 6; }
       const a = base * m, b = base * n, g = gcd(a, b), l = lcm(a, b);
       const mode = Math.random() < 0.5 ? "HCF" : "LCM";
       return { prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : l}`, hint: "Enter a number.",
