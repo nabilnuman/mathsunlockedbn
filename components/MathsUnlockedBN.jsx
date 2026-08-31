@@ -99,6 +99,7 @@ function evalNode(node, xVal) {
   }
 }
 function evalString(str, xVal) {
+  str = String(str).replace(/²/g, "^2").replace(/³/g, "^3");
   const ast = parseExpr(insertImplicitMult(tokenize(str)));
   return evalNode(ast, xVal);
 }
@@ -724,13 +725,66 @@ const TOPICS = [
     } },
   { id: "factorization", name: "Factorisation", icon: "🧩", prereqs: ["algebra"],
     generate() {
-      let p = randInt(-9, 9), q = randInt(-9, 9);
-      while (p === 0) p = randInt(-9, 9);
-      while (q === 0) q = randInt(-9, 9);
-      const xterm = (n) => (n === 0 ? "" : ` ${n > 0 ? "+" : "-"} ${Math.abs(n) === 1 ? "" : Math.abs(n)}x`);
+      const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
+      const sgn = (n) => (n >= 0 ? "+" : "-");
+      const co = (n) => (Math.abs(n) === 1 ? "" : `${Math.abs(n)}`); // coefficient text, hides a bare 1
+      const xterm = (n) => (n === 0 ? "" : ` ${sgn(n)} ${co(n)}x`);
+      // a nonzero value in [lo,hi] that is coprime to m
+      const coprime = (m, lo, hi) => {
+        const opts = [];
+        for (let v = lo; v <= hi; v++) if (v !== 0 && gcd(Math.abs(v), m) === 1) opts.push(v);
+        return opts[randInt(0, opts.length - 1)];
+      };
+      const r = Math.random();
+
+      // 10% — take out a common factor
+      if (r < 0.10) {
+        const g = randInt(2, 6);
+        if (Math.random() < 0.6) {
+          const m = randInt(1, 6), n = coprime(m, -6, 6), A = g * m, B = g * n;
+          return { prompt: `Factorise:   ${A}x² ${sgn(B)} ${Math.abs(B)}x`,
+            answer: `${g}x(${co(m)}x${tight(n)})`, hint: "Take out the biggest common factor first",
+            steps: [`Both terms share ${g}x`, `${A}x² ${sgn(B)} ${Math.abs(B)}x = ${g}x(${co(m)}x ${sgn(n)} ${Math.abs(n)})`] };
+        }
+        const m = randInt(1, 6), n = coprime(m, 2, 9), A = g * m, B = g * n;
+        return { prompt: `Factorise:   ${A}x + ${B}`,
+          answer: `${g}(${co(m)}x+${n})`, hint: "Take out the biggest common factor first",
+          steps: [`Both terms share ${g}`, `${A}x + ${B} = ${g}(${co(m)}x + ${n})`] };
+      }
+
+      // 10% — difference of two squares
+      if (r < 0.20) {
+        const k = randInt(2, 12);
+        return { prompt: `Factorise:   x² - ${k * k}`,
+          answer: `(x+${k})(x-${k})`, hint: "a² - b² = (a + b)(a - b)",
+          steps: [`${k * k} = ${k}²`, `x² - ${k}² = (x + ${k})(x - ${k})`] };
+      }
+
+      // 10% — leading coefficient of 2 or 3  (b coprime to lead ⇒ middle term never 0)
+      if (r < 0.30) {
+        const lead = Math.random() < 0.5 ? 2 : 3;
+        const b = coprime(lead, -6, 6), d = nz(-6, 6);
+        const B = lead * d + b, C = b * d;
+        return { prompt: `Factorise:   ${lead}x² ${sgn(B)} ${co(B)}x ${sgn(C)} ${Math.abs(C)}`,
+          answer: `(${lead}x${tight(b)})(x${tight(d)})`, hint: "e.g. (2x+1)(x-3)",
+          steps: [`Multiply the ends: ${lead} × ${C} = ${lead * C}`,
+            `Two numbers with product ${lead * C} and sum ${B}: ${lead * d} and ${b}`,
+            `= (${lead}x ${sgn(b)} ${Math.abs(b)})(x ${sgn(d)} ${Math.abs(d)})`] };
+      }
+
+      // 10% — perfect square
+      if (r < 0.40) {
+        const n = nz(-9, 9), B = 2 * n, C = n * n;
+        return { prompt: `Factorise:   x² ${sgn(B)} ${Math.abs(B)}x + ${C}`,
+          answer: `(x${tight(n)})^2`, hint: "It's a perfect square: (x + a)²",
+          steps: [`Half the x-term: ${B} ÷ 2 = ${n}`, `${n}² = ${C} ✓`, `= (x ${sgn(n)} ${Math.abs(n)})²`] };
+      }
+
+      // rest — standard x² + (p+q)x + pq
+      const p = nz(-9, 9), q = nz(-9, 9);
       const tail = `${xterm(p + q)} ${spaced(p * q)}`.replace(/\s+/g, " ").trim();
       return { prompt: `Factorise:   x² ${tail}`, answer: `(x${tight(p)})(x${tight(q)})`, hint: "e.g. (x+2)(x-3)",
-        steps: [`Find two numbers that multiply to ${p * q} and add to ${p + q}: ${p} and ${q}`, `Answer: (x${tight(p)})(x${tight(q)})`] };
+        steps: [`Two numbers with product ${p * q} and sum ${p + q}: ${p} and ${q}`, `= (x${tight(p)})(x${tight(q)})`] };
     } },
   { id: "simultaneous", name: "Simultaneous Equations", icon: "🔗", prereqs: ["algebra"],
     generate() {
