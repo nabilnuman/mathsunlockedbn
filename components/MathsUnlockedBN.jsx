@@ -852,7 +852,7 @@ function lockedReason(topic) {
    task adds to profile.bonusExp. A separate one-time list
    ("first-time bonuses") nudges feature discovery.
 --------------------------------------------------------- */
-const DAILY_XP = { showup: 20, task: 40 };
+const DAILY_XP = { showup: 5, task: 40 };  // show-up is deliberately tiny — can't reach Level 2 alone
 const MILESTONE_XP = 50;
 
 function todayKey(d = new Date()) {
@@ -875,8 +875,8 @@ const DAILY_POOL = [
   { id: "correct5", label: "Get 5 correct answers", goal: 5, progress: (d) => d.correct },
   { id: "streak3", label: "Get 3 correct in a row", goal: 3, progress: (d) => d.bestStreakToday },
   { id: "topics3", label: "Practise 3 different topics", goal: 3, progress: (d) => (d.topics || []).length },
-  { id: "weak3", label: "Get 3 right in your weakest topic", goal: 3, progress: (d) => d.weakCorrect,
-    sub: (d) => (TOPIC_BY_ID[d.weakTopicId] || {}).name || "" },
+  { id: "weak3", goal: 3, progress: (d) => d.weakCorrect,
+    label: (d) => `Get 3 right in ${(TOPIC_BY_ID[d.weakTopicId] || {}).name || "one topic"}` },
   { id: "mixed", label: "Play a round of Mixed Review", goal: 1, progress: (d) => d.mixedRounds, needsMixed: true },
 ];
 const TASK_BY_ID = Object.fromEntries([SHOWUP_TASK, ...DAILY_POOL].map((t) => [t.id, t]));
@@ -1324,8 +1324,13 @@ export default function MathsUnlockedBN() {
   /* Teacher/dev shortcuts (only reachable with ?teacher=1) for testing
      level, prestige and Skeleton Key behaviour without grinding. */
   const S_PLUS_IDX = RANK_ORDER.length - 1;
-  function devApplyMax(next, topicIds) {
-    topicIds.forEach((id) => { next.topics[id] = { history: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1], highestRank: S_PLUS_IDX, streak: STREAK_FOR_S_PLUS }; });
+  const C_IDX = RANK_ORDER.indexOf("C");
+  function devApplyRank(next, topicIds, rankIdx) {
+    const hist = rankIdx >= S_PLUS_IDX ? [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] : [1, 1, 1, 1, 1, 0, 0, 0, 0, 0];
+    topicIds.forEach((id) => {
+      const prevRank = (next.topics[id] || {}).highestRank ?? -1;
+      next.topics[id] = { history: hist, highestRank: Math.max(prevRank, rankIdx), streak: rankIdx >= S_PLUS_IDX ? STREAK_FOR_S_PLUS : 0 };
+    });
     next.achievedAt = next.achievedAt || {};
     ACHIEVEMENTS.forEach((a) => {
       if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); next.achievedAt[a.id] = Date.now(); }
@@ -1336,13 +1341,18 @@ export default function MathsUnlockedBN() {
   }
   function devMaxTopic() {
     const next = JSON.parse(JSON.stringify(profile));
-    devApplyMax(next, [devTopic]);
+    devApplyRank(next, [devTopic], S_PLUS_IDX);
     saveProfile(next);
   }
   function devMaxAll() {
     const next = JSON.parse(JSON.stringify(profile));
-    devApplyMax(next, TOPICS.map((t) => t.id));
+    devApplyRank(next, TOPICS.map((t) => t.id), S_PLUS_IDX);
     next.keys = Math.max(next.keys || 0, 4); // as if the 5/10/15/20 milestones were hit
+    saveProfile(next);
+  }
+  function devCAll() {
+    const next = JSON.parse(JSON.stringify(profile));
+    devApplyRank(next, TOPICS.map((t) => t.id), C_IDX);
     saveProfile(next);
   }
   function devAddKeys(n) {
@@ -1441,13 +1451,13 @@ export default function MathsUnlockedBN() {
     if (!allTopicsRankAtLeast(cur, TOPICS, "C")) return; // must be at least C in every topic
     cur.prestige = (cur.prestige || 0) + 1;
     cur.prestigeAt = [...(cur.prestigeAt || []), Date.now()];
-    cur.topics = {};            // grades wiped → XP and level reset to 1
+    cur.topics = {};            // grades wiped
     cur.streak = 0;
     cur.consecWrong = 0;
     cur.levelReachedAt = {};
-    cur.bonusExp = 0;           // daily XP already did its job this cycle
-    cur.daily = null;           // regenerate (weakest topic changes)
-    // kept: achievements, achievedAt, lifetime counters, keys, keyedTopics, name, school
+    // kept: achievements, achievedAt, lifetime counters, keys, keyedTopics,
+    //       name, school, and the daily tasks / bonus XP (prestige doesn't
+    //       touch the engagement loop)
     setConfirmPrestige(false);
     setActiveTopic(null);
     setScreen("dashboard");
@@ -1820,6 +1830,7 @@ export default function MathsUnlockedBN() {
                       return (
                         <>
                           <button onClick={devMaxAll} style={b}>Max all topics → S+ (Level 20)</button>
+                          <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
@@ -1852,8 +1863,7 @@ export default function MathsUnlockedBN() {
                         <div key={task.id} style={rowStyle}>
                           <span style={{ fontSize: 14, flexShrink: 0 }}>{claimed ? "✅" : done ? "🟢" : "⚪"}</span>
                           <div style={{ flex: 1, minWidth: 0, color: claimed ? "var(--muted)" : "var(--ink)" }}>
-                            {task.label}
-                            {task.sub && task.sub(day) ? <span style={{ color: "var(--muted)" }}> — {task.sub(day)}</span> : ""}
+                            {typeof task.label === "function" ? task.label(day) : task.label}
                             {!claimed && !done ? <span style={{ color: "var(--muted)" }}> · {cur}/{task.goal}</span> : ""}
                           </div>
                           {claimed ? (
