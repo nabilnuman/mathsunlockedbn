@@ -135,6 +135,23 @@ function roundToSF(num, sf) {
   const mag = Math.pow(10, sf - Math.ceil(Math.log10(Math.abs(num))));
   return Math.round(num * mag) / mag;
 }
+// Parse a clock time in many forms → minutes since midnight, or null.
+// "1435", "14:35", "2:35pm", "2.35 pm", "9", "9am" all accepted.
+function parseClock(s) {
+  s = String(s).trim().toLowerCase().replace(/\s+/g, "").replace(/\./g, ":");
+  const pm = /pm$/.test(s), am = /am$/.test(s);
+  s = s.replace(/[ap]m$/, "");
+  let h, mn;
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) { h = +m[1]; mn = +m[2]; }
+  else if (/^\d{3,4}$/.test(s)) { const p = s.padStart(4, "0"); h = +p.slice(0, 2); mn = +p.slice(2); }
+  else if (/^\d{1,2}$/.test(s)) { h = +s; mn = 0; }
+  else return null;
+  if (pm && h < 12) h += 12;
+  if (am && h === 12) h = 0;
+  if (h > 23 || mn > 59) return null;
+  return h * 60 + mn;
+}
 // c√rad → { c, d } with d square-free (pull perfect squares out).
 function surdParts(c, rad) {
   let d = rad;
@@ -532,9 +549,39 @@ const TOPICS = [
     } },
   { id: "time", name: "Time", icon: "⏰", prereqs: [],
     generate() {
-      const h = randInt(1, 4), m = randInt(0, 59);
-      return { prompt: `A journey takes ${h} hour${h > 1 ? "s" : ""} and ${m} minutes. How many minutes is that in total?`, answer: `${h * 60 + m}`, hint: "Enter a number.",
-        steps: [`Convert hours to minutes: ${h} × 60 = ${h * 60}`, `Add the extra minutes: ${h * 60} + ${m} = ${h * 60 + m}`] };
+      const fmt = (mins) => { mins = ((mins % 1440) + 1440) % 1440; return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, "0")}`; };
+      const durText = (mins) => {
+        const h = Math.floor(mins / 60), m = mins % 60;
+        if (h && m) return `${h} hour${h > 1 ? "s" : ""} ${m} minute${m > 1 ? "s" : ""}`;
+        if (h) return `${h} hour${h > 1 ? "s" : ""}`;
+        return `${m} minutes`;
+      };
+      const who = ["Hafiz", "Aisha", "Mei Ling", "Daniel", "Siti", "the bus", "the train", "the ferry"][randInt(0, 7)];
+      const mode = randInt(0, 3);
+
+      if (mode === 0) {
+        const h = randInt(1, 4), m = randInt(1, 59);
+        return { prompt: `A journey takes ${h} hour${h > 1 ? "s" : ""} and ${m} minutes. How many minutes is that in total?`, answer: `${h * 60 + m}`, hint: "Enter a number.",
+          steps: [`Convert hours to minutes: ${h} × 60 = ${h * 60}`, `Add the extra minutes: ${h * 60} + ${m} = ${h * 60 + m}`] };
+      }
+
+      const start = randInt(5, 14) * 60 + randInt(0, 59);
+      const dur = randInt(1, 5) * 60 + randInt(5, 55);
+      const end = start + dur;
+
+      if (mode === 1) {
+        return { prompt: `${who} left at ${fmt(start)} and the journey took ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} arrive?`,
+          answer: fmt(end), hint: "e.g. 14:35", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (end % 1440) % 720,
+          steps: [`Start ${fmt(start)}, add ${Math.floor(dur / 60)} h → ${fmt(start + Math.floor(dur / 60) * 60)}`, `Then add ${dur % 60} min → ${fmt(end)}`, `Arrived at ${fmt(end)}`] };
+      }
+      if (mode === 2) {
+        return { prompt: `${who} arrived at ${fmt(end)} after a journey of ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} leave?`,
+          answer: fmt(start), hint: "e.g. 09:20", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (start % 1440) % 720,
+          steps: [`Arrival ${fmt(end)}, subtract ${Math.floor(dur / 60)} h → ${fmt(end - Math.floor(dur / 60) * 60)}`, `Then subtract ${dur % 60} min → ${fmt(start)}`, `Left at ${fmt(start)}`] };
+      }
+      return { prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How many minutes did the journey take?`,
+        answer: `${dur}`, hint: "Enter a number.",
+        steps: [`From ${fmt(start)} to ${fmt(start + Math.floor(dur / 60) * 60)} is ${Math.floor(dur / 60)} h = ${Math.floor(dur / 60) * 60} min`, `Then ${dur % 60} more min to ${fmt(end)}`, `Total = ${dur} minutes`] };
     } },
   { id: "algebra", name: "Algebra", icon: "🧮", prereqs: [],
     generate() {
