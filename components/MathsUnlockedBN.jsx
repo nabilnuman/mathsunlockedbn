@@ -501,9 +501,34 @@ const TOPICS = [
     } },
   { id: "limits", name: "Limits of Accuracy", icon: "📏", prereqs: ["sigfig"],
     generate() {
-      const v = randInt(5, 200), bound = Math.random() < 0.5 ? "upper" : "lower", ans = bound === "upper" ? v + 0.5 : v - 0.5;
-      return { prompt: `A length is measured as ${v} cm, correct to the nearest cm. Find the ${bound} bound`, answer: `${ans}`, hint: "Enter a number.",
-        steps: [`Rounded to the nearest cm means it could be up to 0.5 cm higher or lower`, `${bound === "upper" ? "Upper" : "Lower"} bound = ${v} ${bound === "upper" ? "+" : "−"} 0.5 = ${ans}`] };
+      const clean = (x) => Number(x.toPrecision(12));
+      const units = [
+        { u: "cm", noun: "length", precs: [1, 2, 5, 10, 0.5] },
+        { u: "mm", noun: "length", precs: [1, 5, 10] },
+        { u: "m", noun: "distance", precs: [1, 5, 10, 100, 0.1, 0.5] },
+        { u: "km", noun: "distance", precs: [1, 5, 10, 0.1] },
+        { u: "g", noun: "mass", precs: [1, 5, 10, 100] },
+        { u: "kg", noun: "mass", precs: [1, 5, 10, 0.1, 0.5] },
+        { u: "ml", noun: "volume", precs: [1, 5, 10] },
+        { u: "litres", noun: "volume", precs: [1, 0.1, 0.5] },
+        { u: "seconds", noun: "time", precs: [1, 5, 10, 0.1] },
+      ];
+      const pick = units[randInt(0, units.length - 1)];
+      const prec = pick.precs[randInt(0, pick.precs.length - 1)];
+      const v = clean(randInt(3, 40) * prec);
+      const half = clean(prec / 2);
+      const bound = Math.random() < 0.5 ? "upper" : "lower";
+      const ans = clean(bound === "upper" ? v + half : v - half);
+      const singular = { litres: "litre", seconds: "second" }[pick.u] || pick.u;
+      const precLabel = prec === 1 ? `nearest ${singular}` : `nearest ${clean(prec)} ${pick.u}`;
+      return {
+        prompt: `A ${pick.noun} is measured as ${v} ${pick.u}, correct to the ${precLabel}. Find the ${bound} bound`,
+        answer: `${ans}`, hint: "Enter a number.",
+        steps: [
+          `"${precLabel}" means the true value is within ${half} ${pick.u} of ${v}`,
+          `${bound === "upper" ? "Upper" : "Lower"} bound = ${v} ${bound === "upper" ? "+" : "−"} ${half} = ${ans}`,
+        ],
+      };
     } },
   { id: "time", name: "Time", icon: "⏰", prereqs: [],
     generate() {
