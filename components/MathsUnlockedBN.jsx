@@ -223,7 +223,7 @@ const FRAC_CHARS = [FR.a, FR.b, FR.c].join("");
 
 function MathText({ text, style }) {
   const s = String(text ?? "");
-  if (!s.includes(FR.a)) return <span style={style}>{s}</span>;
+  if (!s.includes(FR.a)) return <span style={{ whiteSpace: "pre-line", ...style }}>{s}</span>;
   const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
   const parts = [];
   let last = 0, m;
@@ -793,8 +793,19 @@ const TOPICS = [
       while (a * d - b * c === 0) { c = randInt(1, 5); d = randInt(1, 5); }
       const e = a * xSol + b * ySol, f = c * xSol + d * ySol;
       const co = (n) => (n === 1 ? "" : `${n}`);
-      return { prompt: `Solve for x:   ${co(a)}x + ${co(b)}y = ${e},  ${co(c)}x + ${co(d)}y = ${f}`, answer: `${xSol}`, hint: "Enter a number.",
-        steps: [`Scale the equations so the y-coefficients match, then subtract to eliminate y`, `Solve the resulting equation for x`, `x = ${xSol} (then y = ${ySol})`] };
+      const eq1 = `${co(a)}x + ${co(b)}y = ${e}`, eq2 = `${co(c)}x + ${co(d)}y = ${f}`;
+      return {
+        prompt: `Solve this pair:   ${eq1}\n${eq2}`,
+        fields: [{ key: "x", label: "x =" }, { key: "y", label: "y =" }],
+        answers: { x: `${xSol}`, y: `${ySol}` },
+        answer: `x = ${xSol},  y = ${ySol}`,
+        hint: "whole numbers",
+        steps: [
+          `Scale the equations so one variable's coefficients match, then subtract to eliminate it`,
+          `Solve for the other variable, then substitute back`,
+          `x = ${xSol},  y = ${ySol}`,
+        ],
+      };
     } },
   { id: "functions", name: "Functions", icon: "🔀", prereqs: ["algebra"],
     generate() {
@@ -1520,6 +1531,7 @@ export default function MathsUnlockedBN() {
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
+  const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [feedback, setFeedback] = useState(null);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -1751,6 +1763,7 @@ export default function MathsUnlockedBN() {
     setActiveTopic(MIXED_TOPIC);
     setQuestion(pickMixed());
     setAnswerInput("");
+    setMultiInput({});
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -1896,6 +1909,7 @@ export default function MathsUnlockedBN() {
     setActiveTopic(topic);
     setQuestion(pickQuestion(topic));
     setAnswerInput("");
+    setMultiInput({});
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -1904,14 +1918,22 @@ export default function MathsUnlockedBN() {
   function nextQuestion() {
     setQuestion(activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
     setAnswerInput("");
+    setMultiInput({});
     setFeedback(null);
     startTimeRef.current = Date.now();
   }
 
   function submitAnswer() {
-    if (!answerInput.trim() || feedback) return;
+    if (feedback) return;
+    let correct;
+    if (question.fields) {
+      if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return; // all cells required
+      correct = question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
+    } else {
+      if (!answerInput.trim()) return;
+      correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
+    }
     const elapsed = (Date.now() - startTimeRef.current) / 1000;
-    const correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
     const expBefore = totalExp(profile);
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const rankBefore = ((profile.topics || {})[scoredId] || {}).highestRank ?? -1;
@@ -2790,16 +2812,38 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              <input
-                ref={answerRef}
-                autoFocus className="mub-mono" value={answerInput}
-                autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => setAnswerInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
-                placeholder={question.hint}
-                disabled={!!feedback}
-                style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", marginBottom: 10 }}
-              />
+              {question.fields ? (
+                <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+                  {question.fields.map((f, i) => (
+                    <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span className="mub-mono" style={{ fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>{f.label}</span>
+                      <input
+                        ref={i === 0 ? answerRef : undefined}
+                        autoFocus={i === 0}
+                        className="mub-mono"
+                        autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                        value={multiInput[f.key] || ""}
+                        onChange={(e) => setMultiInput((m) => ({ ...m, [f.key]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
+                        placeholder={f.placeholder || "?"}
+                        disabled={!!feedback}
+                        style={{ width: 96, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  ref={answerRef}
+                  autoFocus className="mub-mono" value={answerInput}
+                  autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                  onChange={(e) => setAnswerInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
+                  placeholder={question.hint}
+                  disabled={!!feedback}
+                  style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", marginBottom: 10 }}
+                />
+              )}
 
               {!feedback && (() => {
                 const ctx = `${question.hint || ""} ${question.answer || ""}`;
