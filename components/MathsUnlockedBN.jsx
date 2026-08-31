@@ -642,19 +642,20 @@ const TOPICS = [
   { id: "algebra", name: "Algebra", icon: "🧮", prereqs: [],
     generate() {
       const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
+      const sign = () => (Math.random() < 0.5 ? 1 : -1);
       const xt = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
       const moveText = (k) => (k > 0 ? `Subtract ${k} from both sides` : `Add ${-k} to both sides`);
       const divText = (k, x) => (k === 1 ? `x = ${x}` : k === -1 ? `Multiply both sides by −1:  x = ${x}` : `Divide both sides by ${k}:  x = ${x}`);
       const build = () => {
         const r = Math.random();
-        if (r < 0.34) {
+        if (r < 0.32) {
           // a x + b = c
           const a = nz(-9, 9), x = nz(-9, 9), b = nz(-9, 9), c = a * x + b;
           if (c === 0) return null;
           return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${xt(a)} = ${c - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
         }
-        if (r < 0.62) {
+        if (r < 0.60) {
           // a x + b = c x + d
           const a = nz(-9, 9), c = nz(-9, 9);
           if (a === c) return null;
@@ -663,18 +664,59 @@ const TOPICS = [
           return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${xt(c)} ${spaced(d)}`, answer: `${x}`,
             steps: [`Bring the x-terms to one side:  ${xt(a - c)} ${spaced(b)} = ${d}`, `${moveText(b)}:  ${xt(a - c)} = ${d - b}`, ...(a - c === 1 ? [] : [divText(a - c, x)])] };
         }
-        if (r < 0.81) {
+
+        // Fractions — five shapes: x/n, (ax)/n, (ax+b)/n, m/x, m/(ax)
+        const form = randInt(0, 4);
+
+        if (form === 0) {
           // x / den + b = c
           const den = randInt(2, 9), k = nz(-6, 6), x = den * k, b = nz(-9, 9), c = k + b;
           if (c === 0) return null;
-          return { prompt: `Solve for x:   ${frac("x", den)} ${spaced(b)} = ${c}`, answer: `${x}`,
-            steps: [`${moveText(b)}:  ${frac("x", den)} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
+          return { prompt: `Solve for x:   ${frac("x", `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
+            steps: [`${moveText(b)}:  ${frac("x", `${den}`)} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
         }
-        // (a x + b) / den = c
-        const den = randInt(2, 9), a = nz(-6, 6), x = nz(-9, 9), c = nz(-6, 6), b = c * den - a * x;
-        if (b === 0) return null;
-        return { prompt: `Solve for x:   ${frac(`${xt(a)} ${spaced(b)}`, `${den}`)} = ${c}`, answer: `${x}`,
-          steps: [`Multiply both sides by ${den}:  ${xt(a)} ${spaced(b)} = ${c * den}`, `${moveText(b)}:  ${xt(a)} = ${c * den - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
+        if (form === 1) {
+          // (a x) / den + b = c
+          const a = sign() * randInt(2, 6), x = nz(-9, 9), ax = a * x;
+          const dens = [2, 3, 4, 5, 6, 7, 8, 9].filter((d) => ax % d === 0);
+          if (!dens.length) return null;
+          const den = dens[randInt(0, dens.length - 1)], k = ax / den;
+          const b = nz(-9, 9), c = k + b;
+          if (c === 0) return null;
+          return { prompt: `Solve for x:   ${frac(xt(a), `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
+            steps: [`${moveText(b)}:  ${frac(xt(a), `${den}`)} = ${k}`, `Multiply both sides by ${den}:  ${xt(a)} = ${den * k}`, `Divide both sides by ${a}:  x = ${x}`] };
+        }
+        if (form === 2) {
+          // (a x + b) / den = c
+          const den = randInt(2, 9), a = nz(-6, 6), x = nz(-9, 9), c = nz(-6, 6), b = c * den - a * x;
+          if (b === 0) return null;
+          return { prompt: `Solve for x:   ${frac(`${xt(a)} ${spaced(b)}`, `${den}`)} = ${c}`, answer: `${x}`,
+            steps: [`Multiply both sides by ${den}:  ${xt(a)} ${spaced(b)} = ${c * den}`, `${moveText(b)}:  ${xt(a)} = ${c * den - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
+        }
+        if (form === 3) {
+          // m / x + b = c
+          const x = nz(-9, 9), k = nz(-9, 9), num = k * x;
+          const b = Math.random() < 0.4 ? 0 : nz(-9, 9), c = k + b;
+          if (c === 0) return null;
+          const tail = b === 0 ? "" : ` ${spaced(b)}`;
+          return { prompt: `Solve for x:   ${frac(`${num}`, "x")}${tail} = ${c}`, answer: `${x}`,
+            steps: [
+              ...(b !== 0 ? [`${moveText(b)}:  ${frac(`${num}`, "x")} = ${k}`] : []),
+              `Multiply both sides by x:  ${num} = ${xt(k)}`,
+              divText(k, x),
+            ] };
+        }
+        // form 4 — m / (a x) + b = c  (denominator coefficient kept positive)
+        const a = randInt(2, 5), x = nz(-7, 7), k = nz(-5, 5), num = a * k * x;
+        const b = Math.random() < 0.4 ? 0 : nz(-9, 9), c = k + b;
+        if (c === 0) return null;
+        const tail = b === 0 ? "" : ` ${spaced(b)}`;
+        return { prompt: `Solve for x:   ${frac(`${num}`, xt(a))}${tail} = ${c}`, answer: `${x}`,
+          steps: [
+            ...(b !== 0 ? [`${moveText(b)}:  ${frac(`${num}`, xt(a))} = ${k}`] : []),
+            `Multiply both sides by ${xt(a)}:  ${num} = ${a * k}x`,
+            `Divide both sides by ${a * k}:  x = ${x}`,
+          ] };
       };
       let q;
       for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
