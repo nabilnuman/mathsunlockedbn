@@ -148,6 +148,26 @@ function surdStr(c, d) {
   if (c === 1) return `√${d}`;
   return `${c}√${d}`;
 }
+// Standard form helpers. Accepts a*10^b, a×10^b, a x 10^b, aEb.
+function parseSF(s) {
+  const t = String(s).replace(/\s|,/g, "").replace(/×/g, "*").replace(/x10/gi, "*10");
+  const m = t.match(/^(-?\d+(?:\.\d+)?)(?:\*10\^?|[eE])(-?\d+)$/);
+  return m ? { mant: parseFloat(m[1]), exp: parseInt(m[2], 10) } : null;
+}
+function isStdForm(s, value) {
+  const p = parseSF(s);
+  if (!p) return false;
+  const am = Math.abs(p.mant);
+  return am >= 1 && am < 10 && Math.abs(p.mant * Math.pow(10, p.exp) - value) <= 1e-6 * Math.max(1, Math.abs(value));
+}
+function isOrdinary(s, value) {
+  const t = String(s).replace(/\s|,/g, "");
+  if (!t || /[\^]|×|x\s*10|\d[eE]-?\d/i.test(t)) return false;
+  const n = parseFloat(t);
+  return Number.isFinite(n) && Math.abs(n - value) <= 1e-6 * Math.max(1, Math.abs(value));
+}
+const sfString = (mant, exp) => `${Math.round(mant * 1e6) / 1e6}*10^${exp}`;
+const sfPretty = (mant, exp) => `${Math.round(mant * 1e6) / 1e6} × 10^${exp}`;
 
 // "Instruction: expression" → drop the expression onto its own line so it
 // doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
@@ -367,9 +387,66 @@ const TOPICS = [
     } },
   { id: "standardform", name: "Standard Form", icon: "🔟", prereqs: ["indices"],
     generate() {
-      const base = randInt(10, 99) / 10, exp = randInt(2, 6), value = Math.round(base * Math.pow(10, exp));
-      return { prompt: `Write ${value} in standard form`, answer: `${base}*10^${exp}`, hint: "e.g. 4.5*10^4",
-        steps: [`Move the decimal point until you have a number between 1 and 10: ${base}`, `Count how many places it moved: ${exp}`, `Answer: ${base} × 10^${exp}`] };
+      const sfHint = "e.g. 4.5*10^4 or 4.5e-4";
+      const norm = (value) => { // positive value → { mant (1–10), exp }
+        let exp = 0, mant = value;
+        while (mant >= 10) { mant /= 10; exp += 1; }
+        while (mant > 0 && mant < 1) { mant *= 10; exp -= 1; }
+        return { mant: Math.round(mant * 1e6) / 1e6, exp };
+      };
+      const forms = [
+        () => { // ordinary number → standard form (positive OR negative power)
+          const mant = randInt(11, 99) / 10;
+          const exp = [-5, -4, -3, -2, 3, 4, 5, 6, 7][randInt(0, 8)];
+          const value = mant * Math.pow(10, exp);
+          const shown = exp < 0 ? value.toFixed(-exp + 1) : String(Math.round(value));
+          return { prompt: `Write ${shown} in standard form`, answer: sfString(mant, exp), hint: sfHint,
+            check: (inp) => isStdForm(inp, value),
+            steps: [`Put the decimal point after the first non-zero digit: ${mant}`,
+              `Count the places moved: ${Math.abs(exp)}${exp < 0 ? " — the number is below 1, so the power is negative" : ""}`,
+              `Answer: ${sfPretty(mant, exp)}`] };
+        },
+        () => { // standard form → ordinary number
+          const mant = randInt(11, 99) / 10;
+          const exp = [-4, -3, -2, 2, 3, 4, 5][randInt(0, 6)];
+          const value = mant * Math.pow(10, exp);
+          const shown = exp < 0 ? Number(value.toPrecision(12)).toString() : String(Math.round(value));
+          return { prompt: `Write ${sfPretty(mant, exp)} as an ordinary number`, answer: shown, hint: "Enter a number.",
+            check: (inp) => isOrdinary(inp, value),
+            steps: [`Move the decimal point ${Math.abs(exp)} place${Math.abs(exp) === 1 ? "" : "s"} ${exp < 0 ? "left" : "right"}`,
+              `${sfPretty(mant, exp)} = ${shown}`] };
+        },
+        () => { // multiply two standard-form numbers
+          const m1 = randInt(2, 6), m2 = randInt(2, 5);
+          const e1 = [-3, -2, 2, 3, 4][randInt(0, 4)], e2 = [-2, 2, 3, 4, 5][randInt(0, 4)];
+          const value = m1 * m2 * Math.pow(10, e1 + e2);
+          const { mant, exp } = norm(value);
+          return { prompt: `Work out, in standard form:   (${m1} × 10^${e1}) × (${m2} × 10^${e2})`, answer: sfString(mant, exp), hint: sfHint,
+            check: (inp) => isStdForm(inp, value),
+            steps: [`Multiply the numbers: ${m1} × ${m2} = ${m1 * m2}`, `Add the powers: 10^${e1} × 10^${e2} = 10^${e1 + e2}`,
+              m1 * m2 >= 10 ? `Adjust so the first part is 1–10: ${m1 * m2} × 10^${e1 + e2} = ${sfPretty(mant, exp)}` : `Answer: ${sfPretty(mant, exp)}`] };
+        },
+        () => { // add or subtract two standard-form numbers
+          const exp = [-3, -2, 2, 3, 4, 5][randInt(0, 5)];
+          const same = Math.random() < 0.6;
+          let prompt, value;
+          if (same) {
+            const plus = Math.random() < 0.5;
+            const a = randInt(2, 9), b = plus ? randInt(2, 9) : randInt(1, a - 1);
+            prompt = `Work out, in standard form:   ${a} × 10^${exp} ${plus ? "+" : "−"} ${b} × 10^${exp}`;
+            value = (plus ? a + b : a - b) * Math.pow(10, exp);
+          } else {
+            const e2 = exp - 1, a = randInt(2, 9), b = randInt(1, 9);
+            prompt = `Work out, in standard form:   ${a} × 10^${exp} + ${b} × 10^${e2}`;
+            value = a * Math.pow(10, exp) + b * Math.pow(10, e2);
+          }
+          const { mant, exp: ex } = norm(value);
+          return { prompt, answer: sfString(mant, ex), hint: sfHint,
+            check: (inp) => isStdForm(inp, value),
+            steps: [`Match the powers of 10, then add or subtract the front numbers`, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
+        },
+      ];
+      return forms[randInt(0, forms.length - 1)]();
     } },
   { id: "sigfig", name: "Significant Figures", icon: "🎯", prereqs: [],
     generate() {
