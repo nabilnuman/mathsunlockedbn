@@ -960,9 +960,11 @@ const TOPICS = [
           return { kind, term: (n) => a * n * n + b * n + c, rule: quadRule(a, b, c),
             how: `Second difference is ${2 * a} (constant → quadratic), so nth term = ${quadRule(a, b, c)}` };
         }
-        const s = nz(-9, 9);
-        return { kind: "sqShift", term: (n) => n * n + s, rule: `n² ${s > 0 ? "+" : "-"} ${Math.abs(s)}`,
-          how: `Compare with 1, 4, 9, 16, … — every term is ${Math.abs(s)} ${s > 0 ? "more" : "less"}, so nth term = n² ${s > 0 ? "+" : "-"} ${Math.abs(s)}` };
+        // shifted square: (n + s)²
+        const s = pick([-3, -2, -1, 1, 2, 3, 4, 5]);
+        const shift = `n ${s > 0 ? "+" : "-"} ${Math.abs(s)}`;
+        return { kind: "sqShift", term: (n) => (n + s) * (n + s), rule: `(${shift})²`,
+          how: `Every term is a perfect square; the number being squared is ${shift}, so nth term = (${shift})²` };
       };
 
       const seq = makeSeq();
