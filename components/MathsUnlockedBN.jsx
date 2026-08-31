@@ -453,24 +453,51 @@ const TOPICS = [
     } },
   { id: "sigfig", name: "Significant Figures", icon: "🎯", prereqs: [],
     generate() {
-      // The number to round has 2–6 significant figures (built as a
-      // string so there's no floating-point noise), then round to fewer.
-      const d = randInt(2, 6);
-      let digs = String(randInt(1, 9));
-      for (let i = 1; i < d; i++) digs += i === d - 1 ? randInt(1, 9) : randInt(0, 9);
-      const styles = d >= 3 ? [0, 1, 2, 3, 4] : [0, 1, 3, 4];
-      const style = styles[randInt(0, styles.length - 1)];
-      const rawStr =
-        style === 0 ? digs
-        : style === 1 ? `${digs[0]}.${digs.slice(1)}`
-        : style === 2 ? `${digs.slice(0, 2)}.${digs.slice(2)}`
-        : style === 3 ? `0.${digs}`
-        : `0.00${digs}`;
-      const raw = parseFloat(rawStr);
-      const sf = randInt(1, d - 1);
-      const ans = Number(roundToSF(raw, sf).toPrecision(12));
-      return { prompt: `Round ${rawStr} to ${sf} significant figure${sf > 1 ? "s" : ""}`, answer: `${ans}`, hint: "Enter a number.",
-        steps: [`Count from the first non-zero digit and keep ${sf}`, `Use the next digit to decide whether to round up`, `Answer: ${ans}`] };
+      // Every number is built as a digit string (no float noise) with more
+      // detail than the question asks for, so real rounding always happens.
+      const clean = (x) => Number(x.toPrecision(12));
+      const digStr = (len) => {
+        let s = String(randInt(1, 9));
+        for (let i = 1; i < len; i++) s += i === len - 1 ? randInt(1, 9) : randInt(0, 9);
+        return s; // `len` significant digits, first and last non-zero
+      };
+      const build = () => {
+        const mode = randInt(0, 2);
+        if (mode === 0) { // significant figures
+          const d = randInt(3, 6), sf = randInt(1, d - 1), digs = digStr(d);
+          const st = [0, 1, 2, 3, 4][randInt(0, 4)];
+          const rawStr = st === 0 ? digs
+            : st === 1 ? `${digs[0]}.${digs.slice(1)}`
+            : st === 2 ? `${digs.slice(0, 2)}.${digs.slice(2)}`
+            : st === 3 ? `0.${digs}`
+            : `0.00${digs}`;
+          const raw = parseFloat(rawStr);
+          return { raw, rawStr, ans: `${clean(roundToSF(raw, sf))}`, label: `${sf} significant figure${sf > 1 ? "s" : ""}`,
+            how: `Count from the first non-zero digit and keep ${sf}` };
+        }
+        if (mode === 1) { // decimal places
+          const dp = randInt(1, 4), rawStr = `${randInt(1, 400)}.${digStr(dp + randInt(1, 2))}`;
+          const raw = parseFloat(rawStr);
+          return { raw, rawStr, ans: (Math.round(raw * 10 ** dp) / 10 ** dp).toFixed(dp), label: `${dp} decimal place${dp > 1 ? "s" : ""}`,
+            how: `Keep ${dp} digit${dp > 1 ? "s" : ""} after the decimal point` };
+        }
+        // nearest place value
+        const places = [["ten", 10], ["hundred", 100], ["thousand", 1000], ["whole number", 1], ["tenth", 0.1], ["hundredth", 0.01]];
+        const [name, unit] = places[randInt(0, places.length - 1)];
+        let rawStr;
+        if (unit >= 10) rawStr = digStr(String(unit).length + randInt(1, 2));
+        else if (unit === 1) rawStr = `${randInt(1, 900)}.${digStr(randInt(1, 3))}`;
+        else rawStr = `${randInt(1, 99)}.${digStr(String(1 / unit).length + randInt(1, 2))}`;
+        const raw = parseFloat(rawStr);
+        const rounded = Math.round(raw / unit) * unit;
+        const decs = unit < 1 ? String(unit).split(".")[1].length : 0;
+        return { raw, rawStr, ans: decs ? rounded.toFixed(decs) : `${clean(rounded)}`, label: `the nearest ${name}`,
+          how: `Round to the nearest ${name}` };
+      };
+      let q;
+      for (let i = 0; i < 15; i++) { q = build(); if (Math.abs(parseFloat(q.ans) - q.raw) > 1e-9) break; }
+      return { prompt: `Round ${q.rawStr} to ${q.label}`, answer: q.ans, hint: "Enter a number.",
+        steps: [q.how, `Use the next digit to decide whether to round up`, `Answer: ${q.ans}`] };
     } },
   { id: "limits", name: "Limits of Accuracy", icon: "📏", prereqs: ["sigfig"],
     generate() {
