@@ -428,22 +428,25 @@ const TOPICS = [
         },
         () => { // add or subtract two standard-form numbers
           const exp = [-3, -2, 2, 3, 4, 5][randInt(0, 5)];
-          const same = Math.random() < 0.6;
-          let prompt, value;
+          const plus = Math.random() < 0.5;
+          const same = Math.random() < 0.35;
+          let prompt, value, matchStep;
           if (same) {
-            const plus = Math.random() < 0.5;
             const a = randInt(2, 9), b = plus ? randInt(2, 9) : randInt(1, a - 1);
             prompt = `Work out, in standard form:   ${a} × 10^${exp} ${plus ? "+" : "−"} ${b} × 10^${exp}`;
             value = (plus ? a + b : a - b) * Math.pow(10, exp);
+            matchStep = `Same power of 10 — just ${plus ? "add" : "subtract"} the front numbers: ${a} ${plus ? "+" : "−"} ${b} = ${plus ? a + b : a - b}`;
           } else {
-            const e2 = exp - 1, a = randInt(2, 9), b = randInt(1, 9);
-            prompt = `Work out, in standard form:   ${a} × 10^${exp} + ${b} × 10^${e2}`;
-            value = a * Math.pow(10, exp) + b * Math.pow(10, e2);
+            const diff = randInt(1, 2), e2 = exp - diff; // second number has the smaller power
+            const a = randInt(2, 9), b = randInt(1, 9);
+            prompt = `Work out, in standard form:   ${a} × 10^${exp} ${plus ? "+" : "−"} ${b} × 10^${e2}`;
+            value = a * Math.pow(10, exp) + (plus ? 1 : -1) * b * Math.pow(10, e2);
+            matchStep = `Give both the same power of 10:  ${b} × 10^${e2} = ${b / Math.pow(10, diff)} × 10^${exp},  then ${plus ? "add" : "subtract"}`;
           }
           const { mant, exp: ex } = norm(value);
           return { prompt, answer: sfString(mant, ex), hint: sfHint,
             check: (inp) => isStdForm(inp, value),
-            steps: [`Match the powers of 10, then add or subtract the front numbers`, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
+            steps: [matchStep, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
         },
       ];
       return forms[randInt(0, forms.length - 1)]();
