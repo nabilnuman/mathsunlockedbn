@@ -244,9 +244,68 @@ const TOPICS = [
     } },
   { id: "indices", name: "Indices", icon: "⚡", prereqs: [],
     generate() {
-      const a = randInt(2, 9), b = randInt(2, 9), p = randInt(1, 4), q = randInt(1, 4);
-      return { prompt: `Simplify:   ${a}x^${p} × ${b}x^${q}`, answer: `${a * b}x^${p + q}`, hint: "e.g. 12x^5",
-        steps: [`Multiply the coefficients: ${a} × ${b} = ${a * b}`, `Add the powers (same base): x^${p} × x^${q} = x^${p + q}`, `Answer: ${a * b}x^${p + q}`] };
+      // Covers the laws of indices: multiply, divide, power of a power,
+      // zero index, negative index, fractional index / roots, combining
+      // bases, quotients, and solving a^x = k.
+      const alg = "e.g. 12x^5";
+      const num = "Enter a number.";
+      const frac = "Fraction or decimal.";
+      const forms = [
+        () => { // a^m × a^n = a^(m+n)
+          const a = randInt(2, 6), b = randInt(2, 6), m = randInt(1, 4), n = randInt(1, 4);
+          return { prompt: `Simplify:   ${a}x^${m} × ${b}x^${n}`, answer: `${a * b}x^${m + n}`, hint: alg,
+            steps: [`Multiply the coefficients: ${a} × ${b} = ${a * b}`, `Add the powers: x^${m} × x^${n} = x^${m + n}`, `Answer: ${a * b}x^${m + n}`] };
+        },
+        () => { // a^m ÷ a^n = a^(m−n)
+          const a = randInt(2, 6), b = randInt(2, 5), m = randInt(1, 4), n = randInt(1, 3);
+          return { prompt: `Simplify:   ${a * b}x^${m + n} ÷ ${b}x^${n}`, answer: `${a}x^${m}`, hint: alg,
+            steps: [`Divide the coefficients: ${a * b} ÷ ${b} = ${a}`, `Subtract the powers: x^${m + n} ÷ x^${n} = x^${m}`, `Answer: ${a}x^${m}`] };
+        },
+        () => { // (a^m)^n = a^(mn)
+          const a = randInt(2, 4), m = randInt(1, 4), n = randInt(2, 3);
+          return { prompt: `Simplify:   (${a}x^${m})^${n}`, answer: `${a ** n}x^${m * n}`, hint: alg,
+            steps: [`Raise the coefficient: ${a}^${n} = ${a ** n}`, `Multiply the powers: (x^${m})^${n} = x^${m * n}`, `Answer: ${a ** n}x^${m * n}`] };
+        },
+        () => { // a^0 = 1
+          const a = randInt(2, 9), m = randInt(2, 4);
+          const asNum = Math.random() < 0.5;
+          return asNum
+            ? { prompt: `Evaluate:   ${a}^0`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}^0 = 1`] }
+            : { prompt: `Simplify:   (${a}x^${m})^0`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x^${m})^0 = 1`] };
+        },
+        () => { // a^(−m) = 1/a^m
+          const a = randInt(2, 5), m = randInt(2, 3);
+          return { prompt: `Evaluate:   ${a}^-${m}`, answer: `1/${a ** m}`, hint: frac,
+            steps: [`A negative index means "one over": ${a}^-${m} = 1 ÷ ${a}^${m}`, `${a}^${m} = ${a ** m}`, `Answer: 1/${a ** m}`] };
+        },
+        () => { // a^(1/n) = ⁿ√a
+          const base = randInt(2, 6), n = randInt(2, 3);
+          return { prompt: `Evaluate:   ${base ** n}^(1/${n})`, answer: `${base}`, hint: num,
+            steps: [`A power of 1/${n} means the ${n === 2 ? "square" : "cube"} root`, `${n === 2 ? "√" : "∛"}${base ** n} = ${base}`] };
+        },
+        () => { // a^(m/n) = (ⁿ√a)^m
+          const base = randInt(2, 3);
+          const [n, m] = [[2, 3], [3, 2]][randInt(0, 1)];
+          return { prompt: `Evaluate:   ${base ** n}^(${m}/${n})`, answer: `${base ** m}`, hint: num,
+            steps: [`${base ** n}^(${m}/${n}) = (${n === 2 ? "√" : "∛"}${base ** n})^${m} = ${base}^${m}`, `Answer: ${base ** m}`] };
+        },
+        () => { // a^m × b^m = (ab)^m
+          const a = randInt(2, 5), b = [2, 3, 4, 5].filter((x) => x !== a)[randInt(0, 2)], m = randInt(2, 3);
+          return { prompt: `Evaluate:   ${a}^${m} × ${b}^${m}`, answer: `${(a * b) ** m}`, hint: num,
+            steps: [`Same power, so combine the bases: ${a}^${m} × ${b}^${m} = (${a} × ${b})^${m} = ${a * b}^${m}`, `Answer: ${(a * b) ** m}`] };
+        },
+        () => { // (a/b)^n = a^n / b^n
+          const a = randInt(2, 3), b = randInt(a + 1, 5), n = randInt(2, 3);
+          return { prompt: `Evaluate:   (${a}/${b})^${n}`, answer: `${a ** n}/${b ** n}`, hint: frac,
+            steps: [`Raise the top and bottom separately: (${a}/${b})^${n} = ${a}^${n} / ${b}^${n}`, `Answer: ${a ** n}/${b ** n}`] };
+        },
+        () => { // if a^x = a^k then x = k
+          const base = randInt(2, 4), k = randInt(2, 5);
+          return { prompt: `Solve for x:   ${base}^x = ${base ** k}`, answer: `${k}`, hint: num,
+            steps: [`Write the right side as a power of ${base}: ${base ** k} = ${base}^${k}`, `Equal bases means equal powers: x = ${k}`] };
+        },
+      ];
+      return forms[randInt(0, forms.length - 1)]();
     } },
   { id: "surds", name: "Surds", icon: "√", prereqs: ["indices"],
     generate() {
