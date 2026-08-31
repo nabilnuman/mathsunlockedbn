@@ -2563,14 +2563,30 @@ export default function MathsUnlockedBN() {
 
               {feedback && (
                 <div>
-                  <div className={feedback.correct ? "mub-stamp" : "mub-wobble"} style={{
-                    display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8,
-                    border: `2px solid ${feedback.correct ? "var(--green)" : "var(--red)"}`,
-                    color: feedback.correct ? "var(--green)" : "var(--red)", fontWeight: 700, fontSize: 13,
-                    transform: "rotate(-8deg)", marginBottom: 12,
-                  }}>
-                    {feedback.correct ? <Check size={15} /> : <XIcon size={15} />}
-                    {feedback.correct ? "CORRECT" : "TRY AGAIN"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12, flexWrap: "wrap" }}>
+                    <div className={feedback.correct ? "mub-stamp" : "mub-wobble"} style={{
+                      display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8,
+                      border: `2px solid ${feedback.correct ? "var(--green)" : "var(--red)"}`,
+                      color: feedback.correct ? "var(--green)" : "var(--red)", fontWeight: 700, fontSize: 13,
+                      transform: "rotate(-8deg)",
+                    }}>
+                      {feedback.correct ? <Check size={15} /> : <XIcon size={15} />}
+                      {feedback.correct ? "CORRECT" : "TRY AGAIN"}
+                    </div>
+                    {feedback.rankedUp && (() => {
+                      const ri = RANK_ORDER.indexOf(feedback.rankedUp.to);
+                      const rc = rankDisplay(ri).color;
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div className="mub-rankpop" style={{
+                            width: 34, height: 34, borderRadius: "50%", border: `3px solid ${rc}`,
+                            color: rc, display: "flex", alignItems: "center", justifyContent: "center",
+                            fontWeight: 800, fontSize: feedback.rankedUp.to.length > 1 ? 12 : 15, flexShrink: 0,
+                          }}>{feedback.rankedUp.to}</div>
+                          <div style={{ fontWeight: 700, fontSize: 12.5, color: rc }}>Rank up!</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {!feedback.correct && (
                     <div style={{ fontSize: 12.5, color: "var(--ink)", marginBottom: 12, background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "10px 12px" }}>
@@ -2586,22 +2602,6 @@ export default function MathsUnlockedBN() {
                       🎉 Achievement unlocked: {feedback.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
                     </div>
                   )}
-                  {feedback.rankedUp && (() => {
-                    const ri = RANK_ORDER.indexOf(feedback.rankedUp.to);
-                    const rc = rankDisplay(ri).color;
-                    return (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                        <div className="mub-rankpop" style={{
-                          width: 40, height: 40, borderRadius: "50%", border: `3px solid ${rc}`,
-                          color: rc, display: "flex", alignItems: "center", justifyContent: "center",
-                          fontWeight: 800, fontSize: feedback.rankedUp.to.length > 1 ? 13 : 16, flexShrink: 0,
-                        }}>{feedback.rankedUp.to}</div>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
-                          Rank up! {feedback.rankedUp.topic} → <span style={{ color: rc }}>{feedback.rankedUp.to}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
                   {feedback.leveledTo && (
                     <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
                       ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
