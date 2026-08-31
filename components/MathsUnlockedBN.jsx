@@ -727,7 +727,9 @@ const TOPICS = [
       let p = randInt(-9, 9), q = randInt(-9, 9);
       while (p === 0) p = randInt(-9, 9);
       while (q === 0) q = randInt(-9, 9);
-      return { prompt: `Factorise:   x^2 ${spaced(p + q)}x ${spaced(p * q)}`, answer: `(x${tight(p)})(x${tight(q)})`, hint: "e.g. (x+2)(x-3)",
+      const xterm = (n) => (n === 0 ? "" : ` ${n > 0 ? "+" : "-"} ${Math.abs(n) === 1 ? "" : Math.abs(n)}x`);
+      const tail = `${xterm(p + q)} ${spaced(p * q)}`.replace(/\s+/g, " ").trim();
+      return { prompt: `Factorise:   x² ${tail}`, answer: `(x${tight(p)})(x${tight(q)})`, hint: "e.g. (x+2)(x-3)",
         steps: [`Find two numbers that multiply to ${p * q} and add to ${p + q}: ${p} and ${q}`, `Answer: (x${tight(p)})(x${tight(q)})`] };
     } },
   { id: "simultaneous", name: "Simultaneous Equations", icon: "🔗", prereqs: ["algebra"],
