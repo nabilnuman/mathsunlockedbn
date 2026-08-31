@@ -649,14 +649,14 @@ const TOPICS = [
       const divText = (k, x) => (k === 1 ? `x = ${x}` : k === -1 ? `Multiply both sides by −1:  x = ${x}` : `Divide both sides by ${k}:  x = ${x}`);
       const build = () => {
         const r = Math.random();
-        if (r < 0.18) {
+        if (r < 0.37) {
           // a x + b = c
           const a = nz(-9, 9), x = nz(-9, 9), b = nz(-9, 9), c = a * x + b;
           if (c === 0) return null;
           return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${xt(a)} = ${c - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
         }
-        if (r < 0.36) {
+        if (r < 0.55) {
           // a x + b = c x + d
           const a = nz(-9, 9), c = nz(-9, 9);
           if (a === c) return null;
@@ -667,7 +667,7 @@ const TOPICS = [
         }
 
         // 15% — expand a bracket first
-        if (r < 0.51) {
+        if (r < 0.70) {
           if (Math.random() < 0.35) {
             // p(x + q) = m(x + n)
             const p = randInt(2, 5), m = randInt(2, 5), x = nz(-8, 8), q = nz(-8, 8);
@@ -702,7 +702,7 @@ const TOPICS = [
         }
 
         // 12% — square both sides / take the square root
-        if (r < 0.63) {
+        if (r < 0.82) {
           const k = randInt(2, 12);
           const A = Math.random() < 0.4 ? randInt(2, 4) : 1;
           const b = Math.random() < 0.5 ? 0 : nz(-20, 20);
