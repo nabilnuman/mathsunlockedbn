@@ -1922,7 +1922,7 @@ export default function MathsUnlockedBN() {
               );
             })()}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 26 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))", gap: 10, marginBottom: 24 }}>
               {TOPICS.map((t) => {
                 const topicState = profile.topics[t.id] || { history: [], highestRank: -1, streak: 0 };
                 const unlocked = isUnlocked(t, profile);
@@ -1935,24 +1935,24 @@ export default function MathsUnlockedBN() {
                     title={unlocked ? undefined : lockedReason(t)}
                     style={{
                       background: unlocked ? "var(--card)" : "var(--locked)",
-                      border: "1px solid var(--grid)", borderRadius: 14, padding: 14,
+                      border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 11px",
                       cursor: unlocked ? "pointer" : "not-allowed",
                       opacity: unlocked ? 1 : 0.55,
                       position: "relative",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ fontSize: 24, filter: unlocked ? "none" : "grayscale(1)" }}>{t.icon}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
+                      <div style={{ fontSize: 20, filter: unlocked ? "none" : "grayscale(1)" }}>{t.icon}</div>
                       {unlocked ? (
-                        <div style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${rank.color}`, color: rank.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11 }}>
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", border: `2px solid ${rank.color}`, color: rank.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
                           {rank.label}
                         </div>
                       ) : (
-                        <div style={{ fontSize: 15, color: "var(--muted)" }}>🔒</div>
+                        <div style={{ fontSize: 13, color: "var(--muted)" }}>🔒</div>
                       )}
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: 13, marginTop: 8 }}>{t.name}</div>
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 5, lineHeight: 1.2 }}>{t.name}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {unlocked
                         ? `${(topicState.streak || 0) > 0 ? "🔥 " : ""}${topicState.streak || 0} streak`
                         : lockedReason(t)}
@@ -1960,7 +1960,7 @@ export default function MathsUnlockedBN() {
                     {!unlocked && (profile.keys || 0) > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setKeyTarget(t); }}
-                        style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
+                        style={{ marginTop: 6, fontSize: 10.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
                       >
                         🔑 Use key
                       </button>
