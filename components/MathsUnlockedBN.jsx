@@ -213,6 +213,39 @@ function splitPrompt(prompt) {
   return { lead: p.slice(0, i + 1).trim(), expr: p.slice(i + 1).trim() };
 }
 
+// Stacked-fraction markup. Generators emit frac("x + 3", "2") and <MathText>
+// renders it as a numerator over a denominator with a bar, instead of "x/2".
+// Delimiters are private-use code points so they never collide with real text.
+const FR = { a: "", b: "", c: "" };
+const frac = (num, den) => `${FR.a}${num}${FR.b}${den}${FR.c}`;
+const FRAC_CHARS = [FR.a, FR.b, FR.c].join("");
+
+function MathText({ text, style }) {
+  const s = String(text ?? "");
+  if (!s.includes(FR.a)) return <span style={style}>{s}</span>;
+  const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
+  const parts = [];
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) parts.push({ t: s.slice(last, m.index) });
+    parts.push({ n: m[1], d: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) parts.push({ t: s.slice(last) });
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", ...style }}>
+      {parts.map((p, i) => p.t !== undefined
+        ? <span key={i} style={{ whiteSpace: "pre-wrap" }}>{p.t}</span>
+        : (
+          <span key={i} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle", margin: "0 4px" }}>
+            <span style={{ padding: "0 5px 1px" }}>{p.n}</span>
+            <span style={{ padding: "1px 5px 0", borderTop: "1.5px solid currentColor" }}>{p.d}</span>
+          </span>
+        ))}
+    </span>
+  );
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
@@ -634,13 +667,13 @@ const TOPICS = [
           // x / den + b = c
           const den = randInt(2, 9), k = nz(-6, 6), x = den * k, b = nz(-9, 9), c = k + b;
           if (c === 0) return null;
-          return { prompt: `Solve for x:   x/${den} ${spaced(b)} = ${c}`, answer: `${x}`,
-            steps: [`${moveText(b)}:  x/${den} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
+          return { prompt: `Solve for x:   ${frac("x", den)} ${spaced(b)} = ${c}`, answer: `${x}`,
+            steps: [`${moveText(b)}:  ${frac("x", den)} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
         }
         // (a x + b) / den = c
         const den = randInt(2, 9), a = nz(-6, 6), x = nz(-9, 9), c = nz(-6, 6), b = c * den - a * x;
         if (b === 0) return null;
-        return { prompt: `Solve for x:   (${xt(a)} ${spaced(b)})/${den} = ${c}`, answer: `${x}`,
+        return { prompt: `Solve for x:   ${frac(`${xt(a)} ${spaced(b)}`, `${den}`)} = ${c}`, answer: `${x}`,
           steps: [`Multiply both sides by ${den}:  ${xt(a)} ${spaced(b)} = ${c * den}`, `${moveText(b)}:  ${xt(a)} = ${c * den - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
       };
       let q;
@@ -2651,9 +2684,9 @@ export default function MathsUnlockedBN() {
                 const exprSize = expr ? Math.max(13, Math.min(20, Math.round(290 / (expr.length * 0.62)))) : 17;
                 return (
                   <div style={{ marginBottom: 16 }}>
-                    <div className="mub-mono" style={{ fontSize: expr ? 13 : 17, lineHeight: 1.5, color: expr ? "var(--muted)" : "var(--ink)", overflowWrap: "break-word" }}>{lead}</div>
+                    <div className="mub-mono" style={{ fontSize: expr ? 13 : 17, lineHeight: 1.5, color: expr ? "var(--muted)" : "var(--ink)", overflowWrap: "break-word" }}><MathText text={lead} /></div>
                     {expr && (
-                      <div className="mub-mono" style={{ fontSize: exprSize, fontWeight: 600, lineHeight: 1.4, marginTop: 6, color: "var(--ink)", overflowWrap: "break-word" }}>{expr}</div>
+                      <div className="mub-mono" style={{ fontSize: exprSize, fontWeight: 600, lineHeight: 1.4, marginTop: 6, color: "var(--ink)", overflowWrap: "break-word" }}><MathText text={expr} /></div>
                     )}
                   </div>
                 );
@@ -2724,7 +2757,7 @@ export default function MathsUnlockedBN() {
                     <div style={{ fontSize: 12.5, color: "var(--ink)", marginBottom: 12, background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "10px 12px" }}>
                       <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>How to solve it</div>
                       <ol style={{ margin: 0, paddingLeft: 18 }}>
-                        {question.steps.map((s, i) => <li key={i} className="mub-mono" style={{ marginBottom: 4 }}>{s}</li>)}
+                        {question.steps.map((s, i) => <li key={i} className="mub-mono" style={{ marginBottom: 4 }}><MathText text={s} /></li>)}
                       </ol>
                       <div style={{ marginTop: 6 }}>Answer: <span className="mub-mono" style={{ fontWeight: 700 }}>{question.answer}</span></div>
                     </div>
