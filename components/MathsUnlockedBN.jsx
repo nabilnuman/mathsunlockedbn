@@ -147,8 +147,9 @@ const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
       // A mix of BODMAS shapes — brackets, orders (powers & roots),
-      // division, multiplication, add/subtract. Every answer is a
-      // non-negative whole number.
+      // division, multiplication, add/subtract. Answers are whole
+      // numbers; roughly 1 in 4 questions involves negatives (results
+      // going below zero, or negative operands including −×−).
       const forms = [
         () => { // multiply, then add/subtract
           const a = randInt(4, 20), b = randInt(2, 9), c = randInt(2, 9);
@@ -201,16 +202,43 @@ const TOPICS = [
             steps: [`Left to right: ${a} × ${b} = ${prod}`, `Divide: ${prod} ÷ ${cc} = ${prod / cc}`] };
         },
       ];
-      const q = forms[randInt(0, forms.length - 1)]();
-      return { prompt: `Work out (follow the order of operations):   ${q.prompt}`, answer: `${q.answer}`, hint: "Enter a number.", steps: q.steps };
+      const negForms = [
+        () => { // subtraction crossing zero
+          const a = randInt(2, 15), b = randInt(a + 2, a + 16);
+          return { prompt: `${a} − ${b}`, answer: a - b, steps: [`${a} − ${b} = ${a - b}`] };
+        },
+        () => { // multiply, then subtract from a smaller number
+          const b = randInt(3, 9), c = randInt(3, 9), a = randInt(1, b * c - 2);
+          return { prompt: `${a} − ${b} × ${c}`, answer: a - b * c,
+            steps: [`Multiply first: ${b} × ${c} = ${b * c}`, `Subtract: ${a} − ${b * c} = ${a - b * c}`] };
+        },
+        () => { // negative × negative, then add or subtract
+          const a = randInt(2, 9), b = randInt(2, 9), c = randInt(1, 30), plus = Math.random() < 0.5, prod = a * b;
+          return { prompt: `(−${a}) × (−${b}) ${plus ? "+" : "−"} ${c}`, answer: plus ? prod + c : prod - c,
+            steps: [`A negative times a negative is positive: (−${a}) × (−${b}) = ${prod}`, `${plus ? "Add" : "Subtract"}: ${prod} ${plus ? "+" : "−"} ${c} = ${plus ? prod + c : prod - c}`] };
+        },
+        () => { // negative × positive, then add or subtract
+          const a = randInt(2, 9), b = randInt(2, 9), c = randInt(1, 20), plus = Math.random() < 0.5, prod = -a * b;
+          return { prompt: `(−${a}) × ${b} ${plus ? "+" : "−"} ${c}`, answer: plus ? prod + c : prod - c,
+            steps: [`A negative times a positive is negative: (−${a}) × ${b} = ${prod}`, `${plus ? "Add" : "Subtract"}: ${prod} ${plus ? "+" : "−"} ${c} = ${plus ? prod + c : prod - c}`] };
+        },
+      ];
+      const q = (Math.random() < 0.24 ? negForms[randInt(0, negForms.length - 1)] : forms[randInt(0, forms.length - 1)])();
+      return { prompt: `Work out (follow the order of operations):   ${q.prompt}`, answer: `${q.answer}`, hint: "Enter a number — it can be negative.", steps: q.steps };
     } },
   { id: "hcflcm", name: "HCF & LCM", icon: "➗", prereqs: ["arithmetic"],
     generate() {
-      const a = randInt(4, 24), b = randInt(4, 24), mode = Math.random() < 0.5 ? "HCF" : "LCM", g = gcd(a, b);
-      return { prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : lcm(a, b)}`, hint: "Enter a number.",
+      // a and b always share a factor > 1, so the HCF is never 1 and the
+      // LCM is never just a × b.
+      const base = [2, 3, 4, 5, 6][randInt(0, 4)];
+      let m = randInt(2, 8), n = randInt(2, 8);
+      while (m === n) n = randInt(2, 8);
+      const a = base * m, b = base * n, g = gcd(a, b), l = lcm(a, b);
+      const mode = Math.random() < 0.5 ? "HCF" : "LCM";
+      return { prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : l}`, hint: "Enter a number.",
         steps: mode === "HCF"
-          ? [`Use the Euclidean algorithm or list common factors of ${a} and ${b}`, `HCF(${a}, ${b}) = ${g}`]
-          : [`LCM = (${a} × ${b}) ÷ HCF(${a}, ${b})`, `HCF(${a}, ${b}) = ${g}`, `LCM = ${a * b} ÷ ${g} = ${lcm(a, b)}`] };
+          ? [`List the common factors of ${a} and ${b}, or use the Euclidean algorithm`, `HCF(${a}, ${b}) = ${g}`]
+          : [`LCM = (${a} × ${b}) ÷ HCF(${a}, ${b})`, `HCF(${a}, ${b}) = ${g}`, `LCM = ${a * b} ÷ ${g} = ${l}`] };
     } },
   { id: "indices", name: "Indices", icon: "⚡", prereqs: [],
     generate() {
