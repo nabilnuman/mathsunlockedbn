@@ -127,6 +127,7 @@ function checkEquivalent(studentStr, correctStr) {
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const spaced = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
 const tight = (n) => (n >= 0 ? `+${n}` : `-${Math.abs(n)}`);
+const pw = (p) => (p === 1 ? "" : `^${p}`); // x^1 → x, but x^-1 / x^3 keep the index
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; }
 function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
 function roundToSF(num, sf) {
@@ -253,25 +254,25 @@ const TOPICS = [
       const forms = [
         () => { // a^m × a^n = a^(m+n)
           const a = randInt(2, 6), b = randInt(2, 6), m = randInt(1, 4), n = randInt(1, 4);
-          return { prompt: `Simplify:   ${a}x^${m} × ${b}x^${n}`, answer: `${a * b}x^${m + n}`, hint: alg,
-            steps: [`Multiply the coefficients: ${a} × ${b} = ${a * b}`, `Add the powers: x^${m} × x^${n} = x^${m + n}`, `Answer: ${a * b}x^${m + n}`] };
+          return { prompt: `Simplify:   ${a}x${pw(m)} × ${b}x${pw(n)}`, answer: `${a * b}x${pw(m + n)}`, hint: alg,
+            steps: [`Multiply the coefficients: ${a} × ${b} = ${a * b}`, `Add the powers: x${pw(m)} × x${pw(n)} = x${pw(m + n)}`, `Answer: ${a * b}x${pw(m + n)}`] };
         },
         () => { // a^m ÷ a^n = a^(m−n)
           const a = randInt(2, 6), b = randInt(2, 5), m = randInt(1, 4), n = randInt(1, 3);
-          return { prompt: `Simplify:   ${a * b}x^${m + n} ÷ ${b}x^${n}`, answer: `${a}x^${m}`, hint: alg,
-            steps: [`Divide the coefficients: ${a * b} ÷ ${b} = ${a}`, `Subtract the powers: x^${m + n} ÷ x^${n} = x^${m}`, `Answer: ${a}x^${m}`] };
+          return { prompt: `Simplify:   ${a * b}x${pw(m + n)} ÷ ${b}x${pw(n)}`, answer: `${a}x${pw(m)}`, hint: alg,
+            steps: [`Divide the coefficients: ${a * b} ÷ ${b} = ${a}`, `Subtract the powers: x${pw(m + n)} ÷ x${pw(n)} = x${pw(m)}`, `Answer: ${a}x${pw(m)}`] };
         },
         () => { // (a^m)^n = a^(mn)
           const a = randInt(2, 4), m = randInt(1, 4), n = randInt(2, 3);
-          return { prompt: `Simplify:   (${a}x^${m})^${n}`, answer: `${a ** n}x^${m * n}`, hint: alg,
-            steps: [`Raise the coefficient: ${a}^${n} = ${a ** n}`, `Multiply the powers: (x^${m})^${n} = x^${m * n}`, `Answer: ${a ** n}x^${m * n}`] };
+          return { prompt: `Simplify:   (${a}x${pw(m)})^${n}`, answer: `${a ** n}x${pw(m * n)}`, hint: alg,
+            steps: [`Raise the coefficient: ${a}^${n} = ${a ** n}`, `Multiply the powers: (x${pw(m)})^${n} = x${pw(m * n)}`, `Answer: ${a ** n}x${pw(m * n)}`] };
         },
         () => { // a^0 = 1
           const a = randInt(2, 9), m = randInt(2, 4);
           const asNum = Math.random() < 0.5;
           return asNum
             ? { prompt: `Evaluate:   ${a}^0`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}^0 = 1`] }
-            : { prompt: `Simplify:   (${a}x^${m})^0`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x^${m})^0 = 1`] };
+            : { prompt: `Simplify:   (${a}x${pw(m)})^0`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x${pw(m)})^0 = 1`] };
         },
         () => { // a^(−m) = 1/a^m
           const a = randInt(2, 5), m = randInt(2, 3);
