@@ -2493,7 +2493,8 @@ export default function MathsUnlockedBN() {
                 const syms = [];
                 if (/π/.test(ctx)) syms.push("π");
                 if (/√|sqrt/i.test(ctx)) syms.push("√");
-                if (/\^/.test(ctx)) syms.push("^");
+                if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
+                else if (/\^/.test(ctx)) syms.push("^");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
