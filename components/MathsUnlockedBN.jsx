@@ -496,35 +496,33 @@ function rankDisplay(highestRankIdx) {
 }
 
 /* ---------------------------------------------------------
-   Levelling (Mastery Challenge). EXP is earned ONLY when a
-   topic's grade ratchets up — ungraded→F, F→E, … S→S+. It's
-   a pure function of the current topic ranks, never stored,
-   so it can't drift and needs no migration for old profiles.
-   The total EXP available across all 30 topics is exactly the
-   amount needed for the Level-20 cap, so Level 20 ⇔ S+ in
-   every topic. Each level costs more than the last, and the
-   very first correct answer (ungraded→F) is enough for Lv 2.
+   Levelling (Mastery Challenge). XP comes from two sources:
+   grade ratchet-ups (ungraded→F … S→S+) and claimed daily
+   tasks (profile.bonusExp). Level 20 costs 8,500 XP — about
+   what 15 topics at A + 15 at S is worth (8,550) — so full
+   S+ mastery (13,500) is now well past the cap and lives on
+   as the "Mathematics Unlocked" achievement + prestige fuel.
 --------------------------------------------------------- */
 const LEVEL_CAP = 20;
 // XP for entering each rank: F, E, D, C, B, A, A*, S, S+  (arithmetic, +10)
 const RANK_STEP_EXP = [10, 20, 30, 40, 50, 60, 70, 80, 90];
-// RANK_CUM_EXP[k] = XP a topic is worth once it has reached rank index k
-//   → [10, 30, 60, 100, 150, 210, 280, 360, 450]; a maxed topic = 450, ×30 = 13500
+// RANK_CUM_EXP[k] = XP a topic is worth at rank index k
+//   → [10, 30, 60, 100, 150, 210, 280, 360, 450]  (A = 210, S = 360, S+ = 450)
 const RANK_CUM_EXP = RANK_STEP_EXP.reduce((acc, v) => [...acc, (acc[acc.length - 1] || 0) + v], []);
-// LEVEL_CUM_EXP[i] = total XP required to be level (i + 1). Per-level cost is
-// 10·L·(L+1)/2 (10, 30, 60, 100, 150, 210 …) with a 2100 final push, so every
-// threshold is a multiple of 10 and the total is exactly 13500 = all topics S+.
+// LEVEL_CUM_EXP[i] = total XP required to be level (i + 1). Per-level cost
+// climbs 10, 60, 110, 160, 200, 250 … 880 — all multiples of 10, summing to 8,500.
 const LEVEL_CUM_EXP = [
-  0, 10, 40, 100, 200, 350, 560, 840, 1200, 1650,
-  2200, 2860, 3640, 4550, 5600, 6800, 8160, 9690, 11400, 13500,
+  0, 10, 70, 180, 340, 540, 790, 1090, 1440, 1840,
+  2290, 2790, 3330, 3920, 4560, 5250, 5990, 6780, 7620, 8500,
 ];
 
 function totalExp(profile) {
   const topics = (profile && profile.topics) || {};
-  return TOPICS.reduce((sum, t) => {
+  const fromRanks = TOPICS.reduce((sum, t) => {
     const k = (topics[t.id] || {}).highestRank ?? -1;
     return sum + (k >= 0 ? RANK_CUM_EXP[Math.min(k, RANK_CUM_EXP.length - 1)] : 0);
   }, 0);
+  return fromRanks + ((profile && profile.bonusExp) || 0);
 }
 function levelFromExp(exp) {
   let level = 1;
@@ -842,11 +840,94 @@ function lockedReason(topic) {
   return `Unlocks after reaching C in ${names.join(" & ")}`;
 }
 
+/* ---------------------------------------------------------
+   Daily tasks. Three a day: "show up" is always one, the
+   other two rotate from a pool, chosen deterministically
+   from the date so everyone gets the same set. Each claimed
+   task adds to profile.bonusExp. A separate one-time list
+   ("first-time bonuses") nudges feature discovery.
+--------------------------------------------------------- */
+const DAILY_XP = { showup: 20, task: 40 };
+const MILESTONE_XP = 50;
+
+function todayKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function weakestTopicId(profile) {
+  const topics = profile.topics || {};
+  const pool = TOPICS.filter((t) => isUnlocked(t, profile));
+  let worst = pool[0] || TOPICS[0];
+  let worstRank = (topics[worst.id] || {}).highestRank ?? -1;
+  for (const t of pool) {
+    const r = (topics[t.id] || {}).highestRank ?? -1;
+    if (r < worstRank) { worst = t; worstRank = r; }
+  }
+  return worst.id;
+}
+
+const SHOWUP_TASK = { id: "showup", label: "Open the app today", goal: 1, progress: () => 1 };
+const DAILY_POOL = [
+  { id: "correct5", label: "Get 5 correct answers", goal: 5, progress: (d) => d.correct },
+  { id: "streak3", label: "Get 3 correct in a row", goal: 3, progress: (d) => d.bestStreakToday },
+  { id: "topics3", label: "Practise 3 different topics", goal: 3, progress: (d) => (d.topics || []).length },
+  { id: "weak3", label: "Get 3 right in your weakest topic", goal: 3, progress: (d) => d.weakCorrect,
+    sub: (d) => (TOPIC_BY_ID[d.weakTopicId] || {}).name || "" },
+  { id: "mixed", label: "Play a round of Mixed Review", goal: 1, progress: (d) => d.mixedRounds, needsMixed: true },
+];
+const TASK_BY_ID = Object.fromEntries([SHOWUP_TASK, ...DAILY_POOL].map((t) => [t.id, t]));
+
+const MILESTONES = [
+  { id: "friendview", label: "View a friend's profile" },
+  { id: "leaderboard", label: "Check the leaderboard" },
+  { id: "parentlink", label: "Open your Parent Link" },
+  { id: "usekey", label: "Use a Skeleton Key" },
+];
+
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+function pickDailyTasks(date, profile) {
+  const pool = DAILY_POOL.filter((t) => !t.needsMixed || levelFromExp(totalExp(profile)) >= MIXED_UNLOCK_LEVEL);
+  const h = hashStr(date);
+  const a = h % pool.length;
+  let b = (Math.floor(h / pool.length) + 1) % pool.length;
+  if (b === a) b = (b + 1) % pool.length;
+  return ["showup", pool[a].id, pool[b].id];
+}
+function freshDay(profile) {
+  const date = todayKey();
+  return {
+    date, tasks: pickDailyTasks(date, profile), claimed: {},
+    correct: 0, topics: [], streakToday: 0, bestStreakToday: 0,
+    weakCorrect: 0, weakTopicId: weakestTopicId(profile), mixedRounds: 0,
+  };
+}
+function ensureDay(profile) {
+  if (!profile.daily || profile.daily.date !== todayKey()) profile.daily = freshDay(profile);
+  return profile.daily;
+}
+function taskDone(task, day) {
+  return (task.id === "showup" ? 1 : task.progress(day)) >= task.goal;
+}
+
+// Record level-ups (timestamps + Skeleton Keys) after any XP change.
+function creditLevelUps(next, expBefore) {
+  const before = levelFromExp(expBefore);
+  const after = levelFromExp(totalExp(next));
+  if (after > before) {
+    next.levelReachedAt = next.levelReachedAt || {};
+    for (let L = before + 1; L <= after; L++) {
+      if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
+      if (L % 5 === 0) next.keys = (next.keys || 0) + 1;
+    }
+  }
+  return after > before ? after : null;
+}
+
 const emptyProfile = () => ({
   name: "", school: SOLO_SCHOOL, topics: {}, achievements: [], achievedAt: {},
   streak: 0, bestStreak: 0, fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0,
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
+  bonusExp: 0, daily: null, milestones: {},
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 // A student is identified by name + 4-digit PIN, so two students who share
@@ -905,6 +986,7 @@ export default function MathsUnlockedBN() {
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [devTopic, setDevTopic] = useState(TOPICS[0].id);
+  const [toast, setToast] = useState(null);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
@@ -997,6 +1079,53 @@ export default function MathsUnlockedBN() {
       setScreen(profile.name ? "dashboard" : "login");
     }
   }, [teacherMode, screen, profile.name]);
+
+  // Roll over the daily tasks at (local) midnight / on a new day.
+  useEffect(() => {
+    if (!ready || !profile.name) return;
+    if (!profile.daily || profile.daily.date !== todayKey()) {
+      const n = JSON.parse(JSON.stringify(profile));
+      n.daily = freshDay(n);
+      saveProfile(n);
+    }
+  }, [ready, profile.name, profile.daily && profile.daily.date]);
+
+  function flash(msg) {
+    setToast(msg);
+    setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
+  }
+
+  function claimDailyTask(taskId) {
+    const n = JSON.parse(JSON.stringify(profile));
+    const d = ensureDay(n);
+    if (d.claimed[taskId] || !(d.tasks || []).includes(taskId)) return;
+    const task = TASK_BY_ID[taskId];
+    if (!task || !taskDone(task, d)) return;
+    const before = totalExp(n);
+    d.claimed[taskId] = true;
+    n.bonusExp = (n.bonusExp || 0) + (taskId === "showup" ? DAILY_XP.showup : DAILY_XP.task);
+    const gain = totalExp(n) - before;
+    const lv = creditLevelUps(n, before);
+    saveProfile(n);
+    if (lv) playJingle(true);
+    flash(`+${gain} XP${lv ? ` · Level ${lv}!` : ""}`);
+  }
+
+  function markMilestone(id) {
+    if (!profile.name || (profile.milestones || {})[id]) return;
+    saveProfile({ ...profile, milestones: { ...(profile.milestones || {}), [id]: "ready" } });
+  }
+  function claimMilestone(id) {
+    if ((profile.milestones || {})[id] !== "ready") return;
+    const n = JSON.parse(JSON.stringify(profile));
+    const before = totalExp(n);
+    n.milestones[id] = "claimed";
+    n.bonusExp = (n.bonusExp || 0) + MILESTONE_XP;
+    const lv = creditLevelUps(n, before);
+    saveProfile(n);
+    if (lv) playJingle(true);
+    flash(`+${MILESTONE_XP} XP${lv ? ` · Level ${lv}!` : ""}`);
+  }
 
   function toggleTheme() {
     setTheme((prev) => {
@@ -1257,6 +1386,11 @@ export default function MathsUnlockedBN() {
     const nowHour = new Date().getHours();
     if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
 
+    // Daily-task progress
+    const d = ensureDay(next);
+    if (!(d.topics || []).includes(scoredId)) d.topics = [...(d.topics || []), scoredId];
+    if (activeTopic.id === MIXED_TOPIC.id) d.mixedRounds = Math.max(d.mixedRounds || 0, 1);
+
     if (correct) {
       next.streak = (next.streak || 0) + 1;
       next.bestStreak = Math.max(next.bestStreak || 0, next.streak);
@@ -1267,24 +1401,19 @@ export default function MathsUnlockedBN() {
       next.consecWrong = 0;
       if (scoredId === "surds") next.solvedSurd = true; // "Root of the Problem"
       if (String(question.answer).trim() === "67") next.got67 = true; // "67"
+      d.correct = (d.correct || 0) + 1;
+      d.streakToday = (d.streakToday || 0) + 1;
+      d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
+      if (scoredId === d.weakTopicId) d.weakCorrect = (d.weakCorrect || 0) + 1;
     } else {
       next.streak = 0;
       next.consecWrong = (next.consecWrong || 0) + 1;
+      d.streakToday = 0;
     }
     const expAfter = totalExp(next);
     const expGain = expAfter - expBefore;
-    const lvlBefore = levelFromExp(expBefore);
-    const lvlAfter = levelFromExp(expAfter);
-    let keysWon = 0;
-    if (lvlAfter > lvlBefore) {
-      next.levelReachedAt = next.levelReachedAt || {};
-      for (let L = lvlBefore + 1; L <= lvlAfter; L++) {
-        if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
-        if (L % 5 === 0) keysWon += 1; // a Skeleton Key every 5 levels (5, 10, 15, 20)
-      }
-      if (keysWon) next.keys = (next.keys || 0) + keysWon;
-    }
-    const leveledTo = lvlAfter > lvlBefore ? lvlAfter : null;
+    const leveledTo = creditLevelUps(next, expBefore);
+    const keysWon = (next.keys || 0) - (profile.keys || 0);
 
     const unlocked = [];
     next.achievedAt = next.achievedAt || {};
@@ -1310,6 +1439,8 @@ export default function MathsUnlockedBN() {
     cur.streak = 0;
     cur.consecWrong = 0;
     cur.levelReachedAt = {};
+    cur.bonusExp = 0;           // daily XP already did its job this cycle
+    cur.daily = null;           // regenerate (weakest topic changes)
     // kept: achievements, achievedAt, lifetime counters, keys, keyedTopics, name, school
     setConfirmPrestige(false);
     setActiveTopic(null);
@@ -1324,6 +1455,7 @@ export default function MathsUnlockedBN() {
     if ((cur.keyedTopics || []).includes(topic.id)) return;
     cur.keys -= 1;
     cur.keyedTopics = [...(cur.keyedTopics || []), topic.id];
+    if (!(cur.milestones || {}).usekey) cur.milestones = { ...(cur.milestones || {}), usekey: "ready" };
     setKeyTarget(null);
     saveProfile(cur);
   }
@@ -1354,6 +1486,7 @@ export default function MathsUnlockedBN() {
   function openLeaderboard() {
     setScreen("leaderboard");
     loadBoard();
+    markMilestone("leaderboard");
   }
 
   function openFriends() {
@@ -1395,7 +1528,10 @@ export default function MathsUnlockedBN() {
   }
 
   function openParentLink() {
-    if (!profile.parentToken) saveProfile({ ...profile, parentToken: genToken() });
+    const next = { ...profile };
+    if (!next.parentToken) next.parentToken = genToken();
+    if (next.name && (next.milestones || {}).parentlink === undefined) next.milestones = { ...(next.milestones || {}), parentlink: "ready" };
+    saveProfile(next);
     setLinkCopied(false);
     setShowParentLink(true);
   }
@@ -1691,6 +1827,64 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
             </div>
+
+            {(() => {
+              const day = (profile.daily && profile.daily.date === todayKey()) ? profile.daily : freshDay(profile);
+              const dailyTasks = (day.tasks || []).map((id) => TASK_BY_ID[id]).filter(Boolean);
+              const openMs = MILESTONES.filter((m) => (profile.milestones || {})[m.id] !== "claimed");
+              const xpFor = (id) => (id === "showup" ? DAILY_XP.showup : DAILY_XP.task);
+              const rowStyle = { display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 };
+              return (
+                <div style={{ border: "1px solid var(--grid)", background: "var(--card)", borderRadius: 12, padding: "12px 14px", marginBottom: 20 }}>
+                  <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Today</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {dailyTasks.map((task) => {
+                      const done = taskDone(task, day);
+                      const claimed = !!day.claimed[task.id];
+                      const cur = task.id === "showup" ? 1 : task.progress(day);
+                      return (
+                        <div key={task.id} style={rowStyle}>
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{claimed ? "✅" : done ? "🟢" : "⚪"}</span>
+                          <div style={{ flex: 1, minWidth: 0, color: claimed ? "var(--muted)" : "var(--ink)" }}>
+                            {task.label}
+                            {task.sub && task.sub(day) ? <span style={{ color: "var(--muted)" }}> — {task.sub(day)}</span> : ""}
+                            {!claimed && !done ? <span style={{ color: "var(--muted)" }}> · {cur}/{task.goal}</span> : ""}
+                          </div>
+                          {claimed ? (
+                            <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700, flexShrink: 0 }}>+{xpFor(task.id)} XP</span>
+                          ) : done ? (
+                            <button onClick={() => claimDailyTask(task.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
+                              Claim +{xpFor(task.id)}
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {openMs.length > 0 && (
+                    <>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" }}>First-time bonuses</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {openMs.map((m) => {
+                          const st = (profile.milestones || {})[m.id];
+                          return (
+                            <div key={m.id} style={rowStyle}>
+                              <span style={{ fontSize: 14, flexShrink: 0 }}>{st === "ready" ? "🟢" : "⚪"}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>{m.label}</div>
+                              {st === "ready" && (
+                                <button onClick={() => claimMilestone(m.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
+                                  Claim +{MILESTONE_XP}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {(() => {
               const lvl = levelFromExp(totalExp(profile));
@@ -2172,7 +2366,7 @@ export default function MathsUnlockedBN() {
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {friendResults.map((s, i) => (
-                      <button key={i} onClick={() => setFriendView(s)} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)", cursor: "pointer", color: "var(--ink)" }}>
+                      <button key={i} onClick={() => { setFriendView(s); markMilestone("friendview"); }} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)", cursor: "pointer", color: "var(--ink)" }}>
                         <PrestigeBadge prestige={s.prestige} size={16} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
@@ -2339,6 +2533,12 @@ export default function MathsUnlockedBN() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", zIndex: 60, background: "var(--ink)", color: "var(--page-bg)", fontWeight: 700, fontSize: 13, padding: "10px 18px", borderRadius: 999, boxShadow: "0 6px 20px var(--shadow)" }}>
+          {toast}
         </div>
       )}
     </div>
