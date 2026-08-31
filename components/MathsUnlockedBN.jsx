@@ -986,9 +986,55 @@ const TOPICS = [
     } },
   { id: "proportionality", name: "Proportionality", icon: "⚖️", prereqs: ["algebra"],
     generate() {
-      const k = randInt(2, 9), x1 = randInt(2, 9), x2 = randInt(2, 12), y1 = k * x1;
-      return { prompt: `y is directly proportional to x. When x = ${x1}, y = ${y1}. Find y when x = ${x2}`, answer: `${k * x2}`, hint: "Enter a number.",
-        steps: [`Find k: y = kx → k = ${y1} ÷ ${x1} = ${k}`, `Use k to find y when x = ${x2}: y = ${k} × ${x2} = ${k * x2}`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const rels = [
+        { txt: "x",  disp: (x) => `${x}`,   f: (x) => x,             other: (b, t) => b * t,     R: (t) => t },
+        { txt: "x",  disp: (x) => `${x}`,   f: (x) => x,             other: (b, t) => b * t,     R: (t) => t },
+        { txt: "x²", disp: (x) => `${x}²`,  f: (x) => x * x,         other: (b, t) => b * t,     R: (t) => t * t },
+        { txt: "x²", disp: (x) => `${x}²`,  f: (x) => x * x,         other: (b, t) => b * t,     R: (t) => t * t },
+        { txt: "√x", disp: (x) => `√${x}`,  f: (x) => Math.sqrt(x),  other: (b, t) => b * t * t, R: (t) => t, bases: [4, 9, 16] },
+        { txt: "√x", disp: (x) => `√${x}`,  f: (x) => Math.sqrt(x),  other: (b, t) => b * t * t, R: (t) => t, bases: [4, 9, 16] },
+        { txt: "x³", disp: (x) => `${x}³`,  f: (x) => x ** 3,        other: (b, t) => b * t,     R: (t) => t ** 3, small: true },
+      ];
+      const rel = pick(rels);
+      const inverse = Math.random() < 0.45;
+      const baseX = rel.bases ? pick(rel.bases) : rel.small ? randInt(2, 3) : randInt(2, rel.txt === "x" ? 8 : 5);
+      const t = rel.small ? 2 : pick([2, 3]);
+      const otherX = rel.other(baseX, t), R = rel.R(t);
+      const fBase = rel.f(baseX), fOther = rel.f(otherX);
+
+      let yBase, yOther, k;
+      if (inverse) {
+        yOther = randInt(2, 9);
+        k = yOther * fOther;
+        yBase = yOther * R; // = k / fBase
+      } else {
+        k = rel.small ? randInt(2, 4) : randInt(2, 8);
+        yBase = k * fBase;
+        yOther = k * fOther;
+      }
+
+      const giveBase = Math.random() < 0.5;
+      const [gx, gy, ax, ay] = giveBase ? [baseX, yBase, otherX, yOther] : [otherX, yOther, baseX, yBase];
+      const rl = inverse ? `inversely proportional to ${rel.txt}` : `directly proportional to ${rel.txt}`;
+      const op = inverse ? "×" : "÷";
+      const fg = rel.f(gx), fa = rel.f(ax);
+      const kLine = rel.disp(gx) === `${fg}`
+        ? `k = ${gy} ${op} ${gx} = ${k}`
+        : `k = ${gy} ${op} ${rel.disp(gx)} = ${gy} ${op} ${fg} = ${k}`;
+      const useLine = inverse
+        ? `When x = ${ax}:  y = ${k} ÷ ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`
+        : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
+
+      return {
+        prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
+        answer: `${ay}`, hint: "Enter a number.",
+        steps: [
+          inverse ? `Inverse: y = k ÷ ${rel.txt}, so k = y × ${rel.txt}` : `Direct: y = k${rel.txt === "x" ? "x" : " · " + rel.txt}, so k = y ÷ ${rel.txt}`,
+          kLine,
+          useLine,
+        ],
+      };
     } },
   { id: "coordgeo", name: "Co-ordinate Geometry", icon: "📍", prereqs: [],
     generate() {
