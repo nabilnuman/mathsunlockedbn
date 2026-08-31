@@ -649,14 +649,14 @@ const TOPICS = [
       const divText = (k, x) => (k === 1 ? `x = ${x}` : k === -1 ? `Multiply both sides by −1:  x = ${x}` : `Divide both sides by ${k}:  x = ${x}`);
       const build = () => {
         const r = Math.random();
-        if (r < 0.32) {
+        if (r < 0.18) {
           // a x + b = c
           const a = nz(-9, 9), x = nz(-9, 9), b = nz(-9, 9), c = a * x + b;
           if (c === 0) return null;
           return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${xt(a)} = ${c - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
         }
-        if (r < 0.60) {
+        if (r < 0.36) {
           // a x + b = c x + d
           const a = nz(-9, 9), c = nz(-9, 9);
           if (a === c) return null;
@@ -664,6 +664,66 @@ const TOPICS = [
           if (d === 0) return null;
           return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${xt(c)} ${spaced(d)}`, answer: `${x}`,
             steps: [`Bring the x-terms to one side:  ${xt(a - c)} ${spaced(b)} = ${d}`, `${moveText(b)}:  ${xt(a - c)} = ${d - b}`, ...(a - c === 1 ? [] : [divText(a - c, x)])] };
+        }
+
+        // 15% — expand a bracket first
+        if (r < 0.51) {
+          if (Math.random() < 0.35) {
+            // p(x + q) = m(x + n)
+            const p = randInt(2, 5), m = randInt(2, 5), x = nz(-8, 8), q = nz(-8, 8);
+            if (p === m) return null;
+            const numer = (p - m) * x + p * q;
+            if (numer % m !== 0) return null;
+            const n = numer / m;
+            if (n === 0) return null;
+            return { prompt: `Solve for x:   ${p}(x ${spaced(q)}) = ${m}(x ${spaced(n)})`, answer: `${x}`,
+              steps: [
+                `Expand both sides:  ${p}x ${spaced(p * q)} = ${m}x ${spaced(m * n)}`,
+                `Bring the x-terms together:  ${xt(p - m)} ${spaced(p * q)} = ${m * n}`,
+                `${moveText(p * q)}:  ${xt(p - m)} = ${m * n - p * q}`,
+                ...(p - m === 1 ? [] : [divText(p - m, x)]),
+              ] };
+          }
+          // p(cx + q) [+ s] = r
+          const p = randInt(2, 5), c = randInt(1, 3), x = nz(-9, 9), q = nz(-9, 9);
+          const s = Math.random() < 0.5 ? 0 : nz(-9, 9);
+          const con = p * q + s;
+          if (con === 0) return null;
+          const rhs = p * c * x + con;
+          if (rhs === 0) return null;
+          const cx = c === 1 ? "x" : `${c}x`;
+          const lhs = s === 0 ? `${p}(${cx} ${spaced(q)})` : `${p}(${cx} ${spaced(q)}) ${spaced(s)}`;
+          return { prompt: `Solve for x:   ${lhs} = ${rhs}`, answer: `${x}`,
+            steps: [
+              `Expand the bracket:  ${xt(p * c)} ${spaced(con)} = ${rhs}`,
+              `${moveText(con)}:  ${xt(p * c)} = ${rhs - con}`,
+              divText(p * c, x),
+            ] };
+        }
+
+        // 12% — square both sides / take the square root
+        if (r < 0.63) {
+          const k = randInt(2, 12);
+          const A = Math.random() < 0.4 ? randInt(2, 4) : 1;
+          const b = Math.random() < 0.5 ? 0 : nz(-20, 20);
+          const cc = A * k * k + b;
+          if (cc === 0) return null;
+          const lead = A === 1 ? "x²" : `${A}x²`;
+          const lhs = b === 0 ? lead : `${lead} ${spaced(b)}`;
+          return {
+            prompt: `Solve for x:   ${lhs} = ${cc}`,
+            answer: `${k}`, answerDisplay: `±${k}`, hint: "x can be positive or negative — either is fine",
+            check: (inp) => {
+              let s = String(inp).trim().replace(/±/g, "").replace(/\+\/-/g, "").replace(/\+-/g, "").trim();
+              try { const v = evalString(s, 1); return Number.isFinite(v) && Math.abs(Math.abs(v) - k) < 1e-6; }
+              catch (e) { return false; }
+            },
+            steps: [
+              ...(b !== 0 ? [`${moveText(b)}:  ${lead} = ${A * k * k}`] : []),
+              ...(A !== 1 ? [`Divide both sides by ${A}:  x² = ${k * k}`] : []),
+              `Square-root both sides:  x = ${k}  or  x = -${k}`,
+            ],
+          };
         }
 
         // Fractions — five shapes: x/n, (ax)/n, (ax+b)/n, m/x, m/(ax)
@@ -721,7 +781,7 @@ const TOPICS = [
       };
       let q;
       for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
-      return { ...q, hint: "Enter a whole number." };
+      return { hint: "Enter a whole number.", ...q };
     } },
   { id: "factorization", name: "Factorisation", icon: "🧩", prereqs: ["algebra"],
     generate() {
