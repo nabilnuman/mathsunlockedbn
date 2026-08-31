@@ -135,6 +135,19 @@ function roundToSF(num, sf) {
   const mag = Math.pow(10, sf - Math.ceil(Math.log10(Math.abs(num))));
   return Math.round(num * mag) / mag;
 }
+// c√rad → { c, d } with d square-free (pull perfect squares out).
+function surdParts(c, rad) {
+  let d = rad;
+  for (let f = 2; f * f <= d; f++) {
+    while (d % (f * f) === 0) { d = d / (f * f); c *= f; }
+  }
+  return { c, d };
+}
+function surdStr(c, d) {
+  if (d === 1) return `${c}`;
+  if (c === 1) return `√${d}`;
+  return `${c}√${d}`;
+}
 
 // "Instruction: expression" → drop the expression onto its own line so it
 // doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
@@ -310,9 +323,47 @@ const TOPICS = [
     } },
   { id: "surds", name: "Surds", icon: "√", prereqs: ["indices"],
     generate() {
-      const k = randInt(2, 6), b = randInt(2, 9);
-      return { prompt: `Simplify:   √${k * k * b}`, answer: `${k}√${b}`, hint: "e.g. 3√5 or sqrt(45)",
-        steps: [`Split into a perfect square × another factor: ${k * k * b} = ${k * k} × ${b}`, `√${k * k * b} = √${k * k} × √${b} = ${k} × √${b}`, `Answer: ${k}√${b}`] };
+      const surdHint = "e.g. 3√5, sqrt(45) or a decimal";
+      const forms = [
+        () => { // simplify √N
+          const k = randInt(2, 6), b = [2, 3, 5, 6, 7, 10, 11][randInt(0, 6)];
+          return { prompt: `Simplify:   √${k * k * b}`, answer: surdStr(k, b), hint: surdHint,
+            steps: [`Find the biggest square factor: ${k * k * b} = ${k * k} × ${b}`, `√${k * k * b} = √${k * k} × √${b} = ${k}√${b}`] };
+        },
+        () => { // √a × √b, product a perfect square → whole number
+          const r = randInt(3, 9), sq = r * r;
+          const opts = [];
+          for (let a = 2; a * a <= sq; a++) if (sq % a === 0) opts.push([a, sq / a]);
+          const [a, b] = opts[randInt(0, opts.length - 1)];
+          return { prompt: `Simplify:   √${a} × √${b}`, answer: `${r}`, hint: "Enter a number.",
+            steps: [`Multiply under one root: √${a} × √${b} = √(${a} × ${b}) = √${sq}`, `√${sq} = ${r}`] };
+        },
+        () => { // p√a × q√b → simplified surd
+          const p = randInt(1, 3), q = randInt(1, 3), a = randInt(2, 7), b = randInt(2, 7);
+          const { c, d } = surdParts(p * q, a * b);
+          return { prompt: `Simplify:   ${surdStr(p, a)} × ${surdStr(q, b)}`, answer: surdStr(c, d), hint: surdHint,
+            steps: [`Multiply the numbers and the roots separately: ${p} × ${q} = ${p * q},  √${a} × √${b} = √${a * b}`, `${p * q}√${a * b}${d === a * b ? "" : ` = ${surdStr(c, d)}`}`] };
+        },
+        () => { // rationalise a / √b
+          const b = [2, 3, 5, 6, 7, 10, 11, 13][randInt(0, 7)];
+          const a = randInt(1, 6), g = gcd(a, b), nc = a / g, den = b / g;
+          const ans = den === 1 ? surdStr(nc, b) : `${nc === 1 ? "" : nc}√${b}/${den}`;
+          return {
+            prompt: `Rationalise the denominator:   ${a}/√${b}`,
+            answer: ans, hint: "e.g. 3√5/5",
+            check: (inp) => {
+              const s = String(inp).replace(/\s/g, "");
+              return checkEquivalent(inp, ans) && /√|sqrt/i.test(s) && !/\/[^/]*(√|sqrt)/i.test(s);
+            },
+            steps: [
+              `Multiply top and bottom by √${b}:  ${a}/√${b} × √${b}/√${b}`,
+              `= ${a}√${b} / ${b}`,
+              den === 1 ? `= ${ans}` : `Cancel the common factor ${g}:  = ${ans}`,
+            ],
+          };
+        },
+      ];
+      return forms[randInt(0, forms.length - 1)]();
     } },
   { id: "standardform", name: "Standard Form", icon: "🔟", prereqs: ["indices"],
     generate() {
@@ -1476,7 +1527,7 @@ export default function MathsUnlockedBN() {
   function submitAnswer() {
     if (!answerInput.trim() || feedback) return;
     const elapsed = (Date.now() - startTimeRef.current) / 1000;
-    const correct = checkEquivalent(answerInput, question.answer);
+    const correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
     const expBefore = totalExp(profile);
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const next = JSON.parse(JSON.stringify(profile));
