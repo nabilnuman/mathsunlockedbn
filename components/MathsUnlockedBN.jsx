@@ -765,6 +765,30 @@ function ProfileCard({ profile }) {
   );
 }
 
+/* Read-only view of one student — their card plus a grade for every
+   topic. Used by the Parent Link page and the friend search. */
+function StudentProfileView({ profile }) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+        <ProfileCard profile={profile} />
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Grade in every topic</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+        {TOPICS.map((t) => {
+          const r = rankDisplay(((profile.topics || {})[t.id] || {}).highestRank);
+          return (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
+              <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: r.color, flexShrink: 0 }}>{r.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* Achievement check helpers. A topic "counts" once its ratcheted
    highestRank reaches the given label; topicHasCorrect looks for any
    correct answer still in the rolling last-10 history. */
@@ -869,6 +893,10 @@ export default function MathsUnlockedBN() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
   const [board, setBoard] = useState(null);           // { loading, schools: [...] }
+  const [friendQuery, setFriendQuery] = useState("");
+  const [friendResults, setFriendResults] = useState(null); // null = not searched yet
+  const [friendLoading, setFriendLoading] = useState(false);
+  const [friendView, setFriendView] = useState(null);       // a selected student's profile
   const [confirmPrestige, setConfirmPrestige] = useState(false);
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
@@ -1300,6 +1328,44 @@ export default function MathsUnlockedBN() {
     loadBoard();
   }
 
+  function openFriends() {
+    setFriendView(null);
+    setFriendResults(null);
+    setFriendQuery("");
+    setScreen("friends");
+  }
+
+  // Search students by name. The record key already contains the name
+  // slug (student_<name>__<pin>), so we filter keys first and only fetch
+  // the matches — no full table scan.
+  async function runFriendSearch() {
+    const q = friendQuery.trim();
+    const qs = slug(q);
+    if (!qs || friendLoading) return;
+    setFriendLoading(true);
+    setFriendView(null);
+    setFriendResults(null);
+    let keys = [];
+    try {
+      const res = await storage.list("student_", true);
+      keys = (res && res.keys) || [];
+    } catch (e) { /* offline */ }
+    const matches = keys
+      .map((k) => ({ key: k, nameSlug: k.replace(/^student_/, "").replace(/__\d+$/, "") }))
+      .filter((x) => x.nameSlug.includes(qs))
+      .slice(0, 30);
+    const out = [];
+    for (const m of matches) {
+      try {
+        const r = await storage.get(m.key, true);
+        if (r && r.value) out.push(JSON.parse(r.value));
+      } catch (e) { /* skip */ }
+    }
+    out.sort((a, b) => leaderboardScore(b) - leaderboardScore(a) || (a.name || "").localeCompare(b.name || ""));
+    setFriendResults(out);
+    setFriendLoading(false);
+  }
+
   function openParentLink() {
     if (!profile.parentToken) saveProfile({ ...profile, parentToken: genToken() });
     setLinkCopied(false);
@@ -1434,6 +1500,11 @@ export default function MathsUnlockedBN() {
             {screen !== "login" && screen !== "parent" && screen !== "leaderboard" && (
               <button onClick={openLeaderboard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Leaderboard
+              </button>
+            )}
+            {screen !== "login" && screen !== "parent" && screen !== "friends" && (
+              <button onClick={openFriends} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+                Find friends
               </button>
             )}
             {screen !== "login" && screen !== "parent" && teacherMode && screen !== "admin" && (
@@ -2034,21 +2105,58 @@ export default function MathsUnlockedBN() {
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
                   A read-only summary of practice on MathsUnlocked BN. Reload the page for the latest.
                 </div>
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-                  <ProfileCard profile={parentView} />
+                <StudentProfileView profile={parentView} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* FIND A FRIEND */}
+        {screen === "friends" && (
+          <div>
+            <button onClick={() => { if (friendView) setFriendView(null); else setScreen("dashboard"); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+              <ArrowLeft size={14} /> {friendView ? "back to results" : "back"}
+            </button>
+            {friendView ? (
+              <div>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>{friendView.name}</div>
+                <StudentProfileView profile={friendView} />
+              </div>
+            ) : (
+              <div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Find a friend</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Search by name to see someone&rsquo;s profile card and grades.</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                  <input
+                    value={friendQuery} onChange={(e) => setFriendQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") runFriendSearch(); }}
+                    placeholder="e.g. Nurul"
+                    style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                  />
+                  <button onClick={runFriendSearch} disabled={!friendQuery.trim() || friendLoading} style={{ fontSize: 13, fontWeight: 600, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "0 16px", cursor: "pointer", opacity: !friendQuery.trim() || friendLoading ? 0.6 : 1 }}>
+                    Search
+                  </button>
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Grade in every topic</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
-                  {TOPICS.map((t) => {
-                    const r = rankDisplay(((parentView.topics || {})[t.id] || {}).highestRank);
-                    return (
-                      <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
-                        <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
-                        <span style={{ fontWeight: 700, fontSize: 12, color: r.color, flexShrink: 0 }}>{r.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {friendLoading ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Searching…</div>
+                ) : friendResults === null ? null : friendResults.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>No one found matching “{friendQuery.trim()}”.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {friendResults.map((s, i) => (
+                      <button key={i} onClick={() => setFriendView(s)} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)", cursor: "pointer", color: "var(--ink)" }}>
+                        <PrestigeBadge prestige={s.prestige} size={16} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {s.school && s.school !== SOLO_SCHOOL ? s.school : "Solo"}
+                          </div>
+                        </div>
+                        <span className="mub-display" style={{ fontSize: 13, fontWeight: 700, color: "var(--blue)", flexShrink: 0 }}>Lv {levelFromExp(totalExp(s))}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
