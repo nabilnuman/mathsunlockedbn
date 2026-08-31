@@ -451,7 +451,7 @@ const TOPICS = [
       ];
       return forms[randInt(0, forms.length - 1)]();
     } },
-  { id: "sigfig", name: "Significant Figures", icon: "🎯", prereqs: [],
+  { id: "sigfig", name: "Rounding", icon: "🎯", prereqs: [],
     generate() {
       // Every number is built as a digit string (no float noise) with more
       // detail than the question asks for, so real rounding always happens.
@@ -1653,6 +1653,7 @@ export default function MathsUnlockedBN() {
     const correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
     const expBefore = totalExp(profile);
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
+    const rankBefore = ((profile.topics || {})[scoredId] || {}).highestRank ?? -1;
     const next = JSON.parse(JSON.stringify(profile));
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     t.history = [...t.history, correct ? 1 : 0].slice(-10);
@@ -1661,6 +1662,9 @@ export default function MathsUnlockedBN() {
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
     next.topics[scoredId] = t;
+    const rankedUp = t.highestRank > rankBefore
+      ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
+      : null;
 
     const nowHour = new Date().getHours();
     if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
@@ -1704,7 +1708,7 @@ export default function MathsUnlockedBN() {
       }
     });
     if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
-    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon });
+    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon, rankedUp });
     saveProfile(next);
   }
 
@@ -1925,8 +1929,11 @@ export default function MathsUnlockedBN() {
         }
         @keyframes stampIn { 0% { transform: scale(2.2) rotate(-8deg); opacity: 0; } 60% { transform: scale(0.9) rotate(-8deg); opacity: 1; } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
         @keyframes wobble { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+        @keyframes rankPop { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 78% { transform: scale(0.9) rotate(-4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+        @keyframes rankGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 6px currentColor; } }
         .mub-stamp { animation: stampIn 0.4s ease-out; }
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
+        .mub-rankpop { animation: rankPop 0.55s cubic-bezier(.2,.9,.3,1.25), rankGlow 0.7s ease-out 0.2s; }
         .mub-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
         .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
@@ -2579,6 +2586,22 @@ export default function MathsUnlockedBN() {
                       🎉 Achievement unlocked: {feedback.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
                     </div>
                   )}
+                  {feedback.rankedUp && (() => {
+                    const ri = RANK_ORDER.indexOf(feedback.rankedUp.to);
+                    const rc = rankDisplay(ri).color;
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                        <div className="mub-rankpop" style={{
+                          width: 40, height: 40, borderRadius: "50%", border: `3px solid ${rc}`,
+                          color: rc, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontWeight: 800, fontSize: feedback.rankedUp.to.length > 1 ? 13 : 16, flexShrink: 0,
+                        }}>{feedback.rankedUp.to}</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
+                          Rank up! {feedback.rankedUp.topic} → <span style={{ color: rc }}>{feedback.rankedUp.to}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {feedback.leveledTo && (
                     <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
                       ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
