@@ -152,6 +152,22 @@ function parseClock(s) {
   if (h > 23 || mn > 59) return null;
   return h * 60 + mn;
 }
+// Parse a duration → total minutes, or null. Accepts "135", "2:15",
+// "2h 15m", "2 hours 15 minutes", "2h", "15 min", "2 15".
+function parseDuration(s) {
+  s = String(s).trim().toLowerCase();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return +s;
+  let m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return +m[1] * 60 + +m[2];
+  m = s.match(/^(\d+)\s*h(?:r|rs|our|ours)?\s*(\d+)\s*(?:m|min|mins|minute|minutes)?$/);
+  if (m) return +m[1] * 60 + +m[2];
+  m = s.match(/^(?:(\d+)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/);
+  if (m && (m[1] || m[2])) return (+(m[1] || 0)) * 60 + (+(m[2] || 0));
+  m = s.match(/^(\d+)\s+(\d+)$/);
+  if (m) return +m[1] * 60 + +m[2];
+  return null;
+}
 // c√rad → { c, d } with d square-free (pull perfect squares out).
 function surdParts(c, rad) {
   let d = rad;
@@ -189,9 +205,12 @@ const sfPretty = (mant, exp) => `${Math.round(mant * 1e6) / 1e6} × 10^${exp}`;
 // "Instruction: expression" → drop the expression onto its own line so it
 // doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
 function splitPrompt(prompt) {
-  const i = (prompt || "").indexOf(":");
-  if (i === -1 || i > prompt.length - 3) return { lead: prompt || "", expr: "" };
-  return { lead: prompt.slice(0, i + 1).trim(), expr: prompt.slice(i + 1).trim() };
+  const p = prompt || "";
+  const i = p.indexOf(": ");
+  // Only split on a colon followed by a space (the "Instruction: expr" form).
+  // A colon inside a clock time like "6:23" is left alone.
+  if (i === -1 || i > p.length - 3) return { lead: p, expr: "" };
+  return { lead: p.slice(0, i + 1).trim(), expr: p.slice(i + 1).trim() };
 }
 
 const TOPICS = [
@@ -579,9 +598,13 @@ const TOPICS = [
           answer: fmt(start), hint: "e.g. 09:20", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (start % 1440) % 720,
           steps: [`Arrival ${fmt(end)}, subtract ${Math.floor(dur / 60)} h → ${fmt(end - Math.floor(dur / 60) * 60)}`, `Then subtract ${dur % 60} min → ${fmt(start)}`, `Left at ${fmt(start)}`] };
       }
-      return { prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How many minutes did the journey take?`,
-        answer: `${dur}`, hint: "Enter a number.",
-        steps: [`From ${fmt(start)} to ${fmt(start + Math.floor(dur / 60) * 60)} is ${Math.floor(dur / 60)} h = ${Math.floor(dur / 60) * 60} min`, `Then ${dur % 60} more min to ${fmt(end)}`, `Total = ${dur} minutes`] };
+      const dh = Math.floor(dur / 60), dm = dur % 60;
+      const askHM = Math.random() < 0.75;
+      return { prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
+        answer: askHM ? `${dh} h ${dm} min` : `${dur}`,
+        hint: askHM ? "e.g. 2 h 15 min" : "Enter a number.",
+        check: (inp) => parseDuration(inp) === dur,
+        steps: [`From ${fmt(start)} to ${fmt(start + dh * 60)} is ${dh} h = ${dh * 60} min`, `Then ${dm} more min to ${fmt(end)}`, `Total = ${dh} h ${dm} min (${dur} minutes)`] };
     } },
   { id: "algebra", name: "Algebra", icon: "🧮", prereqs: [],
     generate() {
