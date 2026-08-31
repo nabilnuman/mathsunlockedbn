@@ -25,7 +25,7 @@ function tokenize(str) {
     if (c === "π") { tokens.push({ type: "num", value: Math.PI }); i++; continue; }
     if (str.slice(i, i + 4).toLowerCase() === "sqrt") { tokens.push({ type: "op", value: "√" }); i += 4; continue; }
     if (str.slice(i, i + 2).toLowerCase() === "pi") { tokens.push({ type: "num", value: Math.PI }); i += 2; continue; }
-    if (c === "x") { tokens.push({ type: "var" }); i++; continue; }
+    if (c === "x" || c === "X") { tokens.push({ type: "var" }); i++; continue; }
     if ("+-*/^()".includes(c)) { tokens.push({ type: "op", value: c }); i++; continue; }
     i++;
   }
@@ -2739,6 +2739,7 @@ export default function MathsUnlockedBN() {
               <input
                 ref={answerRef}
                 autoFocus className="mub-mono" value={answerInput}
+                autoCapitalize="none" autoCorrect="off" spellCheck={false}
                 onChange={(e) => setAnswerInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                 placeholder={question.hint}
