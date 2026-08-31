@@ -1654,7 +1654,9 @@ export default function MathsUnlockedBN() {
                     </div>
                     <div style={{ fontWeight: 600, fontSize: 13, marginTop: 8 }}>{t.name}</div>
                     <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                      {unlocked ? `${topicState.history.length} attempted` : lockedReason(t)}
+                      {unlocked
+                        ? `${(topicState.streak || 0) > 0 ? "🔥 " : ""}${topicState.streak || 0} streak`
+                        : lockedReason(t)}
                     </div>
                     {!unlocked && (profile.keys || 0) > 0 && (
                       <button
