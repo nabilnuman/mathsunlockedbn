@@ -1038,12 +1038,85 @@ const TOPICS = [
     } },
   { id: "coordgeo", name: "Co-ordinate Geometry", icon: "📍", prereqs: [],
     generate() {
-      const m = randInt(-6, 6) || 2, c = randInt(-8, 8);
-      let x1 = randInt(-6, 6), x2 = randInt(-6, 6);
-      while (x2 === x1) x2 = randInt(-6, 6);
-      const y1 = m * x1 + c, y2 = m * x2 + c;
-      return { prompt: `Find the gradient of the line joining (${x1}, ${y1}) and (${x2}, ${y2})`, answer: `${m}`, hint: "Enter a number.",
-        steps: [`Gradient = (y2 − y1) ÷ (x2 − x1)`, `= (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2 - y1} ÷ ${x2 - x1} = ${m}`] };
+      const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+      const g2 = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+      const fr = (num, den) => { if (den < 0) { num = -num; den = -den; } const g = g2(num, den); num /= g; den /= g; return den === 1 ? `${num}` : `${num}/${den}`; };
+      const mxTerm = (ms) => {
+        if (ms === "1") return "x";
+        if (ms === "-1") return "-x";
+        if (ms.includes("/")) { const [n, d] = ms.split("/"); return `${n === "1" ? "" : n === "-1" ? "-" : n}x/${d}`; }
+        return `${ms}x`;
+      };
+      const plusC = (c) => (c === 0 ? "" : c > 0 ? ` + ${c}` : ` - ${-c}`);
+      const twoPts = () => {
+        const m = nz(-5, 5), c = randInt(-6, 6);
+        let x1 = randInt(-6, 6), x2 = randInt(-6, 6);
+        while (x2 === x1) x2 = randInt(-6, 6);
+        return { m, c, x1, x2, y1: m * x1 + c, y2: m * x2 + c };
+      };
+      const r = Math.random();
+
+      if (r < 0.16) {
+        const { m, x1, x2, y1, y2 } = twoPts();
+        return { prompt: `Find the gradient of the line joining (${x1}, ${y1}) and (${x2}, ${y2})`, answer: `${m}`, hint: "Enter a number.",
+          steps: [`gradient = (y₂ − y₁) ÷ (x₂ − x₁)`, `= (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2 - y1} ÷ ${x2 - x1} = ${m}`] };
+      }
+
+      if (r < 0.34) {
+        const { m, c, x1, x2, y1, y2 } = twoPts();
+        const eq = `y = ${mxTerm(`${m}`)}${plusC(c)}`;
+        return { prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2}).\nGive it as y = mx + c`, answer: eq, hint: "e.g. y = 2x - 1",
+          steps: [`gradient m = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${m}`, `Substitute (${x1}, ${y1}):  ${y1} = ${m}(${x1}) + c  →  c = ${c}`, eq] };
+      }
+
+      if (r < 0.50) {
+        const P = () => { const a = randInt(-6, 6); let b = randInt(-6, 6); while ((a - b) % 2 !== 0) b = randInt(-6, 6); return [a, b]; };
+        const [x1, x2] = P(), [y1, y2] = P();
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        return { prompt: `Find the midpoint of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
+          fields: [{ key: "x", label: "x =" }, { key: "y", label: "y =" }], answers: { x: `${mx}`, y: `${my}` },
+          answer: `(${mx}, ${my})`, hint: "midpoint coordinates",
+          steps: [`Midpoint = ( (x₁+x₂)/2 , (y₁+y₂)/2 )`, `= ( (${x1}${x2 < 0 ? "" : "+"}${x2})/2 , (${y1}${y2 < 0 ? "" : "+"}${y2})/2 ) = (${mx}, ${my})`] };
+      }
+
+      if (r < 0.66) {
+        const triples = [[3, 4], [6, 8], [5, 12], [8, 15], [9, 12], [7, 24], [20, 21]];
+        let x1 = randInt(-5, 5), y1 = randInt(-5, 5), dx, dy;
+        if (Math.random() < 0.6) { const [p, q] = triples[randInt(0, triples.length - 1)]; dx = (Math.random() < 0.5 ? 1 : -1) * p; dy = (Math.random() < 0.5 ? 1 : -1) * q; }
+        else { dx = nz(-7, 7); dy = nz(-7, 7); }
+        const x2 = x1 + dx, y2 = y1 + dy, sq = dx * dx + dy * dy, root = Math.sqrt(sq), exact = Number.isInteger(root);
+        return { prompt: `Find the length of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
+          answer: exact ? `${root}` : `sqrt(${sq})`, hint: exact ? "Enter a number." : "e.g. sqrt(20) or a decimal",
+          steps: [`length = √( (x₂−x₁)² + (y₂−y₁)² )`, `= √( (${dx})² + (${dy})² ) = √(${dx * dx} + ${dy * dy}) = √${sq}`, exact ? `= ${root}` : `= √${sq} ≈ ${root.toFixed(2)}`] };
+      }
+
+      if (r < 0.78) {
+        const m = nz(-4, 4);
+        const perp = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
+        return { prompt: `A line has gradient ${m}. Find the gradient of any line perpendicular to it`, answer: perp, hint: "fraction or decimal",
+          steps: [`Perpendicular gradient = −1 ÷ (gradient)`, `= −1 ÷ ${m} = ${perp}`] };
+      }
+
+      if (r < 0.88) {
+        const m = nz(-4, 4), rc = randInt(-5, 5);
+        const t = nz(-3, 3), px = m * t, py = randInt(-6, 6), c = py + t;
+        const mpS = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
+        const eq = `y = ${mxTerm(mpS)}${plusC(c)}`;
+        return { prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py}).\nGive it as y = mx + c`,
+          answer: eq, hint: "e.g. y = -1/2x + 3",
+          steps: [`Perpendicular gradient = −1 ÷ ${m} = ${mpS}`, `Through (${px}, ${py}):  ${py} = ${mpS}(${px}) + c  →  c = ${c}`, eq] };
+      }
+
+      // read the gradient / y-intercept off a rearranged equation
+      const A = randInt(2, 4), B = nz(-6, 6), k = nz(-3, 3), Cc = k * A;
+      const mm = B / A, cc = k;
+      const eqForm = Math.random() < 0.5
+        ? `${A}y = ${mxTerm(`${B}`)}${plusC(Cc)}`
+        : `${A}y ${Cc > 0 ? "- " + Cc : "+ " + -Cc} = ${mxTerm(`${B}`)}`;
+      const askG = Math.random() < 0.5;
+      return { prompt: `The line ${eqForm}.\nFind the ${askG ? "gradient" : "y-intercept"}`,
+        answer: askG ? fr(B, A) : `${cc}`, hint: "fraction or decimal",
+        steps: [`Rearrange to y = mx + c — divide through by ${A}`, `y = ${fr(B, A)}x${plusC(cc)}`, askG ? `gradient = ${fr(B, A)}` : `y-intercept = ${cc}`] };
     } },
   { id: "graphicalsolutions", name: "Graphical Solutions", icon: "📉", prereqs: ["algebra", "coordgeo"],
     generate() {
