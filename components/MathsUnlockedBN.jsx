@@ -688,7 +688,8 @@ function CircleFigure({ type = "line", ...S }) {
     const aA = S.angA, th = 2 * aA;
     const A = P(180), Bp = P(0), Cp = P(th);
     lines.push([A, Cp], [Bp, Cp], [A, Bp]);
-    rights.push({ v: Cp, a: A, b: Bp });
+    // no right-angle mark at C — the student must recall that the angle
+    // in a semicircle is 90° (that's the theorem being tested)
     if (S.textA) angs.push({ v: A, a: Cp, b: Bp, t: S.textA });
     if (S.textB) angs.push({ v: Bp, a: Cp, b: A, t: S.textB });
     ptLabels.push({ p: P(180, R + 15), t: "A" }, { p: P(0, R + 15), t: "B" }, { p: P(th, R + 15), t: "C" });
