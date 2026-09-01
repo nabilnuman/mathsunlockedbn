@@ -623,6 +623,190 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
   );
 }
 
+// A circle diagram — plain radius/diameter, a sector/arc, or one of the
+// circle-theorem configurations. Geometry is built in world coords (O at
+// the origin, R world units, y-up) then uniformly scaled to fit the
+// viewBox, so the circle always stays round and everything stays on-canvas.
+function CircleFigure({ type = "line", ...S }) {
+  const W = 272, H = 232, m = 24, R = 60;
+  const rd = (d) => (d * Math.PI) / 180;
+  const P = (deg, rr = R) => [rr * Math.cos(rd(deg)), rr * Math.sin(rd(deg))];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+  const addv = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const mul = (a, k) => [a[0] * k, a[1] * k];
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const nrm = (a) => { const L = Math.hypot(a[0], a[1]) || 1; return [a[0] / L, a[1] / L]; };
+
+  const lines = [];       // [[world, world], ...]  solid segments
+  const dashed = [];
+  let sector = null;      // { a0, a1 }  shaded wedge (world degrees)
+  let bold = null;        // { a0, a1 }  emphasised arc on the circle
+  const ptLabels = [];    // { p: world, t }
+  const freeLabels = [];  // { p: world, t, muted }
+  const angs = [];        // { v, a, b: world, t }  angle mark at v between a & b
+  const rights = [];      // { v, a, b: world }
+  let showDot = false;
+
+  const bb = [[-R, -R], [R, R]];
+  const seen = (p) => bb.push(p);
+
+  if (type === "line") {
+    showDot = true;
+    if (S.mode === "diameter") {
+      const a = P(157), b = P(337);
+      lines.push([a, b]); seen(a); seen(b);
+      const perp = nrm([-(b[1] - a[1]), b[0] - a[0]]);
+      freeLabels.push({ p: addv(mid(a, b), mul(perp, 15)), t: S.label });
+    } else {
+      const a = [0, 0], b = P(33);
+      lines.push([a, b]); seen(b);
+      const perp = nrm([-(b[1] - a[1]), b[0] - a[0]]);
+      freeLabels.push({ p: addv(mid(a, b), mul(perp, 15)), t: S.label });
+    }
+  } else if (type === "sector") {
+    showDot = true;
+    const th = S.theta, a0 = 90 - th / 2, a1 = 90 + th / 2;
+    sector = { a0, a1 };
+    const A = P(a0), B = P(a1);
+    lines.push([[0, 0], A], [[0, 0], B]); seen(A); seen(B);
+    if (S.arcText) bold = { a0, a1 };
+    angs.push({ v: [0, 0], a: A, b: B, t: S.angText });
+    const rperp = [Math.sin(rd(a0)), -Math.cos(rd(a0))];
+    if (S.rText) freeLabels.push({ p: addv(mid([0, 0], A), mul(rperp, 16)), t: S.rText });
+    if (S.arcText) { freeLabels.push({ p: P(90, R + 20), t: S.arcText }); seen(P(90, R + 26)); }
+    if (S.areaText) freeLabels.push({ p: P(90, R * 0.72), t: S.areaText });
+  } else if (type === "centre") {
+    showDot = true;
+    const x = S.x, A = P(90), Bp = P(270 - x), Cp = P(270 + x);
+    lines.push([A, Bp], [A, Cp], [[0, 0], Bp], [[0, 0], Cp]);
+    angs.push({ v: [0, 0], a: Bp, b: Cp, t: S.centreText });
+    angs.push({ v: A, a: Bp, b: Cp, t: S.circText });
+    ptLabels.push({ p: P(90, R + 15), t: "A" }, { p: P(270 - x, R + 15), t: "B" }, { p: P(270 + x, R + 15), t: "C" });
+    freeLabels.push({ p: [-15, -7], t: "O", muted: true });
+  } else if (type === "semicircle") {
+    showDot = true;
+    const aA = S.angA, th = 2 * aA;
+    const A = P(180), Bp = P(0), Cp = P(th);
+    lines.push([A, Cp], [Bp, Cp], [A, Bp]);
+    rights.push({ v: Cp, a: A, b: Bp });
+    if (S.textA) angs.push({ v: A, a: Cp, b: Bp, t: S.textA });
+    if (S.textB) angs.push({ v: Bp, a: Cp, b: A, t: S.textB });
+    ptLabels.push({ p: P(180, R + 15), t: "A" }, { p: P(0, R + 15), t: "B" }, { p: P(th, R + 15), t: "C" });
+  } else if (type === "sameseg") {
+    const x = S.x;
+    const Bp = P(270 - x), Cp = P(270 + x), A = P(116), D = P(64);
+    lines.push([A, Bp], [A, Cp], [D, Bp], [D, Cp], [Bp, Cp]);
+    if (S.textA) angs.push({ v: A, a: Bp, b: Cp, t: S.textA });
+    if (S.textD) angs.push({ v: D, a: Bp, b: Cp, t: S.textD });
+    ptLabels.push({ p: P(116, R + 15), t: "A" }, { p: P(64, R + 15), t: "D" }, { p: P(270 - x, R + 16), t: "B" }, { p: P(270 + x, R + 16), t: "C" });
+  } else if (type === "cyclic") {
+    const g = S.gaps, t0 = 90;
+    const a4 = [t0, t0 + g[0], t0 + g[0] + g[1], t0 + g[0] + g[1] + g[2]];
+    const V = a4.map((d) => P(d));
+    for (let i = 0; i < 4; i++) lines.push([V[i], V[(i + 1) % 4]]);
+    const L = ["A", "B", "C", "D"];
+    V.forEach((p, i) => ptLabels.push({ p: P(a4[i], R + 15), t: L[i] }));
+    (S.marks || []).forEach(({ i, t }) => angs.push({ v: V[i], a: V[(i + 3) % 4], b: V[(i + 1) % 4], t }));
+  } else if (type === "tangents") {
+    showDot = true;
+    const p = S.p, aop = 90 - p / 2;
+    const A = P(aop), Bp = P(-aop);
+    const Pe = [R / Math.sin(rd(p / 2)), 0];
+    lines.push([A, Pe], [Bp, Pe]);
+    if (S.baseText) {
+      lines.push([A, Bp]);
+      angs.push({ v: A, a: Pe, b: Bp, t: S.baseText });
+    } else {
+      lines.push([[0, 0], A], [[0, 0], Bp]);
+      dashed.push([[0, 0], Pe]);
+      rights.push({ v: A, a: [0, 0], b: Pe }, { v: Bp, a: [0, 0], b: Pe });
+    }
+    if (S.textP) angs.push({ v: Pe, a: A, b: Bp, t: S.textP });
+    if (S.textO) angs.push({ v: [0, 0], a: A, b: Bp, t: S.textO });
+    ptLabels.push({ p: P(aop, R + 15), t: "A" }, { p: P(-aop, R + 15), t: "B" });
+    freeLabels.push({ p: addv(Pe, [17, 0]), t: "P", muted: true }, { p: [-15, -7], t: "O", muted: true });
+    seen(Pe); seen(addv(Pe, [26, 0]));
+  } else if (type === "altseg") {
+    const x = S.x;
+    const A = P(270), Bp = P(270 - 2 * x), Cp = P(46);
+    const tL = addv(A, [-R * 1.18, 0]), tR = addv(A, [R * 1.18, 0]);
+    lines.push([tL, tR], [A, Bp], [Cp, A], [Cp, Bp]);
+    seen(tL); seen(tR);
+    if (S.textA) angs.push({ v: A, a: tL, b: Bp, t: S.textA });
+    if (S.textC) angs.push({ v: Cp, a: A, b: Bp, t: S.textC });
+    ptLabels.push({ p: addv(A, [0, -16]), t: "A" }, { p: P(270 - 2 * x, R + 15), t: "B" }, { p: P(46, R + 15), t: "C" });
+  }
+
+  ptLabels.forEach((l) => seen(l.p));
+  freeLabels.forEach((l) => seen(l.p));
+
+  const xs = bb.map((p) => p[0]), ys = bb.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min((W - 2 * m) / ((maxX - minX) || 1), (H - 2 * m) / ((maxY - minY) || 1));
+  const bcx = (minX + maxX) / 2, bcy = (minY + maxY) / 2;
+  const T = ([x, y]) => [W / 2 + (x - bcx) * k, H / 2 - (y - bcy) * k];
+  const F = (n) => n.toFixed(1);
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.4, strokeLinejoin: "round" };
+  const O = T([0, 0]), rS = R * k;
+
+  const arcPts = (a0, a1, rr) => {
+    const n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / 3)), out = [];
+    for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; out.push([O[0] + rr * Math.cos(rd(a)), O[1] - rr * Math.sin(rd(a))]); }
+    return out;
+  };
+  const angMark = (V, A, B) => {
+    const v = T(V), a = T(A), b = T(B);
+    const d1 = nrm(sub(a, v)), d2 = nrm(sub(b, v));
+    let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
+    while (ang <= -Math.PI) ang += 2 * Math.PI;
+    while (ang > Math.PI) ang -= 2 * Math.PI;
+    const deg = Math.abs(ang) * 180 / Math.PI;
+    let rr = 15 + Math.max(0, 42 - deg) * 0.3;   // wider arc for narrow angles
+    rr = Math.min(rr, 25);
+    const a1 = [v[0] + d1[0] * rr, v[1] + d1[1] * rr], a2 = [v[0] + d2[0] * rr, v[1] + d2[1] * rr];
+    const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
+    return {
+      path: `M ${F(a1[0])} ${F(a1[1])} A ${F(rr)} ${F(rr)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
+      lab: [v[0] + bis[0] * (rr + 12), v[1] + bis[1] * (rr + 12)],
+    };
+  };
+  const rtMark = (V, A, B) => {
+    const v = T(V), a = T(A), b = T(B);
+    const d1 = nrm(sub(a, v)), d2 = nrm(sub(b, v)), kk = 9;
+    const p1 = [v[0] + d1[0] * kk, v[1] + d1[1] * kk];
+    return [p1, [p1[0] + d2[0] * kk, p1[1] + d2[1] * kk], [v[0] + d2[0] * kk, v[1] + d2[1] * kk]]
+      .map((p) => `${F(p[0])},${F(p[1])}`).join(" ");
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="circle diagram"
+      style={{ maxWidth: 302, display: "block", margin: "0 auto 10px" }}>
+      {sector && (
+        <path d={`M ${F(O[0])} ${F(O[1])} L ${arcPts(sector.a0, sector.a1, rS).map((p) => `${F(p[0])} ${F(p[1])}`).join(" L ")} Z`}
+          fill="var(--blue)" fillOpacity="0.16" stroke="none" />
+      )}
+      <circle cx={F(O[0])} cy={F(O[1])} r={F(rS)} fill="var(--blue)" fillOpacity="0.05" stroke="var(--ink)" strokeWidth="1.8" />
+      {dashed.map(([a, b], i) => { const p = T(a), q = T(b); return <line key={`d${i}`} x1={F(p[0])} y1={F(p[1])} x2={F(q[0])} y2={F(q[1])} stroke="var(--muted)" strokeWidth="1.3" strokeDasharray="4 3" />; })}
+      {lines.map(([a, b], i) => { const p = T(a), q = T(b); return <line key={`l${i}`} x1={F(p[0])} y1={F(p[1])} x2={F(q[0])} y2={F(q[1])} stroke="var(--ink)" strokeWidth="1.6" strokeLinecap="round" />; })}
+      {bold && <polyline points={arcPts(bold.a0, bold.a1, rS).map((p) => `${F(p[0])},${F(p[1])}`).join(" ")} fill="none" stroke="var(--red)" strokeWidth="3" strokeLinecap="round" />}
+      {rights.map((r, i) => <polyline key={`r${i}`} points={rtMark(r.v, r.a, r.b)} fill="none" stroke="var(--ink)" strokeWidth="1.3" />)}
+      {angs.map((A, i) => {
+        if (A.t == null) return null;
+        const { path, lab } = angMark(A.v, A.a, A.b);
+        return (
+          <g key={`ang${i}`}>
+            <path d={path} fill="none" stroke="var(--red)" strokeWidth="1.6" />
+            <text x={F(lab[0])} y={F(lab[1])} fontSize="10" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)" style={halo}>{A.t}</text>
+          </g>
+        );
+      })}
+      {showDot && <circle cx={F(O[0])} cy={F(O[1])} r="2.4" fill="var(--ink)" />}
+      {ptLabels.map((l, i) => { const p = T(l.p); return <text key={`p${i}`} x={F(p[0])} y={F(p[1])} fontSize="9.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)" style={halo}>{l.t}</text>; })}
+      {freeLabels.map((l, i) => { const p = T(l.p); return <text key={`f${i}`} x={F(p[0])} y={F(p[1])} fontSize={l.muted ? "9.5" : "10.5"} fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill={l.muted ? "var(--muted)" : "var(--ink)"} style={halo}>{l.t}</text>; })}
+    </svg>
+  );
+}
+
 // A Venn diagram whose regions the student taps to shade a target set.
 function VennShade({ venn, pressed, onToggle, showAnswer }) {
   const two = venn.sets === 2;
@@ -2366,9 +2550,194 @@ const TOPICS = [
     } },
   { id: "circles", name: "Circles", icon: "⭕", prereqs: ["trigonometry"],
     generate() {
-      const r = randInt(2, 12);
-      return { prompt: `Find the area of a circle with radius ${r} cm. Leave your answer in terms of π or as a decimal`, answer: `${r * r}π`, hint: "e.g. 25π",
-        steps: [`Area of a circle = πr²`, `= π × ${r}² = ${r * r}π cm²`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const roll = Math.random();
+
+      // ---------- circumference:  C = 2πr = πd ----------
+      if (roll < 0.15) {
+        const rad = randInt(3, 14), d = 2 * rad;
+        const v = pick(["r2C", "d2C", "C2r", "C2d"]);
+        if (v === "r2C") return {
+          prompt: `Find the circumference of this circle. Leave your answer in terms of π`,
+          circle: { type: "line", mode: "radius", label: `r = ${rad} cm` },
+          answer: `${2 * rad}π`, hint: `e.g. ${2 * rad}π`,
+          steps: [`Circumference = 2πr`, `= 2 × π × ${rad} = ${2 * rad}π cm`] };
+        if (v === "d2C") return {
+          prompt: `Find the circumference of this circle. Leave your answer in terms of π`,
+          circle: { type: "line", mode: "diameter", label: `d = ${d} cm` },
+          answer: `${d}π`, hint: `e.g. ${d}π`,
+          steps: [`Circumference = πd`, `= π × ${d} = ${d}π cm`] };
+        if (v === "C2r") return {
+          prompt: `The circumference of this circle is ${2 * rad}π cm. Find the radius`,
+          circle: { type: "line", mode: "radius", label: `r = ?` },
+          answer: `${rad}`, hint: "Enter a number.",
+          steps: [`C = 2πr`, `${2 * rad}π = 2πr`, `r = ${2 * rad} ÷ 2 = ${rad} cm`] };
+        return {
+          prompt: `The circumference of this circle is ${d}π cm. Find the diameter`,
+          circle: { type: "line", mode: "diameter", label: `d = ?` },
+          answer: `${d}`, hint: "Enter a number.",
+          steps: [`C = πd`, `${d}π = πd`, `d = ${d} cm`] };
+      }
+
+      // ---------- area:  A = πr² = πd²/4 ----------
+      if (roll < 0.30) {
+        const rad = randInt(2, 12), d = 2 * rad, k = rad * rad;
+        const v = pick(["r2A", "d2A", "A2r", "A2d"]);
+        if (v === "r2A") return {
+          prompt: `Find the area of this circle. Leave your answer in terms of π`,
+          circle: { type: "line", mode: "radius", label: `r = ${rad} cm` },
+          answer: `${k}π`, hint: `e.g. ${k}π`,
+          steps: [`Area = πr²`, `= π × ${rad}² = ${k}π cm²`] };
+        if (v === "d2A") return {
+          prompt: `Find the area of this circle. Leave your answer in terms of π`,
+          circle: { type: "line", mode: "diameter", label: `d = ${d} cm` },
+          answer: `${k}π`, hint: `e.g. ${k}π`,
+          steps: [`Area = πd² ÷ 4`, `= π × ${d}² ÷ 4 = ${k}π cm²`] };
+        if (v === "A2r") return {
+          prompt: `The area of this circle is ${k}π cm². Find the radius`,
+          circle: { type: "line", mode: "radius", label: `r = ?` },
+          answer: `${rad}`, hint: "Enter a number.",
+          steps: [`Area = πr²`, `${k}π = πr²`, `r² = ${k}`, `r = √${k} = ${rad} cm`] };
+        return {
+          prompt: `The area of this circle is ${k}π cm². Find the diameter`,
+          circle: { type: "line", mode: "diameter", label: `d = ?` },
+          answer: `${d}`, hint: "Enter a number.",
+          steps: [`Area = πr²`, `${k}π = πr²`, `r = √${k} = ${rad}`, `d = 2 × ${rad} = ${d} cm`] };
+      }
+
+      // ---------- arc length:  s = (θ/360) × 2πr ----------
+      if (roll < 0.46) {
+        let th, rad, coeff;
+        do { th = pick([30, 36, 40, 45, 60, 72, 80, 90, 120, 135, 150]); rad = randInt(3, 15); coeff = (th * rad) / 180; }
+        while (!Number.isInteger(coeff) || coeff < 1 || coeff > 9);
+        const v = pick(["find", "find", "angle", "radius"]);
+        if (v === "find") return {
+          prompt: `This sector has radius ${rad} cm and angle ${th}°. Find the arc length. Leave your answer in terms of π`,
+          circle: { type: "sector", theta: th, angText: `${th}°`, rText: `${rad} cm`, arcText: `?` },
+          answer: `${coeff}π`, hint: `e.g. ${coeff}π`,
+          steps: [`Arc length = (θ/360) × 2πr`, `= (${th}/360) × 2 × π × ${rad}`, `= ${coeff}π cm`] };
+        if (v === "angle") return {
+          prompt: `This sector has radius ${rad} cm and arc length ${coeff}π cm. Find the angle θ`,
+          circle: { type: "sector", theta: th, angText: `θ = ?`, rText: `${rad} cm`, arcText: `${coeff}π cm` },
+          answer: `${th}`, hint: "Angle in degrees.",
+          steps: [`Arc length = (θ/360) × 2πr`, `${coeff}π = (θ/360) × 2π × ${rad}`, `θ = ${coeff} × 360 ÷ (2 × ${rad}) = ${th}°`] };
+        return {
+          prompt: `This sector has angle ${th}° and arc length ${coeff}π cm. Find the radius`,
+          circle: { type: "sector", theta: th, angText: `${th}°`, rText: `r = ?`, arcText: `${coeff}π cm` },
+          answer: `${rad}`, hint: "Enter a number.",
+          steps: [`Arc length = (θ/360) × 2πr`, `${coeff}π = (${th}/360) × 2πr`, `r = ${coeff} × 360 ÷ (2 × ${th}) = ${rad} cm`] };
+      }
+
+      // ---------- sector area:  A = (θ/360) × πr² ----------
+      if (roll < 0.62) {
+        let th, rad, coeff;
+        do { th = pick([30, 36, 40, 45, 60, 72, 90, 120, 135, 150]); rad = randInt(3, 14); coeff = (th * rad * rad) / 360; }
+        while (!Number.isInteger(coeff) || coeff < 1 || coeff > 30);
+        const v = pick(["find", "find", "angle", "radius"]);
+        if (v === "find") return {
+          prompt: `This sector has radius ${rad} cm and angle ${th}°. Find the area of the sector. Leave your answer in terms of π`,
+          circle: { type: "sector", theta: th, angText: `${th}°`, rText: `${rad} cm`, areaText: `?` },
+          answer: `${coeff}π`, hint: `e.g. ${coeff}π`,
+          steps: [`Sector area = (θ/360) × πr²`, `= (${th}/360) × π × ${rad}²`, `= ${coeff}π cm²`] };
+        if (v === "angle") return {
+          prompt: `This sector has radius ${rad} cm and area ${coeff}π cm². Find the angle θ`,
+          circle: { type: "sector", theta: th, angText: `θ = ?`, rText: `${rad} cm`, areaText: `${coeff}π cm²` },
+          answer: `${th}`, hint: "Angle in degrees.",
+          steps: [`Sector area = (θ/360) × πr²`, `${coeff}π = (θ/360) × π × ${rad}²`, `θ = ${coeff} × 360 ÷ ${rad * rad} = ${th}°`] };
+        return {
+          prompt: `This sector has angle ${th}° and area ${coeff}π cm². Find the radius`,
+          circle: { type: "sector", theta: th, angText: `${th}°`, rText: `r = ?`, areaText: `${coeff}π cm²` },
+          answer: `${rad}`, hint: "Enter a number.",
+          steps: [`Sector area = (θ/360) × πr²`, `${coeff}π = (${th}/360) × πr²`, `r² = ${coeff} × 360 ÷ ${th} = ${rad * rad}`, `r = ${rad} cm`] };
+      }
+
+      // ---------- circle theorems: find the angle ----------
+      const thm = pick(["centre", "centre", "semicircle", "semicircle", "sameseg", "cyclic", "cyclic", "tangents", "tangents", "altseg"]);
+
+      if (thm === "centre") {
+        const c = randInt(20, 62);
+        if (Math.random() < 0.5) return {
+          prompt: `O is the centre of the circle. Find the angle marked ? at the centre`,
+          circle: { type: "centre", x: c, centreText: `?`, circText: `${c}°` },
+          answer: `${2 * c}`, hint: "Angle in degrees.",
+          steps: [`The angle at the centre is twice the angle at the circumference.`, `? = 2 × ${c}° = ${2 * c}°`] };
+        return {
+          prompt: `O is the centre of the circle. Find the angle marked ? at the circumference`,
+          circle: { type: "centre", x: c, centreText: `${2 * c}°`, circText: `?` },
+          answer: `${c}`, hint: "Angle in degrees.",
+          steps: [`The angle at the centre is twice the angle at the circumference.`, `? = ${2 * c}° ÷ 2 = ${c}°`] };
+      }
+
+      if (thm === "semicircle") {
+        const aA = randInt(22, 66), askB = Math.random() < 0.5;
+        return {
+          prompt: `AB is a diameter of the circle. Find the angle marked ?`,
+          circle: { type: "semicircle", angA: aA, textA: askB ? `${aA}°` : `?`, textB: askB ? `?` : `${90 - aA}°` },
+          answer: `${askB ? 90 - aA : aA}`, hint: "Angle in degrees.",
+          steps: [`The angle in a semicircle is 90°.`, `Angles in a triangle add up to 180°.`, `? = 180° − 90° − ${askB ? aA : 90 - aA}° = ${askB ? 90 - aA : aA}°`] };
+      }
+
+      if (thm === "sameseg") {
+        const x = randInt(24, 58);
+        return {
+          prompt: `A and D are points on the major arc. Find the angle marked ?`,
+          circle: { type: "sameseg", x, textA: `${x}°`, textD: `?` },
+          answer: `${x}`, hint: "Angle in degrees.",
+          steps: [`Angles in the same segment are equal.`, `Both angles stand on the same chord BC, so ? = ${x}°`] };
+      }
+
+      if (thm === "cyclic") {
+        let g;
+        do {
+          const opts = [58, 64, 70, 76, 82, 88, 94, 100, 106];
+          const g1 = pick(opts), g2 = pick(opts), g3 = pick(opts);
+          g = [g1, g2, g3, 360 - g1 - g2 - g3];
+        } while (g[3] < 52 || g[3] > 118);
+        const angA = (g[1] + g[2]) / 2, angB = (g[2] + g[3]) / 2;
+        if (Math.random() < 0.5) return {
+          prompt: `ABCD is a cyclic quadrilateral. Find the angle marked ?`,
+          circle: { type: "cyclic", gaps: g, marks: [{ i: 0, t: `${angA}°` }, { i: 2, t: `?` }] },
+          answer: `${180 - angA}`, hint: "Angle in degrees.",
+          steps: [`Opposite angles in a cyclic quadrilateral add up to 180°.`, `? = 180° − ${angA}° = ${180 - angA}°`] };
+        return {
+          prompt: `ABCD is a cyclic quadrilateral. Find the angle marked ?`,
+          circle: { type: "cyclic", gaps: g, marks: [{ i: 1, t: `${angB}°` }, { i: 3, t: `?` }] },
+          answer: `${180 - angB}`, hint: "Angle in degrees.",
+          steps: [`Opposite angles in a cyclic quadrilateral add up to 180°.`, `? = 180° − ${angB}° = ${180 - angB}°`] };
+      }
+
+      if (thm === "tangents") {
+        const p = pick([36, 40, 44, 48, 52, 56, 60, 64, 68, 72]);
+        const v = pick(["O", "P", "base"]);
+        if (v === "O") return {
+          prompt: `PA and PB are tangents to the circle, centre O. Find the angle AOB marked ?`,
+          circle: { type: "tangents", p, textP: `${p}°`, textO: `?` },
+          answer: `${180 - p}`, hint: "Angle in degrees.",
+          steps: [`A tangent meets a radius at 90°, so angle OAP = angle OBP = 90°.`, `Angles in quadrilateral OAPB add up to 360°.`, `? = 360° − 90° − 90° − ${p}° = ${180 - p}°`] };
+        if (v === "P") return {
+          prompt: `PA and PB are tangents to the circle, centre O. Find the angle APB marked ?`,
+          circle: { type: "tangents", p, textP: `?`, textO: `${180 - p}°` },
+          answer: `${p}`, hint: "Angle in degrees.",
+          steps: [`A tangent meets a radius at 90°, so angle OAP = angle OBP = 90°.`, `Angles in quadrilateral OAPB add up to 360°.`, `? = 360° − 90° − 90° − ${180 - p}° = ${p}°`] };
+        return {
+          prompt: `PA and PB are tangents from the point P. Find the angle PAB marked ?`,
+          circle: { type: "tangents", p, textP: `${p}°`, baseText: `?` },
+          answer: `${(180 - p) / 2}`, hint: "Angle in degrees.",
+          steps: [`Tangents from a point are equal in length, so triangle PAB is isosceles.`, `Base angles = (180° − ${p}°) ÷ 2 = ${(180 - p) / 2}°`] };
+      }
+
+      // altseg — alternate segment theorem
+      const x = randInt(30, 60);
+      if (Math.random() < 0.5) return {
+        prompt: `The line through A is a tangent to the circle. Find the angle marked ? in the alternate segment`,
+        circle: { type: "altseg", x, textA: `${x}°`, textC: `?` },
+        answer: `${x}`, hint: "Angle in degrees.",
+        steps: [`Alternate segment theorem: the angle between a tangent and a chord equals the angle in the alternate segment.`, `? = ${x}°`] };
+      return {
+        prompt: `The line through A is a tangent to the circle. Find the angle between the tangent and the chord, marked ?`,
+        circle: { type: "altseg", x, textA: `?`, textC: `${x}°` },
+        answer: `${x}`, hint: "Angle in degrees.",
+        steps: [`Alternate segment theorem: the angle between a tangent and a chord equals the angle in the alternate segment.`, `? = ${x}°`] };
     } },
   { id: "probability", name: "Probability", icon: "🎲", prereqs: [],
     generate() {
@@ -4407,6 +4776,7 @@ export default function MathsUnlockedBN() {
               {question.motion && <MotionGraph {...question.motion} />}
               {question.figure && <ShapeFigure shape={question.figure.shape} />}
               {question.tri && <TriangleFigure {...question.tri} />}
+              {question.circle && <CircleFigure {...question.circle} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
