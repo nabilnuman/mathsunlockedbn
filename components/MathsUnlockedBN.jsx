@@ -286,6 +286,60 @@ function LineGraph({ data }) {
   );
 }
 
+// Interactive grid for "draw the graph of y = …". The student taps
+// lattice points; the last two define a line. `solution` (when set)
+// overlays the correct line in green after the answer is checked.
+function DrawGraph({ points, solution, onToggle }) {
+  const R = 6, U = 19, O = 128;
+  const X = (x) => O + x * U;
+  const Y = (y) => O - y * U;
+  const grid = [];
+  for (let i = -R; i <= R; i++) {
+    if (i === 0) continue;
+    grid.push(<line key={`v${i}`} x1={X(i)} y1={Y(-R)} x2={X(i)} y2={Y(R)} stroke="var(--grid)" strokeWidth="0.5" />);
+    grid.push(<line key={`h${i}`} x1={X(-R)} y1={Y(i)} x2={X(R)} y2={Y(i)} stroke="var(--grid)" strokeWidth="0.5" />);
+  }
+  const lineFor = (p, stroke, w) => {
+    if (!p || p.length < 2) return null;
+    const [[x1, y1], [x2, y2]] = p;
+    if (x1 === x2) return <line x1={X(x1)} y1={Y(-R)} x2={X(x1)} y2={Y(R)} stroke={stroke} strokeWidth={w} clipPath="url(#dg-clip)" />;
+    const m = (y2 - y1) / (x2 - x1), b = y1 - m * x1;
+    return <line x1={X(-R)} y1={Y(m * -R + b)} x2={X(R)} y2={Y(m * R + b)} stroke={stroke} strokeWidth={w} clipPath="url(#dg-clip)" />;
+  };
+  const dots = [];
+  for (let x = -R; x <= R; x++) for (let y = -R; y <= R; y++) {
+    const chosen = points.some(([px, py]) => px === x && py === y);
+    dots.push(
+      <circle key={`${x},${y}`} cx={X(x)} cy={Y(y)} r={chosen ? 4.5 : 8}
+        fill={chosen ? "var(--blue)" : "transparent"} stroke={chosen ? "var(--card)" : "transparent"} strokeWidth={chosen ? 1.5 : 0}
+        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all" }}
+        onClick={() => onToggle && onToggle([x, y])} />
+    );
+  }
+  return (
+    <svg viewBox="0 0 256 256" width="248" height="248" role="img" aria-label="tap points to draw a line"
+      style={{ maxWidth: "100%", display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="var(--card)" stroke="var(--grid)" />
+      {grid}
+      <line x1={X(-R)} y1={Y(0)} x2={X(R)} y2={Y(0)} stroke="var(--ink)" strokeWidth="1.2" />
+      <line x1={X(0)} y1={Y(-R)} x2={X(0)} y2={Y(R)} stroke="var(--ink)" strokeWidth="1.2" />
+      {[-4, -2, 2, 4].map((t) => (
+        <g key={t}>
+          <text x={X(t)} y={Y(0) + 11} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>
+          <text x={X(0) - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      <clipPath id="dg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
+      {solution && lineFor(solution, "var(--green)", 3)}
+      {lineFor(points, "var(--blue)", 2.4)}
+      {dots}
+      {points.map(([px, py], i) => (
+        <circle key={`m${i}`} cx={X(px)} cy={Y(py)} r="4.5" fill="var(--blue)" stroke="var(--card)" strokeWidth="1.5" style={{ pointerEvents: "none" }} />
+      ))}
+    </svg>
+  );
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
@@ -1181,6 +1235,26 @@ const TOPICS = [
     } },
   { id: "graphicalsolutions", name: "Graphical Solutions", icon: "📉", prereqs: ["algebra", "coordgeo"],
     generate() {
+      if (Math.random() < 0.45) {
+        // Draw the graph of a given straight line by tapping two points.
+        const slopes = [[-3, 1], [-2, 1], [-1, 1], [1, 1], [2, 1], [3, 1], [1, 2], [-1, 2]];
+        const [sn, sd] = slopes[randInt(0, slopes.length - 1)];
+        const m = sn / sd, c = randInt(-3, 3);
+        const mS = sd === 1 ? `${sn}` : `${sn}/${sd}`;
+        const mTerm = mS === "1" ? "x" : mS === "-1" ? "-x"
+          : mS.includes("/") ? `${sn === 1 ? "" : sn === -1 ? "-" : sn}x/${sd}` : `${mS}x`;
+        const cs = c === 0 ? "" : c > 0 ? ` + ${c}` : ` - ${-c}`;
+        const eq = `y = ${mTerm}${cs}`;
+        return {
+          prompt: `Draw the graph of ${eq}`,
+          drawGraph: { m, c }, answer: eq, hint: "tap two points the line passes through",
+          steps: [
+            `Gradient ${mS}, crosses the y-axis at ${c}`,
+            `Two points on the line: (0, ${c}) and (${sd}, ${sn + c})`,
+            `Plot them and join up: ${eq}`,
+          ],
+        };
+      }
       const xI = randInt(-6, 6);
       let m1 = randInt(-5, 5), m2 = randInt(-5, 5);
       while (m1 === m2) m2 = randInt(-5, 5);
@@ -1877,6 +1951,7 @@ export default function MathsUnlockedBN() {
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
+  const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [feedback, setFeedback] = useState(null);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -2111,6 +2186,7 @@ export default function MathsUnlockedBN() {
     setQuestion(pickMixed());
     setAnswerInput("");
     setMultiInput({});
+    setDrawPts([]);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2257,6 +2333,7 @@ export default function MathsUnlockedBN() {
     setQuestion(pickQuestion(topic));
     setAnswerInput("");
     setMultiInput({});
+    setDrawPts([]);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2266,14 +2343,34 @@ export default function MathsUnlockedBN() {
     setQuestion(activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
     setAnswerInput("");
     setMultiInput({});
+    setDrawPts([]);
     setFeedback(null);
     startTimeRef.current = Date.now();
+  }
+
+  // "Draw the graph" questions: tap lattice points, keep the last two, FIFO.
+  function toggleDrawPoint(pt) {
+    if (feedback) return;
+    setDrawPts((cur) => {
+      const i = cur.findIndex(([x, y]) => x === pt[0] && y === pt[1]);
+      if (i >= 0) return cur.filter((_, k) => k !== i);   // tap again to remove
+      if (cur.length < 2) return [...cur, pt];
+      return [cur[1], pt];                                // 3rd tap replaces the oldest
+    });
   }
 
   function submitAnswer() {
     if (feedback) return;
     let correct;
-    if (question.fields) {
+    if (question.drawGraph) {
+      if (drawPts.length < 2) return;
+      const [[x1, y1], [x2, y2]] = drawPts;
+      if (x1 === x2) correct = false; // a vertical line is never y = mx + c
+      else {
+        const m = (y2 - y1) / (x2 - x1), c = y1 - m * x1;
+        correct = Math.abs(m - question.drawGraph.m) < 1e-9 && Math.abs(c - question.drawGraph.c) < 1e-9;
+      }
+    } else if (question.fields) {
       if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return; // all cells required
       correct = question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
     } else {
@@ -3175,7 +3272,23 @@ export default function MathsUnlockedBN() {
 
               {question.graph && <LineGraph data={question.graph} />}
 
-              {question.fields ? (
+              {question.drawGraph && (() => {
+                const { m, c } = question.drawGraph;
+                const solution = feedback ? [[-6, m * -6 + c], [6, m * 6 + c]] : null;
+                return (
+                  <div style={{ marginBottom: 12 }}>
+                    <DrawGraph points={drawPts} solution={solution} onToggle={feedback ? null : toggleDrawPoint} />
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
+                      {feedback ? (feedback.correct ? "Your line (blue) matches" : "Green shows the correct line")
+                        : drawPts.length === 0 ? "Tap a point the line passes through"
+                        : drawPts.length === 1 ? "Now tap a second point"
+                        : "Tap another point to move the line"}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {question.drawGraph ? null : question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   {question.fields.map((f, i) => (
                     <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -3226,11 +3339,14 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              {!feedback && (
-                <button onClick={submitAnswer} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                  Check answer
-                </button>
-              )}
+              {!feedback && (() => {
+                const notReady = question.drawGraph && drawPts.length < 2;
+                return (
+                  <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
+                    Check answer
+                  </button>
+                );
+              })()}
 
               {feedback && (
                 <div>
