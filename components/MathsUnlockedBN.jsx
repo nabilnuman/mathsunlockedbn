@@ -2823,7 +2823,7 @@ export default function MathsUnlockedBN() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         .mub-display { font-family: 'Fraunces', serif; }
-        .mub-mono { font-family: 'JetBrains Mono', monospace; }
+        .mub-mono { font-family: 'JetBrains Mono', monospace; font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0, "calt" 0; }
         .mub-grid {
           background-image:
             linear-gradient(var(--grid) 1px, transparent 1px),
