@@ -1891,6 +1891,7 @@ export default function MathsUnlockedBN() {
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
   const [board, setBoard] = useState(null);           // { loading, schools: [...] }
   const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
+  const [rosterProfile, setRosterProfile] = useState(null); // a leaderboard student whose full profile is shown in a modal
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResults, setFriendResults] = useState(null); // null = not searched yet
   const [friendLoading, setFriendLoading] = useState(false);
@@ -2399,6 +2400,7 @@ export default function MathsUnlockedBN() {
   function openLeaderboard() {
     setScreen("leaderboard");
     setOpenSchool(null);
+    setRosterProfile(null);
     loadBoard();
     markMilestone("leaderboard");
   }
@@ -2491,6 +2493,7 @@ export default function MathsUnlockedBN() {
           achievements: (m.achievements || []).length,
           bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
           at: lastImprovementAt(m),
+          full: m,
         }))
         .sort((a, b) => b.score - a.score || a.at - b.at);
       const counting = ranked.slice(0, 10);
@@ -3417,11 +3420,12 @@ export default function MathsUnlockedBN() {
                           {s.roster.map((m, j) => {
                             const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                             return (
-                              <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
+                              <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
+                                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                    {m.name}
+                                    <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
                                     {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                                     {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                                   </div>
@@ -3430,7 +3434,7 @@ export default function MathsUnlockedBN() {
                                   </div>
                                 </div>
                                 <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
-                              </div>
+                              </button>
                             );
                           })}
                           <div style={{ fontSize: 10.5, color: "var(--muted)", padding: "8px 14px 12px", borderTop: "1px solid var(--grid)" }}>
@@ -3455,6 +3459,18 @@ export default function MathsUnlockedBN() {
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <ProfileCard profile={profile} />
             <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Screenshot this to share · tap outside to close</div>
+          </div>
+        </div>
+      )}
+
+      {rosterProfile && (
+        <div onClick={() => setRosterProfile(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", zIndex: 60, overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--page-bg)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, maxWidth: 460, width: "100%", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{rosterProfile.name}</div>
+              <button onClick={() => setRosterProfile(null)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Close</button>
+            </div>
+            <StudentProfileView profile={rosterProfile} />
           </div>
         </div>
       )}
