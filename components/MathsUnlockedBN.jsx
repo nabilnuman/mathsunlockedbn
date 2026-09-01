@@ -540,6 +540,43 @@ function ShapeFigure({ shape }) {
   );
 }
 
+// A schematic triangle with labelled sides / angles, for Trigonometry.
+// verts: 3 [x,y] points (screen orientation). sideLabels[i] labels the
+// edge opposite vertex i; angleLabels[i] labels the angle at vertex i;
+// rightAngle is the vertex index carrying a right-angle square.
+function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels = [], rightAngle }) {
+  const W = 240, H = 176, m = 30;
+  const xs = verts.map((v) => v[0]), ys = verts.map((v) => v[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const s = Math.min((W - 2 * m) / (maxX - minX || 1), (H - 2 * m) / (maxY - minY || 1));
+  const ox = (W - s * (maxX - minX)) / 2, oy = (H - s * (maxY - minY)) / 2;
+  const P = verts.map(([x, y]) => [ox + (x - minX) * s, oy + (y - minY) * s]);
+  const cen = [(P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3];
+  const push = (pt, from, d) => {
+    const dx = pt[0] - from[0], dy = pt[1] - from[1], L = Math.hypot(dx, dy) || 1;
+    return [pt[0] + (dx / L) * d, pt[1] + (dy / L) * d];
+  };
+  const edgeMid = (i) => [(P[(i + 1) % 3][0] + P[(i + 2) % 3][0]) / 2, (P[(i + 1) % 3][1] + P[(i + 2) % 3][1]) / 2];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="triangle diagram"
+      style={{ maxWidth: 290, display: "block", margin: "0 auto 10px" }}>
+      <polygon points={P.map((p) => p.join(",")).join(" ")} fill="var(--blue)" fillOpacity="0.12" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />
+      {typeof rightAngle === "number" && (() => {
+        const v = P[rightAngle], a = P[(rightAngle + 1) % 3], b = P[(rightAngle + 2) % 3];
+        const n = (p) => { const dx = p[0] - v[0], dy = p[1] - v[1], L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
+        const u1 = n(a), u2 = n(b), k = 10;
+        const p1 = [v[0] + u1[0] * k, v[1] + u1[1] * k];
+        const p2 = [p1[0] + u2[0] * k, p1[1] + u2[1] * k];
+        const p3 = [v[0] + u2[0] * k, v[1] + u2[1] * k];
+        return <polyline points={[p1, p2, p3].map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink)" strokeWidth="1.2" />;
+      })()}
+      {sideLabels.map((lab, i) => lab && (() => { const [x, y] = push(edgeMid(i), cen, 15); return <text key={`s${i}`} x={x} y={y} fontSize="10.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)">{lab}</text>; })())}
+      {angleLabels.map((lab, i) => lab && (() => { const [x, y] = push(P[i], cen, -20); return <text key={`a${i}`} x={x} y={y} fontSize="10" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)">{lab}</text>; })())}
+      {vertLabels.map((lab, i) => lab && (() => { const [x, y] = push(P[i], cen, 9); return <text key={`v${i}`} x={x} y={y} fontSize="10" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)">{lab}</text>; })())}
+    </svg>
+  );
+}
+
 // A Venn diagram whose regions the student taps to shade a target set.
 function VennShade({ venn, pressed, onToggle, showAnswer }) {
   const two = venn.sets === 2;
@@ -2114,9 +2151,144 @@ const TOPICS = [
     } },
   { id: "trigonometry", name: "Trigonometry", icon: "📐", prereqs: ["polygons"],
     generate() {
-      const a = randInt(3, 12), b = randInt(3, 12);
-      return { prompt: `A right-angled triangle has legs ${a} cm and ${b} cm. Find the length of the hypotenuse`, answer: `sqrt(${a}^2+${b}^2)`, hint: "e.g. sqrt(41) or a decimal",
-        steps: [`Use Pythagoras' theorem: hyp² = a² + b²`, `= ${a}² + ${b}² = ${a * a} + ${b * b} = ${a * a + b * b}`, `hyp = √${a * a + b * b}`] };
+      const D = Math.PI / 180;
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const r1 = (x) => Math.round(x * 10) / 10;
+      const approx = (val) => (inp) => { try { const x = evalString(String(inp), 0); return Number.isFinite(x) && Math.abs(x - val) <= Math.max(0.15, Math.abs(val) * 0.02); } catch (e) { return false; } };
+      // A at origin, B on +x (AB = side c), C from angle A and AC = side b
+      const layout = (AB, AC, angA) => [[0, 0], [AB, 0], [AC * Math.cos(angA * D), -AC * Math.sin(angA * D)]];
+      // right angle at C: C origin, A on +x (leg adj), B up (leg opp)
+      const rlayout = (adj, opp) => [[adj, 0], [0, -opp], [0, 0]];
+
+      const r = Math.random();
+
+      if (r < 0.15) {
+        const p = randInt(4, 13), q = randInt(4, 13), hyp = Math.sqrt(p * p + q * q);
+        return {
+          prompt: `Find the length of the hypotenuse (marked ?), in cm`,
+          tri: { verts: rlayout(p, q), sideLabels: [`${q} cm`, `${p} cm`, "?"], rightAngle: 2 },
+          answer: `sqrt(${p * p + q * q})`, hint: "leave it as √n or a decimal", check: approx(hyp),
+          steps: [`Pythagoras:  hyp² = ${p}² + ${q}²`, `= ${p * p} + ${q * q} = ${p * p + q * q}`, `hyp = √${p * p + q * q} = ${r1(hyp)} cm`],
+        };
+      }
+
+      if (r < 0.33) {
+        // SOH CAH TOA — find a side
+        const th = pick([25, 30, 35, 40, 50, 55, 60, 65]);
+        const hyp = randInt(8, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
+        const sides = { hyp, adj, opp };
+        const [given, ask] = pick([["hyp", "opp"], ["hyp", "adj"], ["adj", "opp"], ["adj", "hyp"], ["opp", "adj"], ["opp", "hyp"]]);
+        const val = sides[ask];
+        const lbl = { opp: 0, adj: 1, hyp: 2 }; // edge index in rlayout(adj,opp) verts [A,B,C]
+        const sl = ["", "", ""];
+        sl[lbl[given]] = `${r1(sides[given])} cm`;
+        sl[lbl[ask]] = "?";
+        const ratio = (a, b) => (a === "opp" && b === "hyp") || (a === "hyp" && b === "opp") ? "sin" : (a === "adj" && b === "hyp") || (a === "hyp" && b === "adj") ? "cos" : "tan";
+        const rt = ratio(given, ask);
+        return {
+          prompt: `Find the length marked ?, in cm  (1 d.p.)`,
+          tri: { verts: rlayout(adj, opp), sideLabels: sl, angleLabels: ["", "", ""].map((_, i) => (i === 0 ? `${th}°` : "")), rightAngle: 2 },
+          answer: `${r1(val)}`, hint: "SOH CAH TOA", check: approx(val),
+          steps: [
+            `Relative to ${th}°:  opp, adj, hyp — use ${rt === "sin" ? "SOH" : rt === "cos" ? "CAH" : "TOA"}.`,
+            `${rt}(${th}°) = ${rt === "sin" ? "opp ÷ hyp" : rt === "cos" ? "adj ÷ hyp" : "opp ÷ adj"}`,
+            `${ask} = ${r1(val)} cm`,
+          ],
+        };
+      }
+
+      if (r < 0.45) {
+        // SOH CAH TOA — find an angle
+        const th = pick([28, 32, 37, 41, 48, 53, 58, 62]);
+        const hyp = randInt(9, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
+        const sides = { hyp, adj, opp };
+        const shown = pick([["opp", "hyp"], ["adj", "hyp"], ["opp", "adj"]]);
+        const lbl = { opp: 0, adj: 1, hyp: 2 };
+        const sl = ["", "", ""];
+        shown.forEach((k) => { sl[lbl[k]] = `${r1(sides[k])} cm`; });
+        const rt = shown.includes("hyp") ? (shown.includes("opp") ? "sin" : "cos") : "tan";
+        return {
+          prompt: `Find the angle marked ?, in degrees  (1 d.p.)`,
+          tri: { verts: rlayout(adj, opp), sideLabels: sl, angleLabels: ["?", "", ""], rightAngle: 2 },
+          answer: `${r1(th)}`, hint: "use sin⁻¹, cos⁻¹ or tan⁻¹", check: approx(th),
+          steps: [
+            `${rt}(x) = ${rt === "sin" ? "opp ÷ hyp" : rt === "cos" ? "adj ÷ hyp" : "opp ÷ adj"} = ${r1(sides[shown[0]] / sides[shown[1]] * 1000) / 1000}`,
+            `x = ${rt}⁻¹(…) = ${r1(th)}°`,
+          ],
+        };
+      }
+
+      if (r < 0.57) {
+        // sine rule — find a side
+        let A = pick([35, 40, 45, 50, 55, 60, 70, 80]), B = pick([35, 40, 45, 50, 55, 60, 70]);
+        while (A + B > 150) B = pick([35, 40, 45, 50, 55]);
+        const C = 180 - A - B, a = randInt(6, 14);
+        const b = a * Math.sin(B * D) / Math.sin(A * D), c = a * Math.sin(C * D) / Math.sin(A * D);
+        return {
+          prompt: `Find the length marked ?, in cm  (1 d.p.)`,
+          tri: { verts: layout(c, b, A), sideLabels: [`${a} cm`, "?", ""], angleLabels: [`${A}°`, `${B}°`, ""], vertLabels: ["A", "B", "C"] },
+          answer: `${r1(b)}`, hint: "sine rule:  a / sin A = b / sin B", check: approx(b),
+          steps: [`b / sin ${B}° = ${a} / sin ${A}°`, `b = ${a} × sin ${B}° ÷ sin ${A}° = ${r1(b)} cm`],
+        };
+      }
+
+      if (r < 0.65) {
+        // sine rule — find an angle  (A + B ≤ 130 by construction)
+        const A = pick([30, 40, 50, 60, 70]), B = pick([35, 40, 45, 50, 55, 60]);
+        const a = randInt(8, 14), b = a * Math.sin(B * D) / Math.sin(A * D);
+        return {
+          prompt: `The angle marked ? is acute. Find it, in degrees  (1 d.p.)`,
+          tri: { verts: layout(a * Math.sin((180 - A - B) * D) / Math.sin(A * D), b, A), sideLabels: [`${a} cm`, `${r1(b)} cm`, ""], angleLabels: [`${A}°`, "?", ""], vertLabels: ["A", "B", "C"] },
+          answer: `${r1(B)}`, hint: "sine rule:  sin B / b = sin A / a", check: approx(B),
+          steps: [`sin B / ${r1(b)} = sin ${A}° / ${a}`, `sin B = ${r1(b)} × sin ${A}° ÷ ${a}`, `B = ${r1(B)}°`],
+        };
+      }
+
+      if (r < 0.78) {
+        // cosine rule — find a side
+        const A = pick([35, 45, 55, 65, 75, 100, 110, 120]), b = randInt(5, 12), c = randInt(5, 12);
+        const a = Math.sqrt(b * b + c * c - 2 * b * c * Math.cos(A * D));
+        return {
+          prompt: `Find the length marked ?, in cm  (1 d.p.)`,
+          tri: { verts: layout(c, b, A), sideLabels: ["?", `${b} cm`, `${c} cm`], angleLabels: [`${A}°`, "", ""], vertLabels: ["A", "B", "C"] },
+          answer: `${r1(a)}`, hint: "cosine rule:  a² = b² + c² − 2bc·cos A", check: approx(a),
+          steps: [`a² = ${b}² + ${c}² − 2(${b})(${c})cos ${A}°`, `= ${b * b} + ${c * c} − ${b * c * 2}·cos ${A}° = ${r1(a * a)}`, `a = ${r1(a)} cm`],
+        };
+      }
+
+      if (r < 0.86) {
+        // cosine rule — find an angle
+        const b = randInt(6, 12), c = randInt(6, 12);
+        const a = randInt(Math.abs(b - c) + 2, b + c - 2);
+        const A = Math.acos((b * b + c * c - a * a) / (2 * b * c)) / D;
+        return {
+          prompt: `Find the angle marked ?, in degrees  (1 d.p.)`,
+          tri: { verts: layout(c, b, A), sideLabels: [`${a} cm`, `${b} cm`, `${c} cm`], angleLabels: ["?", "", ""], vertLabels: ["A", "B", "C"] },
+          answer: `${r1(A)}`, hint: "cos A = (b² + c² − a²) ÷ 2bc", check: approx(A),
+          steps: [`cos A = (${b}² + ${c}² − ${a}²) ÷ (2 × ${b} × ${c})`, `= ${r1((b * b + c * c - a * a) / (2 * b * c) * 1000) / 1000}`, `A = ${r1(A)}°`],
+        };
+      }
+
+      if (r < 0.93) {
+        // area of a right-angled triangle
+        const base = randInt(4, 16), h = randInt(3, 15), area = (base * h) / 2;
+        return {
+          prompt: `Find the area of the triangle, in cm²`,
+          tri: { verts: rlayout(base, h), sideLabels: [`${h} cm`, `${base} cm`, ""], rightAngle: 2 },
+          answer: `${area}`, hint: "area = ½ × base × height", check: approx(area),
+          steps: [`Area = ½ × base × height`, `= ½ × ${base} × ${h} = ${area} cm²`],
+        };
+      }
+
+      // area of a non-right triangle
+      const A = pick([30, 40, 50, 60, 120, 135, 150]), b = randInt(5, 14), c = randInt(5, 14);
+      const area = 0.5 * b * c * Math.sin(A * D);
+      return {
+        prompt: `Find the area of the triangle, in cm²  (1 d.p.)`,
+        tri: { verts: layout(c, b, A), sideLabels: ["", `${b} cm`, `${c} cm`], angleLabels: [`${A}°`, "", ""], vertLabels: ["A", "B", "C"] },
+        answer: `${r1(area)}`, hint: "area = ½ · b · c · sin A", check: approx(area),
+        steps: [`Area = ½ × ${b} × ${c} × sin ${A}°`, `= ${r1(area)} cm²`],
+      };
     } },
   { id: "circles", name: "Circles", icon: "⭕", prereqs: ["trigonometry"],
     generate() {
@@ -4160,6 +4332,7 @@ export default function MathsUnlockedBN() {
               {question.graph && <LineGraph data={question.graph} />}
               {question.motion && <MotionGraph {...question.motion} />}
               {question.figure && <ShapeFigure shape={question.figure.shape} />}
+              {question.tri && <TriangleFigure {...question.tri} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
