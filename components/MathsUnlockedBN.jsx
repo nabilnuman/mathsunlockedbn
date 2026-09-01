@@ -2560,12 +2560,12 @@ const TOPICS = [
         if (v === "r2C") return {
           prompt: `Find the circumference of this circle. Leave your answer in terms of π`,
           circle: { type: "line", mode: "radius", label: `r = ${rad} cm` },
-          answer: `${2 * rad}π`, hint: `e.g. ${2 * rad}π`,
+          answer: `${2 * rad}π`, hint: "give your answer as a multiple of π",
           steps: [`Circumference = 2πr`, `= 2 × π × ${rad} = ${2 * rad}π cm`] };
         if (v === "d2C") return {
           prompt: `Find the circumference of this circle. Leave your answer in terms of π`,
           circle: { type: "line", mode: "diameter", label: `d = ${d} cm` },
-          answer: `${d}π`, hint: `e.g. ${d}π`,
+          answer: `${d}π`, hint: "give your answer as a multiple of π",
           steps: [`Circumference = πd`, `= π × ${d} = ${d}π cm`] };
         if (v === "C2r") return {
           prompt: `The circumference of this circle is ${2 * rad}π cm. Find the radius`,
@@ -2586,12 +2586,12 @@ const TOPICS = [
         if (v === "r2A") return {
           prompt: `Find the area of this circle. Leave your answer in terms of π`,
           circle: { type: "line", mode: "radius", label: `r = ${rad} cm` },
-          answer: `${k}π`, hint: `e.g. ${k}π`,
+          answer: `${k}π`, hint: "give your answer as a multiple of π",
           steps: [`Area = πr²`, `= π × ${rad}² = ${k}π cm²`] };
         if (v === "d2A") return {
           prompt: `Find the area of this circle. Leave your answer in terms of π`,
           circle: { type: "line", mode: "diameter", label: `d = ${d} cm` },
-          answer: `${k}π`, hint: `e.g. ${k}π`,
+          answer: `${k}π`, hint: "give your answer as a multiple of π",
           steps: [`Area = πd² ÷ 4`, `= π × ${d}² ÷ 4 = ${k}π cm²`] };
         if (v === "A2r") return {
           prompt: `The area of this circle is ${k}π cm². Find the radius`,
@@ -2614,7 +2614,7 @@ const TOPICS = [
         if (v === "find") return {
           prompt: `This sector has radius ${rad} cm and angle ${th}°. Find the arc length. Leave your answer in terms of π`,
           circle: { type: "sector", theta: th, angText: `${th}°`, rText: `${rad} cm`, arcText: `?` },
-          answer: `${coeff}π`, hint: `e.g. ${coeff}π`,
+          answer: `${coeff}π`, hint: "give your answer as a multiple of π",
           steps: [`Arc length = (θ/360) × 2πr`, `= (${th}/360) × 2 × π × ${rad}`, `= ${coeff}π cm`] };
         if (v === "angle") return {
           prompt: `This sector has radius ${rad} cm and arc length ${coeff}π cm. Find the angle θ`,
@@ -2637,7 +2637,7 @@ const TOPICS = [
         if (v === "find") return {
           prompt: `This sector has radius ${rad} cm and angle ${th}°. Find the area of the sector. Leave your answer in terms of π`,
           circle: { type: "sector", theta: th, angText: `${th}°`, rText: `${rad} cm`, areaText: `?` },
-          answer: `${coeff}π`, hint: `e.g. ${coeff}π`,
+          answer: `${coeff}π`, hint: "give your answer as a multiple of π",
           steps: [`Sector area = (θ/360) × πr²`, `= (${th}/360) × π × ${rad}²`, `= ${coeff}π cm²`] };
         if (v === "angle") return {
           prompt: `This sector has radius ${rad} cm and area ${coeff}π cm². Find the angle θ`,
