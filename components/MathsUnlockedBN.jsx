@@ -247,6 +247,45 @@ function MathText({ text, style }) {
   );
 }
 
+// A small coordinate grid with one straight line and two marked lattice
+// points — used by the "read the equation off the graph" question.
+function LineGraph({ data }) {
+  const { m, c, marks = [] } = data;
+  const R = 6, U = 20, O = 130;            // range ±6, 20px per unit, origin at 130
+  const X = (x) => O + x * U;
+  const Y = (y) => O - y * U;
+  const grid = [];
+  for (let i = -R; i <= R; i++) {
+    if (i === 0) continue;
+    grid.push(<line key={`v${i}`} x1={X(i)} y1={Y(-R)} x2={X(i)} y2={Y(R)} stroke="var(--grid)" strokeWidth="0.5" />);
+    grid.push(<line key={`h${i}`} x1={X(-R)} y1={Y(i)} x2={X(R)} y2={Y(i)} stroke="var(--grid)" strokeWidth="0.5" />);
+  }
+  return (
+    <svg viewBox="0 0 260 260" width="240" height="240" role="img" aria-label="line on a coordinate grid"
+      style={{ maxWidth: "100%", display: "block", margin: "0 auto 14px" }}>
+      <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="var(--card)" stroke="var(--grid)" />
+      {grid}
+      <line x1={X(-R)} y1={Y(0)} x2={X(R)} y2={Y(0)} stroke="var(--ink)" strokeWidth="1.2" />
+      <line x1={X(0)} y1={Y(-R)} x2={X(0)} y2={Y(R)} stroke="var(--ink)" strokeWidth="1.2" />
+      {[-4, -2, 2, 4].map((t) => (
+        <g key={t}>
+          <text x={X(t)} y={Y(0) + 11} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>
+          <text x={X(0) - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      <clipPath id="lg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
+      <line x1={X(-R)} y1={Y(m * -R + c)} x2={X(R)} y2={Y(m * R + c)} stroke="var(--blue)" strokeWidth="2.4" clipPath="url(#lg-clip)" />
+      {marks.map(([mx, my], i) => (
+        <g key={i}>
+          <circle cx={X(mx)} cy={Y(my)} r="3.4" fill="var(--red)" />
+          <text x={X(mx) + (mx > 2 ? -6 : 6)} y={Y(my) + (my > 3 ? 12 : -6)} fontSize="9" fontWeight="700"
+            textAnchor={mx > 2 ? "end" : "start"} fill="var(--ink)">({mx}, {my})</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
@@ -1056,20 +1095,20 @@ const TOPICS = [
       };
       const r = Math.random();
 
-      if (r < 0.16) {
+      if (r < 0.14) {
         const { m, x1, x2, y1, y2 } = twoPts();
         return { prompt: `Find the gradient of the line joining (${x1}, ${y1}) and (${x2}, ${y2})`, answer: `${m}`, hint: "Enter a number.",
           steps: [`gradient = (y₂ − y₁) ÷ (x₂ − x₁)`, `= (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2 - y1} ÷ ${x2 - x1} = ${m}`] };
       }
 
-      if (r < 0.34) {
+      if (r < 0.30) {
         const { m, c, x1, x2, y1, y2 } = twoPts();
         const eq = `y = ${mxTerm(`${m}`)}${plusC(c)}`;
         return { prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2}).\nGive it as y = mx + c`, answer: eq, hint: "e.g. y = 2x - 1",
           steps: [`gradient m = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${m}`, `Substitute (${x1}, ${y1}):  ${y1} = ${m}(${x1}) + c  →  c = ${c}`, eq] };
       }
 
-      if (r < 0.50) {
+      if (r < 0.44) {
         const P = () => { const a = randInt(-6, 6); let b = randInt(-6, 6); while ((a - b) % 2 !== 0) b = randInt(-6, 6); return [a, b]; };
         const [x1, x2] = P(), [y1, y2] = P();
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
@@ -1079,7 +1118,7 @@ const TOPICS = [
           steps: [`Midpoint = ( (x₁+x₂)/2 , (y₁+y₂)/2 )`, `= ( (${x1}${x2 < 0 ? "" : "+"}${x2})/2 , (${y1}${y2 < 0 ? "" : "+"}${y2})/2 ) = (${mx}, ${my})`] };
       }
 
-      if (r < 0.66) {
+      if (r < 0.58) {
         const triples = [[3, 4], [6, 8], [5, 12], [8, 15], [9, 12], [7, 24], [20, 21]];
         let x1 = randInt(-5, 5), y1 = randInt(-5, 5), dx, dy;
         if (Math.random() < 0.6) { const [p, q] = triples[randInt(0, triples.length - 1)]; dx = (Math.random() < 0.5 ? 1 : -1) * p; dy = (Math.random() < 0.5 ? 1 : -1) * q; }
@@ -1090,14 +1129,14 @@ const TOPICS = [
           steps: [`length = √( (x₂−x₁)² + (y₂−y₁)² )`, `= √( (${dx})² + (${dy})² ) = √(${dx * dx} + ${dy * dy}) = √${sq}`, exact ? `= ${root}` : `= √${sq} ≈ ${root.toFixed(2)}`] };
       }
 
-      if (r < 0.78) {
+      if (r < 0.70) {
         const m = nz(-4, 4);
         const perp = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
         return { prompt: `A line has gradient ${m}. Find the gradient of any line perpendicular to it`, answer: perp, hint: "fraction or decimal",
           steps: [`Perpendicular gradient = −1 ÷ (gradient)`, `= −1 ÷ ${m} = ${perp}`] };
       }
 
-      if (r < 0.88) {
+      if (r < 0.80) {
         const m = nz(-4, 4), rc = randInt(-5, 5);
         const t = nz(-3, 3), px = m * t, py = randInt(-6, 6), c = py + t;
         const mpS = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
@@ -1105,6 +1144,28 @@ const TOPICS = [
         return { prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py}).\nGive it as y = mx + c`,
           answer: eq, hint: "e.g. y = -1/2x + 3",
           steps: [`Perpendicular gradient = −1 ÷ ${m} = ${mpS}`, `Through (${px}, ${py}):  ${py} = ${mpS}(${px}) + c  →  c = ${c}`, eq] };
+      }
+
+      if (r < 0.90) {
+        // read the equation of a line straight off a graph
+        const slopes = [[-3, 1], [-2, 1], [-1, 1], [1, 1], [2, 1], [3, 1], [1, 2], [-1, 2], [3, 2], [-3, 2]];
+        const [sn, sd] = slopes[randInt(0, slopes.length - 1)];
+        const m = sn / sd, c = randInt(-2, 2);
+        const p1 = [0, c];
+        let p2 = [sd, sn + c];
+        for (const kk of [3, -3, 2, -2, 1, -1]) { const x = sd * kk, y = sn * kk + c; if (Math.abs(x) <= 5 && Math.abs(y) <= 5) { p2 = [x, y]; break; } }
+        const mS = fr(sn, sd);
+        const eq = `y = ${mxTerm(mS)}${plusC(c)}`;
+        return {
+          prompt: `The straight line is drawn on the grid. Write its equation as y = mx + c`,
+          graph: { m, c, marks: [p1, p2] }, answer: eq, hint: "read two points off the line",
+          steps: [
+            `Two points on the line: (${p1[0]}, ${p1[1]}) and (${p2[0]}, ${p2[1]})`,
+            `gradient = (${p2[1]} − ${p1[1]}) ÷ (${p2[0]} − ${p1[0]}) = ${mS}`,
+            `crosses the y-axis at ${c}, so c = ${c}`,
+            eq,
+          ],
+        };
       }
 
       // read the gradient / y-intercept off a rearranged equation
@@ -3095,6 +3156,8 @@ export default function MathsUnlockedBN() {
                   </div>
                 );
               })()}
+
+              {question.graph && <LineGraph data={question.graph} />}
 
               {question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
