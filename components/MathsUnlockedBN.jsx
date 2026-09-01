@@ -1329,9 +1329,25 @@ const TOPICS = [
       const xI = randInt(-6, 6);
       let m1 = randInt(-5, 5), m2 = randInt(-5, 5);
       while (m1 === m2) m2 = randInt(-5, 5);
-      const c1 = randInt(-8, 8), c2 = m1 * xI + c1 - m2 * xI;
-      return { prompt: `Lines y = ${m1}x ${spaced(c1)} and y = ${m2}x ${spaced(c2)} intersect. Find the x-coordinate of the intersection`, answer: `${xI}`, hint: "Enter a number.",
-        steps: [`At the intersection both lines are equal: ${m1}x ${spaced(c1)} = ${m2}x ${spaced(c2)}`, `Rearrange: ${m1 - m2}x = ${c2 - c1}`, `x = ${c2 - c1} ÷ ${m1 - m2} = ${xI}`] };
+      let c1 = randInt(-8, 8);
+      while (m1 === 0 && c1 === 0) c1 = randInt(-8, 8);
+      const c2 = m1 * xI + c1 - m2 * xI;
+      const xc = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
+      const rhs = (m, c) => {
+        if (m === 0) return `${c}`;
+        let s = xc(m);
+        if (c > 0) s += ` + ${c}`; else if (c < 0) s += ` - ${-c}`;
+        return s;
+      };
+      return {
+        prompt: `Find the x-coordinate where these lines cross:   y = ${rhs(m1, c1)}\ny = ${rhs(m2, c2)}`,
+        answer: `${xI}`, hint: "Enter a number.",
+        steps: [
+          `Where they cross the y-values match:  ${rhs(m1, c1)} = ${rhs(m2, c2)}`,
+          `Collect the x-terms:  ${xc(m1 - m2)} = ${c2 - c1}`,
+          `x = ${c2 - c1} ÷ ${m1 - m2} = ${xI}`,
+        ],
+      };
     } },
   { id: "inequalities", name: "Linear Inequalities & Shading", icon: "🚧", prereqs: ["algebra", "coordgeo"],
     generate() {
