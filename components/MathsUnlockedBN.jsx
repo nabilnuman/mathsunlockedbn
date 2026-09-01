@@ -490,6 +490,56 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo 
   );
 }
 
+// Shapes and letters with their symmetry properties, for the Symmetry topic.
+function regPoly(n, startDeg = -90, r = 1) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = (startDeg + (i * 360) / n) * Math.PI / 180;
+    return [Math.cos(a) * r, Math.sin(a) * r];
+  });
+}
+function starPoly(n, startDeg = -90, ro = 1, ri = 0.42) {
+  const pts = [];
+  for (let i = 0; i < 2 * n; i++) {
+    const a = (startDeg + (i * 180) / n) * Math.PI / 180;
+    const r = i % 2 === 0 ? ro : ri;
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return pts;
+}
+const SHAPES = {
+  isotri: { label: "an isosceles triangle", lines: 1, rot: 1, p: [[0, -1], [0.85, 0.75], [-0.85, 0.75]] },
+  eqtri: { label: "an equilateral triangle", lines: 3, rot: 3, p: regPoly(3, -90) },
+  rect: { label: "a rectangle", lines: 2, rot: 2, p: [[-1, -0.62], [1, -0.62], [1, 0.62], [-1, 0.62]] },
+  square: { label: "a square", lines: 4, rot: 4, p: [[-0.82, -0.82], [0.82, -0.82], [0.82, 0.82], [-0.82, 0.82]] },
+  rhombus: { label: "a rhombus", lines: 2, rot: 2, p: [[0, -1], [0.68, 0], [0, 1], [-0.68, 0]] },
+  parallelogram: { label: "a parallelogram", lines: 0, rot: 2, p: [[-0.95, -0.55], [0.5, -0.55], [0.95, 0.55], [-0.5, 0.55]] },
+  kite: { label: "a kite", lines: 1, rot: 1, p: [[0, -1], [0.62, -0.15], [0, 1], [-0.62, -0.15]] },
+  pentagon: { label: "a regular pentagon", lines: 5, rot: 5, p: regPoly(5, -90) },
+  hexagon: { label: "a regular hexagon", lines: 6, rot: 6, p: regPoly(6, -90) },
+  octagon: { label: "a regular octagon", lines: 8, rot: 8, p: regPoly(8, -112.5) },
+  plus: { label: "a plus shape", lines: 4, rot: 4, p: [[-0.3, -0.9], [0.3, -0.9], [0.3, -0.3], [0.9, -0.3], [0.9, 0.3], [0.3, 0.3], [0.3, 0.9], [-0.3, 0.9], [-0.3, 0.3], [-0.9, 0.3], [-0.9, -0.3], [-0.3, -0.3]] },
+  arrow: { label: "an arrow", lines: 1, rot: 1, p: [[-0.9, -0.32], [0.15, -0.32], [0.15, -0.7], [0.9, 0], [0.15, 0.7], [0.15, 0.32], [-0.9, 0.32]] },
+  lshape: { label: "an L-shape", lines: 0, rot: 1, p: [[-0.6, -0.9], [-0.1, -0.9], [-0.1, 0.4], [0.7, 0.4], [0.7, 0.9], [-0.6, 0.9]] },
+  tshape: { label: "a T-shape", lines: 1, rot: 1, p: [[-0.9, -0.9], [0.9, -0.9], [0.9, -0.35], [0.28, -0.35], [0.28, 0.9], [-0.28, 0.9], [-0.28, -0.35], [-0.9, -0.35]] },
+  hletter: { label: "the letter H", lines: 2, rot: 2, p: [[-0.7, -0.9], [-0.35, -0.9], [-0.35, -0.2], [0.35, -0.2], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [0.35, 0.2], [-0.35, 0.2], [-0.35, 0.9], [-0.7, 0.9]] },
+  iletter: { label: "the letter I", lines: 2, rot: 2, p: [[-0.7, -0.9], [0.7, -0.9], [0.7, -0.55], [0.2, -0.55], [0.2, 0.55], [0.7, 0.55], [0.7, 0.9], [-0.7, 0.9], [-0.7, 0.55], [-0.2, 0.55], [-0.2, -0.55], [-0.7, -0.55]] },
+  nletter: { label: "the letter N", lines: 0, rot: 2, p: [[-0.7, -0.9], [-0.35, -0.9], [0.35, 0.35], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [-0.35, -0.35], [-0.35, 0.9], [-0.7, 0.9]] },
+  zletter: { label: "the letter Z", lines: 0, rot: 2, p: [[-0.75, -0.9], [0.75, -0.9], [0.75, -0.5], [-0.2, 0.5], [0.75, 0.5], [0.75, 0.9], [-0.75, 0.9], [-0.75, 0.5], [0.2, -0.5], [-0.75, -0.5]] },
+  star5: { label: "a five-pointed star", lines: 5, rot: 5, p: starPoly(5, -90, 1, 0.4) },
+  star6: { label: "a six-pointed star", lines: 6, rot: 6, p: starPoly(6, -90, 1, 0.55) },
+};
+function ShapeFigure({ shape }) {
+  const s = SHAPES[shape];
+  const S = 56, O = 72;
+  const pts = s.p.map(([x, y]) => `${(O + x * S).toFixed(1)},${(O + y * S).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox="0 0 144 144" width="150" height="150" role="img" aria-label={s.label}
+      style={{ display: "block", margin: "0 auto 10px" }}>
+      <polygon points={pts} fill="var(--blue)" fillOpacity="0.16" stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // A Venn diagram whose regions the student taps to shade a target set.
 function VennShade({ venn, pressed, onToggle, showAnswer }) {
   const two = venn.sets === 2;
@@ -2008,6 +2058,23 @@ const TOPICS = [
     } },
   { id: "symmetry", name: "Symmetry", icon: "🦋", prereqs: [],
     generate() {
+      if (Math.random() < 0.82) {
+        const keys = Object.keys(SHAPES);
+        const k = keys[randInt(0, keys.length - 1)];
+        const s = SHAPES[k];
+        const cap = (t) => t[0].toUpperCase() + t.slice(1);
+        const askLines = Math.random() < 0.5;
+        return {
+          prompt: askLines
+            ? `The shape shown is ${s.label}.\nHow many lines of symmetry does it have?`
+            : `The shape shown is ${s.label}.\nWhat is its order of rotational symmetry?`,
+          figure: { shape: k },
+          answer: `${askLines ? s.lines : s.rot}`, hint: "Enter a number.",
+          steps: askLines
+            ? [`${cap(s.label)} has ${s.lines} line${s.lines === 1 ? "" : "s"} of symmetry.`]
+            : [`Turned through a full circle, ${s.label} looks the same ${s.rot} time${s.rot === 1 ? "" : "s"}.`, `Order of rotational symmetry = ${s.rot}.`],
+        };
+      }
       const n = randInt(3, 10);
       return { prompt: `How many lines of symmetry does a regular polygon with ${n} sides have?`, answer: `${n}`, hint: "Enter a number.",
         steps: [`A regular polygon has one line of symmetry per side`, `Answer: ${n}`] };
@@ -2082,8 +2149,15 @@ const TOPICS = [
       }
 
       const a = randInt(8, 20), b = randInt(8, 20), both = randInt(1, Math.min(a, b) - 1);
-      return { prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in A∪B`, answer: `${a + b - both}`, hint: "Enter a number.",
-        steps: [`n(A∪B) = n(A) + n(B) − n(A∩B)`, `= ${a} + ${b} − ${both} = ${a + b - both}`] };
+      const aOnly = a - both, bOnly = b - both, union = a + b - both;
+      const ask = pick([
+        { q: "A ∪ B", ans: union, s: [`n(A ∪ B) = n(A) + n(B) − n(A ∩ B)`, `= ${a} + ${b} − ${both} = ${union}`] },
+        { q: "A ∩ B", ans: both, s: [`${both} elements are stated to be in both sets`, `n(A ∩ B) = ${both}`] },
+        { q: "A only (in A but not B)", ans: aOnly, s: [`n(A only) = n(A) − n(A ∩ B)`, `= ${a} − ${both} = ${aOnly}`] },
+        { q: "B only (in B but not A)", ans: bOnly, s: [`n(B only) = n(B) − n(A ∩ B)`, `= ${b} − ${both} = ${bOnly}`] },
+      ]);
+      return { prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in ${ask.q}`,
+        answer: `${ask.ans}`, hint: "Enter a number.", steps: ask.s };
     } },
   { id: "vectors", name: "Vectors", icon: "➡️", prereqs: ["algebra"],
     generate() {
@@ -4058,6 +4132,7 @@ export default function MathsUnlockedBN() {
 
               {question.graph && <LineGraph data={question.graph} />}
               {question.motion && <MotionGraph {...question.motion} />}
+              {question.figure && <ShapeFigure shape={question.figure.shape} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
