@@ -555,27 +555,31 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
   const nrm = (a) => { const L = Math.hypot(a[0], a[1]) || 1; return [a[0] / L, a[1] / L]; };
   const F = (n) => n.toFixed(1);
 
-  // side label: true midpoint of edge i, pushed along the outward normal
+  // a light halo behind text so labels stay readable if they cross a line
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.6, strokeLinejoin: "round" };
+  // side label: true midpoint of edge i, pushed out along the perpendicular
   const sidePos = (i) => {
     const a = P[(i + 1) % 3], b = P[(i + 2) % 3], opp = P[i];
     const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     let nv = nrm([-(b[1] - a[1]), b[0] - a[0]]);
     if ((mid[0] + nv[0] - opp[0]) ** 2 + (mid[1] + nv[1] - opp[1]) ** 2 < (mid[0] - nv[0] - opp[0]) ** 2 + (mid[1] - nv[1] - opp[1]) ** 2) nv = [-nv[0], -nv[1]];
-    return [mid[0] + nv[0] * 15, mid[1] + nv[1] * 15];
+    return [mid[0] + nv[0] * 18, mid[1] + nv[1] * 18];
   };
-  // angle arc + label along the bisector, at vertex i — sized so it
-  // never reaches the far edge (matters for thin / obtuse triangles)
+  // angle arc + label along the bisector at vertex i — the radius grows
+  // for narrow angles so the arc is visible, capped by the vertex height
   const angleAt = (i) => {
     const v = P[i], a = P[(i + 1) % 3], b = P[(i + 2) % 3];
     const d1 = nrm([a[0] - v[0], a[1] - v[1]]), d2 = nrm([b[0] - v[0], b[1] - v[1]]);
     const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     const hgt = Math.abs((b[0] - a[0]) * (a[1] - v[1]) - (a[0] - v[0]) * (b[1] - a[1])) / edgeLen;
-    const R = Math.max(9, Math.min(16, hgt * 0.42));
-    const labD = Math.min(R + 11, hgt * 0.58);
-    const a1 = [v[0] + d1[0] * R, v[1] + d1[1] * R], a2 = [v[0] + d2[0] * R, v[1] + d2[1] * R];
     let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
     while (ang <= -Math.PI) ang += 2 * Math.PI;
     while (ang > Math.PI) ang -= 2 * Math.PI;
+    const deg = Math.abs(ang) * 180 / Math.PI;
+    let R = 13 + Math.max(0, 55 - deg) * 0.32;   // bigger for narrow angles
+    R = Math.max(9, Math.min(R, hgt * 0.5, 26));
+    const labD = Math.min(R + 15, hgt * 0.6);
+    const a1 = [v[0] + d1[0] * R, v[1] + d1[1] * R], a2 = [v[0] + d2[0] * R, v[1] + d2[1] * R];
     const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
     return {
       path: `M ${F(a1[0])} ${F(a1[1])} A ${F(R)} ${F(R)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
@@ -600,20 +604,20 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
         const { path, lab: pos } = angleAt(i);
         return (
           <g key={`a${i}`}>
-            <path d={path} fill="none" stroke="var(--red)" strokeWidth="1.5" />
-            <text x={F(pos[0])} y={F(pos[1])} fontSize="9.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)">{lab}</text>
+            <path d={path} fill="none" stroke="var(--red)" strokeWidth="1.6" />
+            <text x={F(pos[0])} y={F(pos[1])} fontSize="9.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)" style={halo}>{lab}</text>
           </g>
         );
       })}
       {sideLabels.map((lab, i) => {
         if (!lab) return null;
         const p = sidePos(i);
-        return <text key={`s${i}`} x={F(p[0])} y={F(p[1])} fontSize="10.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)">{lab}</text>;
+        return <text key={`s${i}`} x={F(p[0])} y={F(p[1])} fontSize="10.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)" style={halo}>{lab}</text>;
       })}
       {vertLabels.map((lab, i) => {
         if (!lab) return null;
         const d = nrm([P[i][0] - cen[0], P[i][1] - cen[1]]);
-        return <text key={`v${i}`} x={F(P[i][0] + d[0] * 12)} y={F(P[i][1] + d[1] * 12)} fontSize="9" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)">{lab}</text>;
+        return <text key={`v${i}`} x={F(P[i][0] + d[0] * 12)} y={F(P[i][1] + d[1] * 12)} fontSize="9" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)" style={halo}>{lab}</text>;
       })}
     </svg>
   );
@@ -2232,7 +2236,7 @@ const TOPICS = [
 
       if (r < 0.33) {
         // SOH CAH TOA — find a side
-        const th = pick([25, 30, 35, 40, 50, 55, 60, 65]);
+        const th = pick([32, 36, 40, 44, 48, 52, 56, 60]);
         const hyp = randInt(8, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
         const sides = { hyp, adj, opp };
         const [given, ask] = pick([["hyp", "opp"], ["hyp", "adj"], ["adj", "opp"], ["adj", "hyp"], ["opp", "adj"], ["opp", "hyp"]]);
@@ -2257,7 +2261,7 @@ const TOPICS = [
 
       if (r < 0.45) {
         // SOH CAH TOA — find an angle
-        const th = pick([28, 32, 37, 41, 48, 53, 58, 62]);
+        const th = pick([33, 37, 42, 46, 50, 54, 58]);
         const hyp = randInt(9, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
         const sides = { hyp, adj, opp };
         const shown = pick([["opp", "hyp"], ["adj", "hyp"], ["opp", "adj"]]);
