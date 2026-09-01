@@ -1718,9 +1718,79 @@ const TOPICS = [
     } },
   { id: "dailymaths", name: "Daily Maths", icon: "🛒", prereqs: ["algebra"],
     generate() {
-      const p = randInt(4, 40) * 2, pct = randInt(1, 9) * 10, discount = (p * pct) / 100;
-      return { prompt: `A shirt costs $${p}. It is discounted by ${pct}%. Find the new price`, answer: `${p - discount}`, hint: "Enter a number.",
-        steps: [`Discount = ${pct}% of $${p} = $${discount}`, `New price = $${p} − $${discount} = $${p - discount}`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const money = (n) => (Number.isInteger(n) ? `${n}` : n.toFixed(2));
+      const r = Math.random();
+
+      // A — percentage change: find new amount / original amount / percentage
+      if (r < 0.50) {
+        const up = Math.random() < 0.5;
+        const noun = pick(["jacket", "laptop", "bicycle", "sofa", "watch", "monthly bill"]);
+        const find = pick(["new", "original", "percent"]);
+        const pct = pick([5, 10, 12, 15, 20, 25, 30, 40]);
+        const g = gcd(pct, 100), step = 100 / g;
+        const orig = step * randInt(Math.ceil(40 / step), Math.floor(400 / step));
+        const change = (orig * pct) / 100;
+        const nw = up ? orig + change : orig - change;
+        const verb = up ? "goes up" : "goes down";
+        if (find === "new") return {
+          prompt: `A ${noun} costs $${orig}. The price ${verb} by ${pct}%. Find the new price`,
+          answer: `${nw}`, hint: "Enter a number ($).",
+          steps: [`Change = ${pct}% of $${orig} = $${change}`, `New price = $${orig} ${up ? "+" : "−"} $${change} = $${nw}`],
+        };
+        if (find === "original") return {
+          prompt: `After ${up ? "a rise" : "a fall"} of ${pct}%, a ${noun} costs $${nw}. Find the original price`,
+          answer: `${orig}`, hint: "Enter a number ($).",
+          steps: [`$${nw} is ${100 + (up ? pct : -pct)}% of the original price`, `Original = $${nw} ÷ ${(100 + (up ? pct : -pct)) / 100} = $${orig}`],
+        };
+        return {
+          prompt: `A ${noun}'s price changes from $${orig} to $${nw}. Find the percentage ${up ? "increase" : "decrease"}`,
+          answer: `${pct}`, hint: "Enter a number (%).",
+          steps: [`Change = $${Math.abs(nw - orig)}`, `Percentage = ${Math.abs(nw - orig)} ÷ ${orig} × 100 = ${pct}%`],
+        };
+      }
+
+      // B — simple interest
+      if (r < 0.72) {
+        const P = randInt(2, 20) * 100, R = pick([2, 3, 4, 5, 6, 8, 10]), T = randInt(2, 6);
+        const I = (P * R * T) / 100, total = P + I;
+        const findTotal = Math.random() < 0.5;
+        return {
+          prompt: `$${P} is invested at ${R}% simple interest per year for ${T} years. Find the ${findTotal ? "total amount" : "interest earned"}`,
+          answer: `${findTotal ? total : I}`, hint: "Enter a number ($).",
+          steps: [
+            `Simple interest = P × R × T ÷ 100`,
+            `= ${P} × ${R} × ${T} ÷ 100 = ${I}`,
+            findTotal ? `Total = ${P} + ${I} = ${total}` : `Interest earned = ${I}`,
+          ],
+        };
+      }
+
+      // C — compound interest / exponential growth & decay
+      const grow = Math.random() < 0.6;
+      const P = randInt(2, 20) * 100, R = pick([5, 10, 20, 25]), T = randInt(2, 4);
+      const factor = grow ? 1 + R / 100 : 1 - R / 100;
+      const amount = Math.round(P * Math.pow(factor, T) * 100) / 100;
+      const scenario = grow
+        ? pick([
+          { text: `$${P} is invested at ${R}% compound interest per year`, unit: "years", ask: "total value" },
+          { text: `A $${P} painting rises in value by ${R}% each year`, unit: "years", ask: "value" },
+          { text: `A colony of ${P} bacteria grows by ${R}% every hour`, unit: "hours", ask: "number of bacteria" },
+        ])
+        : pick([
+          { text: `A car bought for $${P} loses ${R}% of its value each year`, unit: "years", ask: "value" },
+          { text: `A ${P} g radioactive sample decays by ${R}% each year`, unit: "years", ask: "mass in grams" },
+          { text: `A town of ${P} people shrinks by ${R}% each year`, unit: "years", ask: "population" },
+        ]);
+      return {
+        prompt: `${scenario.text}. Find the ${scenario.ask} after ${T} ${scenario.unit}`,
+        answer: `${amount}`, hint: "a decimal is fine",
+        steps: [
+          `${grow ? "Grows" : "Shrinks"} to ${money(factor * 100)}% each ${scenario.unit.slice(0, -1)} → multiply by ${money(factor)}`,
+          `Amount = ${P} × ${money(factor)}^${T}`,
+          `= ${amount}`,
+        ],
+      };
     } },
   { id: "mensuration", name: "Mensuration", icon: "▦", prereqs: [],
     generate() {
