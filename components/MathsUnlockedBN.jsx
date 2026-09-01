@@ -2076,9 +2076,41 @@ const TOPICS = [
     } },
   { id: "polygons", name: "Polygons", icon: "⬡", prereqs: [],
     generate() {
-      const n = randInt(3, 12);
-      return { prompt: `Find the sum of the interior angles of a polygon with ${n} sides (in degrees)`, answer: `${(n - 2) * 180}`, hint: "Enter a number.",
-        steps: [`Sum of interior angles = (n − 2) × 180°`, `= (${n} − 2) × 180 = ${(n - 2) * 180}°`] };
+      const NAME = { 3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon", 7: "heptagon", 8: "octagon", 9: "nonagon", 10: "decagon", 11: "hendecagon", 12: "dodecagon" };
+      const named = (n) => NAME[n] || `${n}-sided polygon`;
+      const A = (n) => `${/^(octagon|8|11|18)/.test(named(n)) ? "an" : "a"} ${named(n)}`;
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const div360 = [3, 4, 5, 6, 8, 9, 10, 12]; // regular polygons with whole-number angles
+      const r = Math.random();
+
+      if (r < 0.22) {
+        const n = pick([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), sum = (n - 2) * 180;
+        return { prompt: `Find the sum of the interior angles of ${A(n)}, in degrees`, answer: `${sum}`, hint: "Enter a number.",
+          steps: [`Sum of interior angles = (n − 2) × 180°`, `= (${n} − 2) × 180 = ${sum}°`] };
+      }
+      if (r < 0.44) {
+        const n = pick(div360), each = ((n - 2) * 180) / n;
+        return { prompt: `Find the size of each interior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
+          steps: [`Sum of interior angles = (${n} − 2) × 180 = ${(n - 2) * 180}°`, `Each = ${(n - 2) * 180} ÷ ${n} = ${each}°`] };
+      }
+      if (r < 0.56) {
+        const n = pick(div360), each = 360 / n;
+        return { prompt: `Find the size of each exterior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
+          steps: [`The exterior angles of any polygon add up to 360°`, `Each = 360 ÷ ${n} = ${each}°`] };
+      }
+      if (r < 0.78) {
+        const n = randInt(3, 14), sum = (n - 2) * 180;
+        return { prompt: `The interior angles of a polygon add up to ${sum}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+          steps: [`(n − 2) × 180 = ${sum}`, `n − 2 = ${sum} ÷ 180 = ${sum / 180}`, `n = ${n}`] };
+      }
+      if (r < 0.88) {
+        const n = pick([3, 4, 5, 6, 8, 9, 10, 12, 15, 18, 20, 24]), ext = 360 / n;
+        return { prompt: `Each exterior angle of a regular polygon is ${ext}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+          steps: [`Number of sides = 360 ÷ (each exterior angle)`, `= 360 ÷ ${ext} = ${n}`] };
+      }
+      const n = pick([3, 4, 5, 6, 8, 9, 10, 12, 15, 18, 20]), interior = ((n - 2) * 180) / n, ext = 180 - interior;
+      return { prompt: `Each interior angle of a regular polygon is ${interior}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+        steps: [`Each exterior angle = 180 − ${interior} = ${ext}°`, `Number of sides = 360 ÷ ${ext} = ${n}`] };
     } },
   { id: "trigonometry", name: "Trigonometry", icon: "📐", prereqs: ["polygons"],
     generate() {
