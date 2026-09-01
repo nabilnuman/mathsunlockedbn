@@ -1257,7 +1257,7 @@ const TOPICS = [
         const cs = c === 0 ? "" : c > 0 ? ` + ${c}` : ` - ${-c}`;
         const eq = `y = ${mTerm}${cs}`;
         return {
-          prompt: `Draw the graph of ${eq}`,
+          prompt: `Draw the graph of:   ${eq}`,
           drawGraph: { m, c }, answer: eq, hint: "tap two points the line passes through",
           steps: [
             `Gradient ${mS}, crosses the y-axis at ${c}`,
@@ -1295,7 +1295,7 @@ const TOPICS = [
           const lo = Math.min(p, q), hi = Math.max(p, q);
 
           return {
-            prompt: `The graph of y = x²${plusA} is drawn.\nBy drawing a suitable line, solve  ${eqShown}`,
+            prompt: `y = x²${plusA} is drawn. By drawing a suitable line, solve:   ${eqShown}`,
             curve: { a }, solveLine: { m: M, c: C },
             solvePoints: tangent ? [[p, p * p + a]] : [[p, p * p + a], [q, q * q + a]],
             fields: tangent
