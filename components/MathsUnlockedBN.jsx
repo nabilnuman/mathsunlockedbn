@@ -1379,52 +1379,67 @@ const TOPICS = [
       const flip = (o) => ({ ">": "<", "<": ">", "≥": "≤", "≤": "≥" }[o]);
       const xc = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
       const tm = (n) => (n > 0 ? ` + ${n}` : n < 0 ? ` - ${-n}` : "");
+      const xtm = (n) => (n > 0 ? ` + ${n === 1 ? "" : n}x` : ` - ${n === -1 ? "" : -n}x`);
+      const divLine = (k, ans, x0) => `Divide by ${k}${k < 0 ? " — the inequality flips" : ""}:  x ${ans} ${x0}`;
 
-      const op = OPS[randInt(0, 3)];
-      const x0 = nz(-6, 6);
-      const r = Math.random();
-      let display, answerOp, steps;
+      const build = () => {
+        const op = OPS[randInt(0, 3)];
+        const x0 = nz(-6, 6);
+        const r = Math.random();
 
-      if (r < 0.45) {
-        // negative coefficient — dividing flips the sign
-        const a = nz(-5, -1);
-        answerOp = flip(op);
-        if (Math.random() < 0.5) {
-          const b = nz(-9, 9), c = a * x0 + b;
-          display = `${xc(a)}${tm(b)} ${op} ${c}`;
-          steps = [`Move the ${b >= 0 ? "+ " + b : "− " + -b} across:  ${xc(a)} ${op} ${c - b}`,
-            `Divide by ${a} — the inequality flips:  x ${answerOp} ${x0}`];
-        } else {
-          const b = randInt(1, 9), c = a * x0 + b; // display as "b - |a|x  op  c"
-          display = `${b} ${a === -1 ? "- x" : `- ${-a}x`} ${op} ${c}`;
-          steps = [`Subtract ${b} from both sides:  ${xc(a)} ${op} ${c - b}`,
-            `Divide by ${a} — the inequality flips:  x ${answerOp} ${x0}`];
+        if (r < 0.28) {
+          // single x-term, one number  (negative or positive coefficient)
+          const a = Math.random() < 0.65 ? nz(-5, -1) : randInt(2, 6);
+          const b = nz(-9, 9), c = a * x0 + b, ans = a < 0 ? flip(op) : op;
+          const disp = (Math.random() < 0.4 && a < 0 && b > 0)
+            ? `${b} ${a === -1 ? "- x" : `- ${-a}x`} ${op} ${c}` // "7 - 3x"
+            : `${xc(a)}${tm(b)} ${op} ${c}`;
+          return { disp, ans, x0, op, steps: [`Get the x-term by itself:  ${xc(a)} ${op} ${c - b}`, divLine(a, ans, x0)] };
         }
-      } else if (r < 0.72) {
-        // positive coefficient — no flip
-        const a = randInt(2, 6), b = nz(-9, 9), c = a * x0 + b;
-        answerOp = op;
-        display = `${xc(a)}${tm(b)} ${op} ${c}`;
-        steps = [`Move the ${b >= 0 ? "+ " + b : "− " + -b} across:  ${xc(a)} ${op} ${c - b}`,
-          `Divide by ${a}:  x ${op} ${x0}`];
-      } else {
+
+        if (r < 0.48) {
+          // expand a bracket first;  p(cx + q) op rhs
+          const p = [-4, -3, -2, 2, 3, 4][randInt(0, 5)], cx = randInt(1, 3);
+          const q = nz(-6, 6), rhs = p * cx * x0 + p * q, k = p * cx, ans = k < 0 ? flip(op) : op;
+          return { disp: `${p}(${xc(cx)}${tm(q)}) ${op} ${rhs}`, ans, x0, op,
+            steps: [`Expand:  ${xc(k)}${tm(p * q)} ${op} ${rhs}`, `Get the x-term by itself:  ${xc(k)} ${op} ${rhs - p * q}`, divLine(k, ans, x0)] };
+        }
+
+        if (r < 0.66) {
+          // several x-terms to collect;  k1·x ± k2·x ± b op rhs
+          const k1 = nz(-5, 5), k2 = nz(-5, 5), sum = k1 + k2;
+          if (sum === 0) return null;
+          const b = nz(-9, 9), rhs = sum * x0 + b, ans = sum < 0 ? flip(op) : op;
+          return { disp: `${xc(k1)}${xtm(k2)}${tm(b)} ${op} ${rhs}`, ans, x0, op,
+            steps: [`Collect the x-terms:  ${xc(sum)}${tm(b)} ${op} ${rhs}`, `Get the x-term by itself:  ${xc(sum)} ${op} ${rhs - b}`, divLine(sum, ans, x0)] };
+        }
+
+        if (r < 0.80) {
+          // fraction;  (a x + b) / n  op  rhs
+          const n = randInt(2, 5), a = nz(-4, 4), b = nz(-9, 9);
+          if ((a * x0 + b) % n !== 0) return null;
+          const rhs = (a * x0 + b) / n, ans = a < 0 ? flip(op) : op;
+          return { disp: `${frac(`${xc(a)}${tm(b)}`, `${n}`)} ${op} ${rhs}`, ans, x0, op,
+            steps: [`Multiply both sides by ${n}:  ${xc(a)}${tm(b)} ${op} ${n * rhs}`, `Get the x-term by itself:  ${xc(a)} ${op} ${n * rhs - b}`, divLine(a, ans, x0)] };
+        }
+
         // x on both sides
         let a = nz(-5, 5), c2 = nz(-5, 5);
         while (a === c2) c2 = nz(-5, 5);
-        const b = nz(-9, 9), diff = a - c2, d = diff * x0 + b;
-        answerOp = diff < 0 ? flip(op) : op;
-        display = `${xc(a)}${tm(b)} ${op} ${xc(c2)}${tm(d)}`;
-        steps = [`Collect x on the left, numbers on the right:  ${xc(diff)} ${op} ${d - b}`,
-          `Divide by ${diff}${diff < 0 ? " — the inequality flips" : ""}:  x ${answerOp} ${x0}`];
-      }
+        const b = nz(-9, 9), diff = a - c2, d = diff * x0 + b, ans = diff < 0 ? flip(op) : op;
+        return { disp: `${xc(a)}${tm(b)} ${op} ${xc(c2)}${tm(d)}`, ans, x0, op,
+          steps: [`Collect x on the left, numbers on the right:  ${xc(diff)} ${op} ${d - b}`, divLine(diff, ans, x0)] };
+      };
 
-      const answer = `x ${answerOp} ${x0}`;
-      const symbols = /[≥≤]/.test(answerOp) ? ["x", "≥", "≤"] : ["x", ">", "<"];
+      let q;
+      for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
+      const answer = `x ${q.ans} ${q.x0}`;
+      const symbols = /[≥≤]/.test(q.ans) ? ["x", "≥", "≤"] : ["x", ">", "<"];
       return {
-        prompt: `Solve the inequality:   ${display}`,
-        answer, hint: `give the answer as an inequality, e.g. x ${op} 3`, symbols,
-        check: (inp) => { const p = parseIneq(inp); return !!p && p.op === answerOp && Math.abs(p.val - x0) < 1e-6; },
-        steps,
+        prompt: `Solve the inequality:   ${q.disp}`,
+        answer, hint: `give the answer as an inequality, e.g. x ${q.op} 3`, symbols,
+        check: (inp) => { const p = parseIneq(inp); return !!p && p.op === q.ans && Math.abs(p.val - q.x0) < 1e-6; },
+        steps: q.steps,
       };
     } },
   { id: "transformations", name: "Transformations", icon: "🔄", prereqs: ["coordgeo"],
