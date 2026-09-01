@@ -373,6 +373,75 @@ function DrawGraph({ points, solution, curve, solvePoints, onToggle }) {
   );
 }
 
+// Is (px,py) on the "greater / above / right" side of the boundary?
+function regionAbove(reg, px, py) {
+  if (reg.kind === "vert") return px > reg.k;
+  if (reg.kind === "horiz") return py > reg.k;
+  return py > reg.m * px + reg.c;
+}
+function regionSideCorrect(reg, px, py) {
+  const ge = reg.op === ">" || reg.op === "≥";
+  return regionAbove(reg, px, py) === ge;
+}
+function regionDist(reg, px, py) {
+  if (reg.kind === "vert") return Math.abs(px - reg.k);
+  if (reg.kind === "horiz") return Math.abs(py - reg.k);
+  return Math.abs(py - (reg.m * px + reg.c)) / Math.sqrt(1 + reg.m * reg.m);
+}
+
+// A coordinate grid with one boundary line; the student taps a half-plane.
+function RegionGraph({ line, picked, showAnswer, onPick }) {
+  const R = 6, U = 19, O = 128, BIG = 400;
+  const X = (x) => O + x * U;
+  const Y = (y) => O - y * U;
+  const grid = [];
+  for (let i = -R; i <= R; i++) {
+    if (i === 0) continue;
+    grid.push(<line key={`v${i}`} x1={X(i)} y1={Y(-R)} x2={X(i)} y2={Y(R)} stroke="var(--grid)" strokeWidth="0.5" />);
+    grid.push(<line key={`h${i}`} x1={X(-R)} y1={Y(i)} x2={X(R)} y2={Y(i)} stroke="var(--grid)" strokeWidth="0.5" />);
+  }
+  const polyFor = (above) => {
+    let pts;
+    const far = above ? BIG : -BIG;
+    if (line.kind === "vert") pts = [[line.k, -BIG], [line.k, BIG], [far, BIG], [far, -BIG]];
+    else if (line.kind === "horiz") pts = [[-BIG, line.k], [BIG, line.k], [BIG, far], [-BIG, far]];
+    else pts = [[-BIG, line.m * -BIG + line.c], [BIG, line.m * BIG + line.c], [BIG, far], [-BIG, far]];
+    return pts.map(([gx, gy]) => `${X(gx)},${Y(gy)}`).join(" ");
+  };
+  const pickedAbove = picked ? regionAbove(line, picked[0], picked[1]) : null;
+  const correctAbove = line.op === ">" || line.op === "≥";
+  const bs = { stroke: "var(--blue)", strokeWidth: 2.4, strokeLinecap: "round", clipPath: "url(#rg-clip)", strokeDasharray: line.solid ? undefined : "5 4" };
+  return (
+    <svg viewBox="0 0 256 256" width="248" height="248" role="img" aria-label="tap a region"
+      style={{ maxWidth: "100%", display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="var(--card)" stroke="var(--grid)" />
+      <clipPath id="rg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
+      {grid}
+      {showAnswer && <polygon points={polyFor(correctAbove)} fill="var(--green)" fillOpacity="0.25" clipPath="url(#rg-clip)" />}
+      {pickedAbove != null && <polygon points={polyFor(pickedAbove)} fill="var(--blue)" fillOpacity="0.18" clipPath="url(#rg-clip)" />}
+      <line x1={X(-R)} y1={Y(0)} x2={X(R)} y2={Y(0)} stroke="var(--ink)" strokeWidth="1.2" />
+      <line x1={X(0)} y1={Y(-R)} x2={X(0)} y2={Y(R)} stroke="var(--ink)" strokeWidth="1.2" />
+      {[-4, -2, 2, 4].map((t) => (
+        <g key={t}>
+          <text x={X(t)} y={Y(0) + 11} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>
+          <text x={X(0) - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      {line.kind === "vert" && <line x1={X(line.k)} y1={Y(-R)} x2={X(line.k)} y2={Y(R)} {...bs} />}
+      {line.kind === "horiz" && <line x1={X(-R)} y1={Y(line.k)} x2={X(R)} y2={Y(line.k)} {...bs} />}
+      {line.kind === "diag" && <line x1={X(-R)} y1={Y(line.m * -R + line.c)} x2={X(R)} y2={Y(line.m * R + line.c)} {...bs} />}
+      <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="transparent"
+        style={{ cursor: onPick ? "crosshair" : "default", pointerEvents: "all" }}
+        onClick={onPick ? (e) => {
+          const b = e.currentTarget.getBoundingClientRect();
+          const vx = (e.clientX - b.left) / b.width * 256;
+          const vy = (e.clientY - b.top) / b.height * 256;
+          onPick((vx - O) / U, (O - vy) / U);
+        } : undefined} />
+    </svg>
+  );
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
@@ -1382,6 +1451,40 @@ const TOPICS = [
       const xtm = (n) => (n > 0 ? ` + ${n === 1 ? "" : n}x` : ` - ${n === -1 ? "" : -n}x`);
       const divLine = (k, ans, x0) => `Divide by ${k}${k < 0 ? " — the inequality flips" : ""}:  x ${ans} ${x0}`;
 
+      if (Math.random() < 0.25) {
+        // shade the region that satisfies an inequality
+        const kind = ["diag", "diag", "vert", "horiz"][randInt(0, 3)];
+        const op = OPS[randInt(0, 3)];
+        const solid = op === "≤" || op === "≥";
+        const ge = op === ">" || op === "≥";
+        if (kind === "diag") {
+          const m = [-2, -1, 1, 2][randInt(0, 3)], c = nz(-3, 3);
+          const mE = `${xc(m)}${tm(c)}`;
+          const test0 = ({ ">": 0 > c, "<": 0 < c, "≥": 0 >= c, "≤": 0 <= c })[op];
+          return {
+            prompt: `The line y = ${mE} is drawn.\nTap the region where:   y ${op} ${mE}`,
+            region: { kind: "diag", m, c, op, solid },
+            answer: `y ${op} ${mE}`, hint: "tap anywhere in the correct half",
+            steps: [
+              `Boundary: y = ${mE}  (${solid ? "solid — the line is included" : "dashed — the line is not included"}).`,
+              `Test the origin (0, 0):  is  0 ${op} ${c}?  ${test0 ? "yes" : "no"}.`,
+              `So the region ${test0 ? "containing" : "not containing"} the origin satisfies  y ${op} ${mE}.`,
+            ],
+          };
+        }
+        const k = nz(-4, 4);
+        const axis = kind === "vert" ? "x" : "y";
+        return {
+          prompt: `The line ${axis} = ${k} is drawn.\nTap the region where:   ${axis} ${op} ${k}`,
+          region: { kind, k, op, solid },
+          answer: `${axis} ${op} ${k}`, hint: "tap anywhere in the correct half",
+          steps: [
+            `${axis} = ${k} is a ${kind === "vert" ? "vertical" : "horizontal"} line (${solid ? "solid — included" : "dashed — not included"}).`,
+            `${kind === "vert" ? (ge ? "Right" : "Left") : (ge ? "Above" : "Below")} the line is where  ${axis} ${op} ${k}.`,
+          ],
+        };
+      }
+
       const build = () => {
         const op = OPS[randInt(0, 3)];
         const x0 = nz(-6, 6);
@@ -2126,6 +2229,7 @@ export default function MathsUnlockedBN() {
   const [answerInput, setAnswerInput] = useState("");
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
+  const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
   const [feedback, setFeedback] = useState(null);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -2361,6 +2465,7 @@ export default function MathsUnlockedBN() {
     setAnswerInput("");
     setMultiInput({});
     setDrawPts([]);
+    setRegionPick(null);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2508,6 +2613,7 @@ export default function MathsUnlockedBN() {
     setAnswerInput("");
     setMultiInput({});
     setDrawPts([]);
+    setRegionPick(null);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2518,6 +2624,7 @@ export default function MathsUnlockedBN() {
     setAnswerInput("");
     setMultiInput({});
     setDrawPts([]);
+    setRegionPick(null);
     setFeedback(null);
     startTimeRef.current = Date.now();
   }
@@ -2533,10 +2640,20 @@ export default function MathsUnlockedBN() {
     });
   }
 
+  // "Shade the region" questions: tap a half-plane (rejected if too near the line).
+  function pickRegion(x, y) {
+    if (feedback || !question.region) return;
+    if (regionDist(question.region, x, y) < 0.35) { flash("Tap clearly on one side of the line."); return; }
+    setRegionPick([x, y]);
+  }
+
   function submitAnswer() {
     if (feedback) return;
     let correct;
-    if (question.drawSolve) {
+    if (question.region) {
+      if (!regionPick) return;
+      correct = regionSideCorrect(question.region, regionPick[0], regionPick[1]);
+    } else if (question.drawSolve) {
       if (drawPts.length < 2) return;
       if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return;
       correct = !!question.drawSolve(drawPts, multiInput);
@@ -3468,7 +3585,19 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              {question.drawGraph ? null : question.fields ? (
+              {question.region && (
+                <div style={{ marginBottom: 12 }}>
+                  <RegionGraph line={question.region} picked={regionPick} showAnswer={!!feedback}
+                    onPick={feedback ? null : pickRegion} />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
+                    {feedback ? (feedback.correct ? "Correct region shaded" : "Green shows the correct region")
+                      : regionPick ? "Tap the other side to switch, or check your answer"
+                      : "Tap the region where the inequality is true"}
+                  </div>
+                </div>
+              )}
+
+              {(question.drawGraph || question.region) ? null : question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   {question.fields.map((f, i) => (
                     <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -3521,6 +3650,7 @@ export default function MathsUnlockedBN() {
 
               {!feedback && (() => {
                 const notReady = (question.drawGraph && drawPts.length < 2)
+                  || (question.region && !regionPick)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
