@@ -563,18 +563,23 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
     if ((mid[0] + nv[0] - opp[0]) ** 2 + (mid[1] + nv[1] - opp[1]) ** 2 < (mid[0] - nv[0] - opp[0]) ** 2 + (mid[1] - nv[1] - opp[1]) ** 2) nv = [-nv[0], -nv[1]];
     return [mid[0] + nv[0] * 15, mid[1] + nv[1] * 15];
   };
-  // angle arc + label along the bisector, at vertex i
+  // angle arc + label along the bisector, at vertex i — sized so it
+  // never reaches the far edge (matters for thin / obtuse triangles)
   const angleAt = (i) => {
-    const v = P[i], d1 = nrm([P[(i + 1) % 3][0] - v[0], P[(i + 1) % 3][1] - v[1]]), d2 = nrm([P[(i + 2) % 3][0] - v[0], P[(i + 2) % 3][1] - v[1]]);
-    const R = 16;
+    const v = P[i], a = P[(i + 1) % 3], b = P[(i + 2) % 3];
+    const d1 = nrm([a[0] - v[0], a[1] - v[1]]), d2 = nrm([b[0] - v[0], b[1] - v[1]]);
+    const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const hgt = Math.abs((b[0] - a[0]) * (a[1] - v[1]) - (a[0] - v[0]) * (b[1] - a[1])) / edgeLen;
+    const R = Math.max(9, Math.min(16, hgt * 0.42));
+    const labD = Math.min(R + 11, hgt * 0.58);
     const a1 = [v[0] + d1[0] * R, v[1] + d1[1] * R], a2 = [v[0] + d2[0] * R, v[1] + d2[1] * R];
     let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
     while (ang <= -Math.PI) ang += 2 * Math.PI;
     while (ang > Math.PI) ang -= 2 * Math.PI;
     const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
     return {
-      path: `M ${F(a1[0])} ${F(a1[1])} A ${R} ${R} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
-      lab: [v[0] + bis[0] * (R + 14), v[1] + bis[1] * (R + 14)],
+      path: `M ${F(a1[0])} ${F(a1[1])} A ${F(R)} ${F(R)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
+      lab: [v[0] + bis[0] * labD, v[1] + bis[1] * labD],
     };
   };
 
@@ -2301,7 +2306,9 @@ const TOPICS = [
 
       if (r < 0.78) {
         // cosine rule — find a side
-        const A = pick([35, 45, 55, 65, 75, 100, 110, 120]), b = randInt(5, 12), c = randInt(5, 12);
+        const A = pick([35, 45, 55, 65, 75, 100, 110]);
+        let b = randInt(5, 12), c = randInt(5, 12);
+        while (Math.abs(b - c) > 5) c = randInt(5, 12); // keep the triangle from being a sliver
         const a = Math.sqrt(b * b + c * c - 2 * b * c * Math.cos(A * D));
         return {
           prompt: `Find the length marked ?, in cm  (1 d.p.)`,
@@ -2312,10 +2319,16 @@ const TOPICS = [
       }
 
       if (r < 0.86) {
-        // cosine rule — find an angle
-        const b = randInt(6, 12), c = randInt(6, 12);
-        const a = randInt(Math.abs(b - c) + 2, b + c - 2);
-        const A = Math.acos((b * b + c * c - a * a) / (2 * b * c)) / D;
+        // cosine rule — find an angle  (every angle ≥ ~25° so it's not a sliver)
+        let b, c, a, A, B, C;
+        for (let i = 0; i < 40; i++) {
+          b = randInt(6, 12); c = randInt(6, 12);
+          a = randInt(Math.max(3, Math.abs(b - c) + 3), b + c - 3);
+          A = Math.acos((b * b + c * c - a * a) / (2 * b * c)) / D;
+          B = Math.acos((a * a + c * c - b * b) / (2 * a * c)) / D;
+          C = 180 - A - B;
+          if (Math.min(A, B, C) >= 25) break;
+        }
         return {
           prompt: `Find the angle marked ?, in degrees  (1 d.p.)`,
           tri: { verts: layout(c, b, A), sideLabels: [`${a} cm`, `${b} cm`, `${c} cm`], angleLabels: ["?", "", ""], vertLabels: ["A", "B", "C"] },
@@ -2336,7 +2349,9 @@ const TOPICS = [
       }
 
       // area of a non-right triangle
-      const A = pick([30, 40, 50, 60, 120, 135, 150]), b = randInt(5, 14), c = randInt(5, 14);
+      const A = pick([40, 50, 60, 70, 110, 120, 130]);
+      let b = randInt(6, 13), c = randInt(6, 13);
+      while (Math.abs(b - c) > 5) c = randInt(6, 13);
       const area = 0.5 * b * c * Math.sin(A * D);
       return {
         prompt: `Find the area of the triangle, in cm²  (1 d.p.)`,
