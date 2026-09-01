@@ -545,34 +545,71 @@ function ShapeFigure({ shape }) {
 // edge opposite vertex i; angleLabels[i] labels the angle at vertex i;
 // rightAngle is the vertex index carrying a right-angle square.
 function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels = [], rightAngle }) {
-  const W = 240, H = 176, m = 30;
+  const W = 244, H = 190, m = 42;
   const xs = verts.map((v) => v[0]), ys = verts.map((v) => v[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const s = Math.min((W - 2 * m) / (maxX - minX || 1), (H - 2 * m) / (maxY - minY || 1));
   const ox = (W - s * (maxX - minX)) / 2, oy = (H - s * (maxY - minY)) / 2;
   const P = verts.map(([x, y]) => [ox + (x - minX) * s, oy + (y - minY) * s]);
   const cen = [(P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3];
-  const push = (pt, from, d) => {
-    const dx = pt[0] - from[0], dy = pt[1] - from[1], L = Math.hypot(dx, dy) || 1;
-    return [pt[0] + (dx / L) * d, pt[1] + (dy / L) * d];
+  const nrm = (a) => { const L = Math.hypot(a[0], a[1]) || 1; return [a[0] / L, a[1] / L]; };
+  const F = (n) => n.toFixed(1);
+
+  // side label: true midpoint of edge i, pushed along the outward normal
+  const sidePos = (i) => {
+    const a = P[(i + 1) % 3], b = P[(i + 2) % 3], opp = P[i];
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let nv = nrm([-(b[1] - a[1]), b[0] - a[0]]);
+    if ((mid[0] + nv[0] - opp[0]) ** 2 + (mid[1] + nv[1] - opp[1]) ** 2 < (mid[0] - nv[0] - opp[0]) ** 2 + (mid[1] - nv[1] - opp[1]) ** 2) nv = [-nv[0], -nv[1]];
+    return [mid[0] + nv[0] * 15, mid[1] + nv[1] * 15];
   };
-  const edgeMid = (i) => [(P[(i + 1) % 3][0] + P[(i + 2) % 3][0]) / 2, (P[(i + 1) % 3][1] + P[(i + 2) % 3][1]) / 2];
+  // angle arc + label along the bisector, at vertex i
+  const angleAt = (i) => {
+    const v = P[i], d1 = nrm([P[(i + 1) % 3][0] - v[0], P[(i + 1) % 3][1] - v[1]]), d2 = nrm([P[(i + 2) % 3][0] - v[0], P[(i + 2) % 3][1] - v[1]]);
+    const R = 16;
+    const a1 = [v[0] + d1[0] * R, v[1] + d1[1] * R], a2 = [v[0] + d2[0] * R, v[1] + d2[1] * R];
+    let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
+    while (ang <= -Math.PI) ang += 2 * Math.PI;
+    while (ang > Math.PI) ang -= 2 * Math.PI;
+    const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
+    return {
+      path: `M ${F(a1[0])} ${F(a1[1])} A ${R} ${R} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
+      lab: [v[0] + bis[0] * (R + 14), v[1] + bis[1] * (R + 14)],
+    };
+  };
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="triangle diagram"
-      style={{ maxWidth: 290, display: "block", margin: "0 auto 10px" }}>
-      <polygon points={P.map((p) => p.join(",")).join(" ")} fill="var(--blue)" fillOpacity="0.12" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />
+      style={{ maxWidth: 292, display: "block", margin: "0 auto 10px" }}>
+      <polygon points={P.map((p) => `${F(p[0])},${F(p[1])}`).join(" ")} fill="var(--blue)" fillOpacity="0.12" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />
       {typeof rightAngle === "number" && (() => {
         const v = P[rightAngle], a = P[(rightAngle + 1) % 3], b = P[(rightAngle + 2) % 3];
-        const n = (p) => { const dx = p[0] - v[0], dy = p[1] - v[1], L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
-        const u1 = n(a), u2 = n(b), k = 10;
+        const u1 = nrm([a[0] - v[0], a[1] - v[1]]), u2 = nrm([b[0] - v[0], b[1] - v[1]]), k = 11;
         const p1 = [v[0] + u1[0] * k, v[1] + u1[1] * k];
         const p2 = [p1[0] + u2[0] * k, p1[1] + u2[1] * k];
         const p3 = [v[0] + u2[0] * k, v[1] + u2[1] * k];
-        return <polyline points={[p1, p2, p3].map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink)" strokeWidth="1.2" />;
+        return <polyline points={[p1, p2, p3].map((p) => `${F(p[0])},${F(p[1])}`).join(" ")} fill="none" stroke="var(--ink)" strokeWidth="1.3" />;
       })()}
-      {sideLabels.map((lab, i) => lab && (() => { const [x, y] = push(edgeMid(i), cen, 15); return <text key={`s${i}`} x={x} y={y} fontSize="10.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)">{lab}</text>; })())}
-      {angleLabels.map((lab, i) => lab && (() => { const [x, y] = push(P[i], cen, -20); return <text key={`a${i}`} x={x} y={y} fontSize="10" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)">{lab}</text>; })())}
-      {vertLabels.map((lab, i) => lab && (() => { const [x, y] = push(P[i], cen, 9); return <text key={`v${i}`} x={x} y={y} fontSize="10" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)">{lab}</text>; })())}
+      {angleLabels.map((lab, i) => {
+        if (!lab || i === rightAngle) return null;
+        const { path, lab: pos } = angleAt(i);
+        return (
+          <g key={`a${i}`}>
+            <path d={path} fill="none" stroke="var(--red)" strokeWidth="1.5" />
+            <text x={F(pos[0])} y={F(pos[1])} fontSize="9.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)">{lab}</text>
+          </g>
+        );
+      })}
+      {sideLabels.map((lab, i) => {
+        if (!lab) return null;
+        const p = sidePos(i);
+        return <text key={`s${i}`} x={F(p[0])} y={F(p[1])} fontSize="10.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)">{lab}</text>;
+      })}
+      {vertLabels.map((lab, i) => {
+        if (!lab) return null;
+        const d = nrm([P[i][0] - cen[0], P[i][1] - cen[1]]);
+        return <text key={`v${i}`} x={F(P[i][0] + d[0] * 12)} y={F(P[i][1] + d[1] * 12)} fontSize="9" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--muted)">{lab}</text>;
+      })}
     </svg>
   );
 }
@@ -2162,7 +2199,23 @@ const TOPICS = [
 
       const r = Math.random();
 
-      if (r < 0.15) {
+      if (r < 0.16) {
+        // Pythagoras — ~40% ask for a leg (using a triple so it's a whole number)
+        if (Math.random() < 0.4) {
+          const [x, y, h] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17], [9, 12, 15], [7, 24, 25], [20, 21, 29], [12, 16, 20], [10, 24, 26], [9, 40, 41]]);
+          const giveX = Math.random() < 0.5;
+          const known = giveX ? x : y, unknown = giveX ? y : x;
+          const sl = ["", "", ""];
+          sl[2] = `${h} cm`;                       // rlayout(x,y): edge 2 = hypotenuse
+          sl[giveX ? 1 : 0] = `${known} cm`;       // edge 1 = leg x (adj), edge 0 = leg y (opp)
+          sl[giveX ? 0 : 1] = "?";
+          return {
+            prompt: `Find the length marked ?, in cm`,
+            tri: { verts: rlayout(x, y), sideLabels: sl, rightAngle: 2 },
+            answer: `${unknown}`, hint: "rearrange Pythagoras", check: approx(unknown),
+            steps: [`Pythagoras:  (missing side)² = ${h}² − ${known}²`, `= ${h * h} − ${known * known} = ${h * h - known * known}`, `missing side = √${h * h - known * known} = ${unknown} cm`],
+          };
+        }
         const p = randInt(4, 13), q = randInt(4, 13), hyp = Math.sqrt(p * p + q * q);
         return {
           prompt: `Find the length of the hypotenuse (marked ?), in cm`,
@@ -2221,7 +2274,7 @@ const TOPICS = [
       if (r < 0.57) {
         // sine rule — find a side
         let A = pick([35, 40, 45, 50, 55, 60, 70, 80]), B = pick([35, 40, 45, 50, 55, 60, 70]);
-        while (A + B > 150) B = pick([35, 40, 45, 50, 55]);
+        while (A + B > 150 || B === A) B = pick([35, 40, 45, 50, 55]);
         const C = 180 - A - B, a = randInt(6, 14);
         const b = a * Math.sin(B * D) / Math.sin(A * D), c = a * Math.sin(C * D) / Math.sin(A * D);
         return {
@@ -2234,7 +2287,9 @@ const TOPICS = [
 
       if (r < 0.65) {
         // sine rule — find an angle  (A + B ≤ 130 by construction)
-        const A = pick([30, 40, 50, 60, 70]), B = pick([35, 40, 45, 50, 55, 60]);
+        const A = pick([30, 40, 50, 60, 70]);
+        let B = pick([35, 40, 45, 50, 55, 60]);
+        while (B === A) B = pick([35, 45, 55]);
         const a = randInt(8, 14), b = a * Math.sin(B * D) / Math.sin(A * D);
         return {
           prompt: `The angle marked ? is acute. Find it, in degrees  (1 d.p.)`,
