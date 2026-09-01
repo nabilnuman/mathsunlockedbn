@@ -490,6 +490,81 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo 
   );
 }
 
+// A Venn diagram whose regions the student taps to shade a target set.
+function VennShade({ venn, pressed, onToggle, showAnswer }) {
+  const two = venn.sets === 2;
+  const U = { x: 8, y: 8, w: 224, h: 184 };
+  const cir = two
+    ? { A: [92, 102, 60], B: [148, 102, 60] }
+    : { A: [92, 86, 52], B: [148, 86, 52], C: [120, 134, 52] };
+  const inC = (p, c) => (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 < c[2] ** 2;
+  const regionAt = (px, py) => {
+    const p = [px, py];
+    const iA = inC(p, cir.A), iB = inC(p, cir.B), iC = two ? false : inC(p, cir.C);
+    if (two) return iA && iB ? "ab" : iA ? "a" : iB ? "b" : "out";
+    if (iA && iB && iC) return "abc";
+    if (iA && iB) return "ab";
+    if (iA && iC) return "ac";
+    if (iB && iC) return "bc";
+    if (iA) return "a"; if (iB) return "b"; if (iC) return "c";
+    return "out";
+  };
+  const C = (c, extra) => <circle cx={c[0]} cy={c[1]} r={c[2]} {...extra} />;
+  const mr = () => <rect x={U.x} y={U.y} width={U.w} height={U.h} fill="#fff" />;
+  const mf = { maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 240, height: 200 };
+  const bigrect = (f) => <rect x={U.x} y={U.y} width={U.w} height={U.h} {...f} />;
+
+  const shape = (key, fill, op) => {
+    const f = { fill, fillOpacity: op };
+    if (two) {
+      if (key === "a") return C(cir.A, { ...f, mask: "url(#vs-nB)" });
+      if (key === "b") return C(cir.B, { ...f, mask: "url(#vs-nA)" });
+      if (key === "ab") return <g clipPath="url(#vs-cA)">{C(cir.B, f)}</g>;
+      return bigrect({ ...f, mask: "url(#vs-out)" });
+    }
+    if (key === "a") return C(cir.A, { ...f, mask: "url(#vs-nBC)" });
+    if (key === "b") return C(cir.B, { ...f, mask: "url(#vs-nAC)" });
+    if (key === "c") return C(cir.C, { ...f, mask: "url(#vs-nAB)" });
+    if (key === "ab") return <g clipPath="url(#vs-cA)">{C(cir.B, { ...f, mask: "url(#vs-nC)" })}</g>;
+    if (key === "ac") return <g clipPath="url(#vs-cA)">{C(cir.C, { ...f, mask: "url(#vs-nB)" })}</g>;
+    if (key === "bc") return <g clipPath="url(#vs-cB)">{C(cir.C, { ...f, mask: "url(#vs-nA)" })}</g>;
+    if (key === "abc") return <g clipPath="url(#vs-cA)"><g clipPath="url(#vs-cB)">{C(cir.C, f)}</g></g>;
+    return bigrect({ ...f, mask: "url(#vs-out)" });
+  };
+
+  return (
+    <svg viewBox="0 0 240 200" width="100%" role="img" aria-label="Venn diagram — tap regions to shade"
+      style={{ maxWidth: 330, display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      <defs>
+        <clipPath id="vs-cA">{C(cir.A)}</clipPath>
+        <clipPath id="vs-cB">{C(cir.B)}</clipPath>
+        <mask id="vs-nA" {...mf}>{mr()}{C(cir.A, { fill: "#000" })}</mask>
+        <mask id="vs-nB" {...mf}>{mr()}{C(cir.B, { fill: "#000" })}</mask>
+        {!two && <mask id="vs-nC" {...mf}>{mr()}{C(cir.C, { fill: "#000" })}</mask>}
+        {!two && <mask id="vs-nBC" {...mf}>{mr()}{C(cir.B, { fill: "#000" })}{C(cir.C, { fill: "#000" })}</mask>}
+        {!two && <mask id="vs-nAC" {...mf}>{mr()}{C(cir.A, { fill: "#000" })}{C(cir.C, { fill: "#000" })}</mask>}
+        {!two && <mask id="vs-nAB" {...mf}>{mr()}{C(cir.A, { fill: "#000" })}{C(cir.B, { fill: "#000" })}</mask>}
+        <mask id="vs-out" {...mf}>{mr()}{C(cir.A, { fill: "#000" })}{C(cir.B, { fill: "#000" })}{!two ? C(cir.C, { fill: "#000" }) : null}</mask>
+      </defs>
+      <rect x={U.x} y={U.y} width={U.w} height={U.h} fill="var(--card)" stroke="var(--grid)" />
+      {showAnswer && venn.target.map((k) => <g key={`t${k}`}>{shape(k, "var(--green)", 0.3)}</g>)}
+      {pressed.map((k) => <g key={`p${k}`}>{shape(k, "var(--blue)", 0.34)}</g>)}
+      {C(cir.A, { fill: "none", stroke: "var(--ink)", strokeWidth: 1.6 })}
+      {C(cir.B, { fill: "none", stroke: "var(--ink)", strokeWidth: 1.6 })}
+      {!two && C(cir.C, { fill: "none", stroke: "var(--ink)", strokeWidth: 1.6 })}
+      <text x={cir.A[0] - cir.A[2] + 5} y={cir.A[1] - cir.A[2] + 14} fontSize="12" fontWeight="700" fill="var(--ink)">A</text>
+      <text x={cir.B[0] + cir.B[2] - 13} y={cir.B[1] - cir.B[2] + 14} fontSize="12" fontWeight="700" fill="var(--ink)">B</text>
+      {!two && <text x={cir.C[0] - 4} y={cir.C[1] + cir.C[2] - 5} fontSize="12" fontWeight="700" fill="var(--ink)">C</text>}
+      <rect x={U.x} y={U.y} width={U.w} height={U.h} fill="transparent"
+        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all" }}
+        onClick={onToggle ? (e) => {
+          const b = e.currentTarget.getBoundingClientRect();
+          onToggle(regionAt((e.clientX - b.left) / b.width * 240, (e.clientY - b.top) / b.height * 200));
+        } : undefined} />
+    </svg>
+  );
+}
+
 // A translucent scratch sheet over the quiz card for rough working.
 // Strokes are normalised (0–1) so they survive card resizes; the parent
 // clears them when the question changes.
@@ -1969,6 +2044,43 @@ const TOPICS = [
     } },
   { id: "sets", name: "Sets", icon: "∩", prereqs: ["probability"],
     generate() {
+      const pick = (arr) => arr[randInt(0, arr.length - 1)];
+
+      // shade-the-region on a Venn diagram
+      if (Math.random() < 0.6) {
+        const three = Math.random() < 0.25;
+        const nm2 = { a: "A only", b: "B only", ab: "A ∩ B", out: "outside A and B" };
+        const nm3 = { a: "A only", b: "B only", c: "C only", ab: "A ∩ B only", ac: "A ∩ C only", bc: "B ∩ C only", abc: "A ∩ B ∩ C", out: "outside all three" };
+        const list2 = [
+          { e: "A", t: ["a", "ab"] },
+          { e: "B", t: ["b", "ab"] },
+          { e: "A ∪ B", t: ["a", "b", "ab"] },
+          { e: "A ∩ B", t: ["ab"] },
+          { e: "A'", t: ["b", "out"] },
+          { e: "B'", t: ["a", "out"] },
+          { e: "A ∩ B'", t: ["a"] },
+          { e: "A' ∩ B", t: ["b"] },
+          { e: "(A ∪ B)'", t: ["out"] },
+          { e: "(A ∩ B)'", t: ["a", "b", "out"] },
+        ];
+        const list3 = [
+          { e: "A ∩ B ∩ C", t: ["abc"] },
+          { e: "A ∪ B ∪ C", t: ["a", "b", "c", "ab", "ac", "bc", "abc"] },
+          { e: "A ∩ B", t: ["ab", "abc"] },
+          { e: "A ∩ B ∩ C'", t: ["ab"] },
+          { e: "A ∩ (B ∪ C)", t: ["ab", "ac", "abc"] },
+          { e: "(A ∪ B ∪ C)'", t: ["out"] },
+        ];
+        const q = three ? pick(list3) : pick(list2);
+        const nm = three ? nm3 : nm2;
+        return {
+          prompt: `Shade the region:   ${q.e}`,
+          venn: { sets: three ? 3 : 2, target: q.t },
+          answer: q.e, hint: "tap every part of the region — tap again to unshade",
+          steps: [`${q.e} is made up of: ${q.t.map((k) => nm[k]).join(", ")}.`, `Tap each of those regions.`],
+        };
+      }
+
       const a = randInt(8, 20), b = randInt(8, 20), both = randInt(1, Math.min(a, b) - 1);
       return { prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in A∪B`, answer: `${a + b - both}`, hint: "Enter a number.",
         steps: [`n(A∪B) = n(A) + n(B) − n(A∩B)`, `= ${a} + ${b} − ${both} = ${a + b - both}`] };
@@ -2586,6 +2698,7 @@ export default function MathsUnlockedBN() {
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
+  const [vennPressed, setVennPressed] = useState([]); // region keys shaded on a Venn diagram question
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -2824,6 +2937,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setVennPressed([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -2974,6 +3088,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setVennPressed([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -2987,6 +3102,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setVennPressed([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -3011,10 +3127,19 @@ export default function MathsUnlockedBN() {
     setRegionPick([x, y]);
   }
 
+  function toggleVenn(key) {
+    if (feedback) return;
+    setVennPressed((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]));
+  }
+
   function submitAnswer() {
     if (feedback) return;
     let correct;
-    if (question.region) {
+    if (question.venn) {
+      if (vennPressed.length === 0) return;
+      const t = question.venn.target;
+      correct = vennPressed.length === t.length && vennPressed.every((k) => t.includes(k));
+    } else if (question.region) {
       if (!regionPick) return;
       correct = regionSideCorrect(question.region, regionPick[0], regionPick[1]);
     } else if (question.drawSolve) {
@@ -3962,7 +4087,18 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {(question.drawGraph || question.region) ? null : question.fields ? (
+              {question.venn && (
+                <div style={{ marginBottom: 12 }}>
+                  <VennShade venn={question.venn} pressed={vennPressed} showAnswer={!!feedback}
+                    onToggle={feedback ? null : toggleVenn} />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
+                    {feedback ? (feedback.correct ? "Correct — that's the region" : "Green shows the correct region")
+                      : "Tap every part of the region to shade it"}
+                  </div>
+                </div>
+              )}
+
+              {(question.drawGraph || question.region || question.venn) ? null : question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   {question.fields.map((f, i) => (
                     <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -4016,6 +4152,7 @@ export default function MathsUnlockedBN() {
               {!feedback && (() => {
                 const notReady = (question.drawGraph && drawPts.length < 2)
                   || (question.region && !regionPick)
+                  || (question.venn && vennPressed.length === 0)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
