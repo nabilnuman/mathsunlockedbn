@@ -169,6 +169,29 @@ function parseDuration(s) {
   if (m) return +m[1] * 60 + +m[2];
   return null;
 }
+// Parse a solved linear inequality → { op, val } with x isolated on the
+// left. Accepts "x>2", "2<x", "-x >= -4", "2x<6", ">= <= ≥ ≤" etc.
+function parseIneq(s) {
+  s = String(s).trim().toLowerCase().replace(/\s+/g, "")
+    .replace(/>=|=>|≥/g, "≥").replace(/<=|=<|≤/g, "≤");
+  const m = s.match(/^(.+?)(≥|≤|>|<)(.+)$/);
+  if (!m) return null;
+  const flipOp = { ">": "<", "<": ">", "≥": "≤", "≤": "≥" };
+  const evalN = (t) => { try { return evalString(t, 0); } catch (e) { return NaN; } };
+  const coefOfX = (t) => {
+    const mm = t.match(/^(-?\d*(?:\.\d+)?)x$/);
+    return mm ? (mm[1] === "" ? 1 : mm[1] === "-" ? -1 : parseFloat(mm[1])) : null;
+  };
+  let o = m[2], k = coefOfX(m[1]), other = m[3], xLeft = true;
+  if (k == null) { k = coefOfX(m[3]); other = m[1]; xLeft = false; }
+  if (k == null || k === 0) return null;
+  let val = evalN(other);
+  if (!Number.isFinite(val)) return null;
+  val /= k;
+  if (k < 0) o = flipOp[o];
+  if (!xLeft) o = flipOp[o];
+  return { op: o, val };
+}
 // c√rad → { c, d } with d square-free (pull perfect squares out).
 function surdParts(c, rad) {
   let d = rad;
@@ -1351,9 +1374,58 @@ const TOPICS = [
     } },
   { id: "inequalities", name: "Linear Inequalities & Shading", icon: "🚧", prereqs: ["algebra", "coordgeo"],
     generate() {
-      const a = randInt(2, 8), xB = randInt(-9, 9), b = randInt(-10, 10), c = a * xB + b;
-      return { prompt: `Solve:   ${a}x ${spaced(b)} < ${c}.   What is the boundary value of x?`, answer: `${xB}`, hint: "Enter a number.",
-        steps: [`Treat it as an equation to find the boundary: ${a}x ${spaced(b)} = ${c}`, `Subtract ${b}: ${a}x = ${c - b}`, `Divide by ${a}: x = ${xB}`] };
+      const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+      const OPS = [">", "<", "≥", "≤"];
+      const flip = (o) => ({ ">": "<", "<": ">", "≥": "≤", "≤": "≥" }[o]);
+      const xc = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
+      const tm = (n) => (n > 0 ? ` + ${n}` : n < 0 ? ` - ${-n}` : "");
+
+      const op = OPS[randInt(0, 3)];
+      const x0 = nz(-6, 6);
+      const r = Math.random();
+      let display, answerOp, steps;
+
+      if (r < 0.45) {
+        // negative coefficient — dividing flips the sign
+        const a = nz(-5, -1);
+        answerOp = flip(op);
+        if (Math.random() < 0.5) {
+          const b = nz(-9, 9), c = a * x0 + b;
+          display = `${xc(a)}${tm(b)} ${op} ${c}`;
+          steps = [`Move the ${b >= 0 ? "+ " + b : "− " + -b} across:  ${xc(a)} ${op} ${c - b}`,
+            `Divide by ${a} — the inequality flips:  x ${answerOp} ${x0}`];
+        } else {
+          const b = randInt(1, 9), c = a * x0 + b; // display as "b - |a|x  op  c"
+          display = `${b} ${a === -1 ? "- x" : `- ${-a}x`} ${op} ${c}`;
+          steps = [`Subtract ${b} from both sides:  ${xc(a)} ${op} ${c - b}`,
+            `Divide by ${a} — the inequality flips:  x ${answerOp} ${x0}`];
+        }
+      } else if (r < 0.72) {
+        // positive coefficient — no flip
+        const a = randInt(2, 6), b = nz(-9, 9), c = a * x0 + b;
+        answerOp = op;
+        display = `${xc(a)}${tm(b)} ${op} ${c}`;
+        steps = [`Move the ${b >= 0 ? "+ " + b : "− " + -b} across:  ${xc(a)} ${op} ${c - b}`,
+          `Divide by ${a}:  x ${op} ${x0}`];
+      } else {
+        // x on both sides
+        let a = nz(-5, 5), c2 = nz(-5, 5);
+        while (a === c2) c2 = nz(-5, 5);
+        const b = nz(-9, 9), diff = a - c2, d = diff * x0 + b;
+        answerOp = diff < 0 ? flip(op) : op;
+        display = `${xc(a)}${tm(b)} ${op} ${xc(c2)}${tm(d)}`;
+        steps = [`Collect x on the left, numbers on the right:  ${xc(diff)} ${op} ${d - b}`,
+          `Divide by ${diff}${diff < 0 ? " — the inequality flips" : ""}:  x ${answerOp} ${x0}`];
+      }
+
+      const answer = `x ${answerOp} ${x0}`;
+      const symbols = /[≥≤]/.test(answerOp) ? ["x", "≥", "≤"] : ["x", ">", "<"];
+      return {
+        prompt: `Solve the inequality:   ${display}`,
+        answer, hint: `give the answer as an inequality, e.g. x ${op} 3`, symbols,
+        check: (inp) => { const p = parseIneq(inp); return !!p && p.op === answerOp && Math.abs(p.val - x0) < 1e-6; },
+        steps,
+      };
     } },
   { id: "transformations", name: "Transformations", icon: "🔄", prereqs: ["coordgeo"],
     generate() {
@@ -3416,7 +3488,7 @@ export default function MathsUnlockedBN() {
 
               {!feedback && (() => {
                 const ctx = `${question.hint || ""} ${question.answer || ""}`;
-                const syms = [];
+                const syms = question.symbols ? [...question.symbols] : [];
                 if (/π/.test(ctx)) syms.push("π");
                 if (/√|sqrt/i.test(ctx)) syms.push("√");
                 if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
