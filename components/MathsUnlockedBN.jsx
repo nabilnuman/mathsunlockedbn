@@ -1890,6 +1890,7 @@ export default function MathsUnlockedBN() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
   const [board, setBoard] = useState(null);           // { loading, schools: [...] }
+  const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResults, setFriendResults] = useState(null); // null = not searched yet
   const [friendLoading, setFriendLoading] = useState(false);
@@ -2397,6 +2398,7 @@ export default function MathsUnlockedBN() {
 
   function openLeaderboard() {
     setScreen("leaderboard");
+    setOpenSchool(null);
     loadBoard();
     markMilestone("leaderboard");
   }
@@ -2479,16 +2481,27 @@ export default function MathsUnlockedBN() {
     }
     const schools = Object.entries(bySchool).map(([name, members]) => {
       const ranked = members
-        .map((m) => ({ name: m.name, score: leaderboardScore(m), prestige: m.prestige || 0, level: levelFromExp(totalExp(m)), at: lastImprovementAt(m) }))
+        .map((m) => ({
+          name: m.name,
+          score: leaderboardScore(m),
+          prestige: m.prestige || 0,
+          level: levelFromExp(totalExp(m)),
+          title: titleForLevel(levelFromExp(totalExp(m))),
+          correct: m.totalCorrect || 0,
+          achievements: (m.achievements || []).length,
+          bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
+          at: lastImprovementAt(m),
+        }))
         .sort((a, b) => b.score - a.score || a.at - b.at);
-      const top = ranked.slice(0, 10);
+      const counting = ranked.slice(0, 10);
       return {
         name,
         members: members.length,
         atMax: ranked.filter((r) => r.level >= LEVEL_CAP).length,
-        score: top.reduce((sum, r) => sum + r.score, 0),
-        assembledAt: top.length ? Math.max(...top.map((r) => r.at)) : Infinity,
-        top,
+        score: counting.reduce((sum, r) => sum + r.score, 0),
+        assembledAt: counting.length ? Math.max(...counting.map((r) => r.at)) : Infinity,
+        top: counting,
+        roster: ranked.slice(0, 20),
       };
     });
     schools.sort((a, b) => b.score - a.score || a.assembledAt - b.assembledAt || a.name.localeCompare(b.name));
@@ -3373,23 +3386,56 @@ export default function MathsUnlockedBN() {
                 {board.schools.map((s, i) => {
                   const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
                   const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
+                  const expanded = openSchool === s.name;
                   return (
-                    <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, padding: "12px 14px", background: "var(--card)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden" }}>
+                      <button
+                        onClick={() => setOpenSchool(expanded ? null : s.name)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}
+                      >
                         <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"} · tap to {expanded ? "hide" : "see"} the top {Math.min(20, s.roster.length)}</div>
                         </div>
                         <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.score}</div>
-                      </div>
-                      {s.top.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                        <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+                      </button>
+
+                      {!expanded && s.top.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 14px 12px" }}>
                           {s.top.map((m, j) => (
                             <span key={j} style={{ fontSize: 10.5, color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 7px" }}>
                               {m.name} · {m.prestige ? `P${m.prestige} ` : ""}L{m.level}
                             </span>
                           ))}
+                        </div>
+                      )}
+
+                      {expanded && (
+                        <div style={{ borderTop: "1px solid var(--grid)" }}>
+                          {s.roster.map((m, j) => {
+                            const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                            return (
+                              <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                    {m.name}
+                                    {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
+                                    {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                                  </div>
+                                  <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                                    {m.title} · Level {m.level} · {m.correct} correct · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
+                                  </div>
+                                </div>
+                                <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ fontSize: 10.5, color: "var(--muted)", padding: "8px 14px 12px", borderTop: "1px solid var(--grid)" }}>
+                            The top 10 (above the dashed line) add up to the school score of {s.score}. Score per student = prestige × 20 + level.
+                          </div>
                         </div>
                       )}
                     </div>
