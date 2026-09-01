@@ -442,6 +442,54 @@ function RegionGraph({ line, picked, showAnswer, onPick }) {
   );
 }
 
+// A piecewise motion graph (distance–time or speed–time) with axis
+// labels, one highlighted segment, and optional shaded area beneath it.
+function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo }) {
+  const W = 288, Hh = 216, ml = 40, mr = 12, mt = 10, mb = 30;
+  const pw = W - ml - mr, ph = Hh - mt - mb;
+  const niceMax = (v) => {
+    const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
+    const n = v / p;
+    const m = n <= 1 ? 1 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 4 ? 4 : n <= 5 ? 5 : n <= 6 ? 6 : n <= 8 ? 8 : 10;
+    return m * p;
+  };
+  const xMax = niceMax(Math.max(...pts.map((p) => p[0])));
+  const yMax = niceMax(Math.max(...pts.map((p) => p[1]), 1));
+  const X = (x) => ml + (x / xMax) * pw;
+  const Y = (y) => mt + ph - (y / yMax) * ph;
+  const ticks = (mx) => { for (const k of [5, 4, 6, 3]) if (Math.round((mx / k) * 100) % 100 === 0) return Array.from({ length: k }, (_, i) => (i + 1) * (mx / k)); return Array.from({ length: 4 }, (_, i) => Math.round((i + 1) * (mx / 4))); };
+  return (
+    <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label={`${yLabel} against time graph`}
+      style={{ maxWidth: 330, display: "block", margin: "0 auto 10px" }}>
+      <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
+      {ticks(xMax).map((t) => (
+        <g key={`x${t}`}>
+          <line x1={X(t)} y1={mt} x2={X(t)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
+          <text x={X(t)} y={mt + ph + 12} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      {ticks(yMax).map((t) => (
+        <g key={`y${t}`}>
+          <line x1={ml} y1={Y(t)} x2={ml + pw} y2={Y(t)} stroke="var(--grid)" strokeWidth="0.5" />
+          <text x={ml - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      {shadeFrom != null && (() => {
+        const seg = pts.filter((p) => p[0] >= shadeFrom - 1e-9 && p[0] <= shadeTo + 1e-9);
+        const poly = [`${X(shadeFrom)},${Y(0)}`, ...seg.map((p) => `${X(p[0])},${Y(p[1])}`), `${X(shadeTo)},${Y(0)}`].join(" ");
+        return <polygon points={poly} fill="var(--blue)" fillOpacity="0.16" />;
+      })()}
+      <polyline points={pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")} fill="none" stroke="var(--blue)" strokeWidth="2.4" strokeLinejoin="round" />
+      {highlight && (
+        <polyline points={[pts[highlight[0]], pts[highlight[1]]].map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")}
+          fill="none" stroke="var(--amber)" strokeWidth="3.4" strokeLinecap="round" />
+      )}
+      <text x={ml + pw / 2} y={Hh - 4} fontSize="8.5" textAnchor="middle" fill="var(--muted)">time ({xUnit})</text>
+      <text x={11} y={mt + ph / 2} fontSize="8.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 11 ${mt + ph / 2})`}>{yLabel} ({yUnit})</text>
+    </svg>
+  );
+}
+
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
@@ -1553,9 +1601,120 @@ const TOPICS = [
     } },
   { id: "kinematics", name: "Kinematics", icon: "🚗", prereqs: ["algebra", "coordgeo", "time"],
     generate() {
-      const t = randInt(2, 8), speed = randInt(20, 90), d = t * speed;
-      return { prompt: `A car travels ${d} km in ${t} hours. Find its average speed in km/h`, answer: `${speed}`, hint: "Enter a number.",
-        steps: [`Speed = distance ÷ time`, `= ${d} ÷ ${t} = ${speed} km/h`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+      const r = Math.random();
+
+      // A — speed = distance ÷ time  (find speed / distance / time; time sometimes in minutes)
+      if (r < 0.30) {
+        const find = pick(["speed", "distance", "time"]);
+        const minutes = Math.random() < 0.3;
+        if (minutes) {
+          const tMin = pick([30, 40, 45, 90, 120]);
+          const g = gcd(tMin, 60), unit = 60 / g, tH = tMin / 60;
+          const speed = unit * randInt(Math.ceil(16 / unit), Math.floor(80 / unit));
+          const dist = Math.round(speed * tH);
+          if (find === "speed") return { prompt: `A cyclist rides ${dist} km in ${tMin} minutes. Find the average speed in km/h`, answer: `${speed}`, hint: "convert the time to hours first",
+            steps: [`${tMin} min = ${tMin} ÷ 60 = ${tH} h`, `Speed = ${dist} ÷ ${tH} = ${speed} km/h`] };
+          if (find === "distance") return { prompt: `A cyclist rides at ${speed} km/h for ${tMin} minutes. Find the distance in km`, answer: `${dist}`, hint: "convert the time to hours first",
+            steps: [`${tMin} min = ${tH} h`, `Distance = ${speed} × ${tH} = ${dist} km`] };
+          return { prompt: `A cyclist rides ${dist} km at ${speed} km/h. Find the time taken in minutes`, answer: `${tMin}`, hint: "answer in minutes",
+            steps: [`Time = ${dist} ÷ ${speed} = ${tH} h`, `${tH} h = ${tH} × 60 = ${tMin} min`] };
+        }
+        const ms = Math.random() < 0.45;
+        const spU = ms ? "m/s" : "km/h", dU = ms ? "m" : "km", tU = ms ? "s" : "h";
+        const t = randInt(2, 8), speed = ms ? randInt(2, 20) : randInt(20, 95), dist = speed * t;
+        if (find === "speed") return { prompt: `An object travels ${dist} ${dU} in ${t} ${ms ? "seconds" : "hours"}. Find the average speed in ${spU}`, answer: `${speed}`, hint: "Enter a number.",
+          steps: [`Speed = distance ÷ time`, `= ${dist} ÷ ${t} = ${speed} ${spU}`] };
+        if (find === "distance") return { prompt: `An object travels at ${speed} ${spU} for ${t} ${ms ? "seconds" : "hours"}. Find the distance in ${dU}`, answer: `${dist}`, hint: "Enter a number.",
+          steps: [`Distance = speed × time`, `= ${speed} × ${t} = ${dist} ${dU}`] };
+        return { prompt: `An object travels ${dist} ${dU} at ${speed} ${spU}. Find the time taken in ${ms ? "seconds" : "hours"}`, answer: `${t}`, hint: "Enter a number.",
+          steps: [`Time = distance ÷ speed`, `= ${dist} ÷ ${speed} = ${t} ${tU}`] };
+      }
+
+      // B — a = (v − u) ÷ t   (find a / v / u / t)
+      if (r < 0.55) {
+        const find = pick(["a", "v", "u", "t"]);
+        const a = nz(-4, 4), t = randInt(2, 8);
+        let u, v;
+        if (a > 0) { u = randInt(0, 12); v = u + a * t; }
+        else { v = randInt(0, 10); u = v - a * t; } // u = v + |a|·t  ≥ 0
+        const speeding = a > 0;
+        const aTxt = `${a} m/s²`;
+        if (find === "a") return { prompt: `A vehicle ${speeding ? "speeds up" : "slows"} from ${u} m/s to ${v} m/s in ${t} s. Find the acceleration in m/s²`, answer: `${a}`, hint: "a = (v − u) ÷ t; negative when slowing",
+          steps: [`a = (v − u) ÷ t`, `= (${v} − ${u}) ÷ ${t} = ${v - u} ÷ ${t} = ${a} m/s²`] };
+        if (find === "v") return { prompt: `A vehicle starts at ${u} m/s and accelerates at ${aTxt} for ${t} s. Find the final speed in m/s`, answer: `${v}`, hint: "v = u + a·t",
+          steps: [`v = u + a t`, `= ${u} + (${a})(${t}) = ${u} ${a * t >= 0 ? "+ " + a * t : "− " + -a * t} = ${v} m/s`] };
+        if (find === "u") return { prompt: `A vehicle reaches ${v} m/s after accelerating at ${aTxt} for ${t} s. Find the initial speed in m/s`, answer: `${u}`, hint: "u = v − a·t",
+          steps: [`u = v − a t`, `= ${v} − (${a})(${t}) = ${v} ${(-a * t) >= 0 ? "+ " + (-a * t) : "− " + (a * t)} = ${u} m/s`] };
+        return { prompt: `A vehicle changes from ${u} m/s to ${v} m/s with acceleration ${aTxt}. Find the time taken in s`, answer: `${t}`, hint: "t = (v − u) ÷ a",
+          steps: [`t = (v − u) ÷ a`, `= (${v} − ${u}) ÷ ${a} = ${v - u} ÷ ${a} = ${t} s`] };
+      }
+
+      // C — distance–time graph → gradient → speed of one stage
+      if (r < 0.78) {
+        const km = Math.random() < 0.5;
+        const xU = km ? "h" : "s", yU = km ? "km" : "m", spU = km ? "km/h" : "m/s";
+        const t1 = randInt(1, 3), s1 = km ? randInt(20, 60) : randInt(4, 15), d1 = s1 * t1;
+        const stopLen = randInt(1, 3), t2 = t1 + stopLen;
+        const dt3 = randInt(2, 3), s3 = km ? randInt(20, 60) : randInt(4, 15), d3 = d1 + s3 * dt3, t3 = t2 + dt3;
+        const pts = [[0, 0], [t1, d1], [t2, d1], [t3, d3]];
+        const stage = pick([1, 3]);
+        const ans = stage === 1 ? s1 : s3;
+        const hi = stage === 1 ? [0, 1] : [2, 3];
+        return {
+          prompt: `From the distance–time graph, find the speed during ${stage === 1 ? "the first stage" : "the final stage"} in ${spU}`,
+          motion: { pts, yLabel: "distance", xUnit: xU, yUnit: yU, highlight: hi },
+          answer: `${ans}`, hint: "speed = gradient of the line",
+          steps: [
+            `Speed = gradient = change in distance ÷ change in time`,
+            stage === 1 ? `= (${d1} − 0) ÷ (${t1} − 0) = ${d1} ÷ ${t1} = ${ans} ${spU}`
+              : `= (${d3} − ${d1}) ÷ (${t3} − ${t2}) = ${d3 - d1} ÷ ${t3 - t2} = ${ans} ${spU}`,
+          ],
+        };
+      }
+
+      // D — speed–time graph → area (distance) or gradient (acceleration)
+      const t1 = randInt(2, 5), cruise = randInt(2, 5), decel = randInt(2, 4);
+      const kind = pick(["accel", "decel", "distTri", "distRect", "distTotal"]);
+      const v1 = kind === "accel" ? t1 * randInt(2, 6) : kind === "decel" ? decel * randInt(2, 6) : 2 * randInt(3, 9);
+      const t2 = t1 + cruise, t3 = t2 + decel;
+      const pts = [[0, 0], [t1, v1], [t2, v1], [t3, 0]];
+      if (kind === "accel") return {
+        prompt: `From the speed–time graph, find the acceleration during the first ${t1} s in m/s²`,
+        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [0, 1] },
+        answer: `${v1 / t1}`, hint: "acceleration = gradient",
+        steps: [`Acceleration = gradient = ${v1} ÷ ${t1} = ${v1 / t1} m/s²`],
+      };
+      if (kind === "decel") return {
+        prompt: `From the speed–time graph, find the deceleration during the last ${decel} s in m/s²`,
+        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [2, 3] },
+        answer: `${v1 / decel}`, hint: "deceleration = size of the gradient",
+        steps: [`Deceleration = gradient size = ${v1} ÷ ${decel} = ${v1 / decel} m/s²`],
+      };
+      if (kind === "distTri") return {
+        prompt: `From the speed–time graph, find the distance travelled in the first ${t1} s in m`,
+        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [0, 1], shadeFrom: 0, shadeTo: t1 },
+        answer: `${(t1 * v1) / 2}`, hint: "distance = area under the graph",
+        steps: [`Area of the triangle = ½ × base × height`, `= ½ × ${t1} × ${v1} = ${(t1 * v1) / 2} m`],
+      };
+      if (kind === "distRect") return {
+        prompt: `From the speed–time graph, find the distance travelled while the speed is constant, in m`,
+        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [1, 2], shadeFrom: t1, shadeTo: t2 },
+        answer: `${cruise * v1}`, hint: "distance = area under the graph",
+        steps: [`Area of the rectangle = ${cruise} × ${v1} = ${cruise * v1} m`],
+      };
+      const total = (t1 * v1) / 2 + cruise * v1 + (decel * v1) / 2;
+      return {
+        prompt: `From the speed–time graph, find the total distance travelled in m`,
+        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", shadeFrom: 0, shadeTo: t3 },
+        answer: `${total}`, hint: "distance = total area under the graph",
+        steps: [
+          `Split into triangle + rectangle + triangle`,
+          `= ½·${t1}·${v1}  +  ${cruise}·${v1}  +  ½·${decel}·${v1}`,
+          `= ${(t1 * v1) / 2} + ${cruise * v1} + ${(decel * v1) / 2} = ${total} m`,
+        ],
+      };
     } },
   { id: "dailymaths", name: "Daily Maths", icon: "🛒", prereqs: ["algebra"],
     generate() {
@@ -3566,6 +3725,7 @@ export default function MathsUnlockedBN() {
               })()}
 
               {question.graph && <LineGraph data={question.graph} />}
+              {question.motion && <MotionGraph {...question.motion} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
