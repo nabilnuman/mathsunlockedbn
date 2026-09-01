@@ -289,7 +289,9 @@ function LineGraph({ data }) {
 // Interactive grid for "draw the graph of y = …". The student taps
 // lattice points; the last two define a line. `solution` (when set)
 // overlays the correct line in green after the answer is checked.
-function DrawGraph({ points, solution, onToggle }) {
+// `curve` ({a}) pre-draws the parabola y = x² + a; `solvePoints`
+// marks the intersection points in green once the answer is checked.
+function DrawGraph({ points, solution, curve, solvePoints, onToggle }) {
   const R = 6, U = 19, O = 128;
   const X = (x) => O + x * U;
   const Y = (y) => O - y * U;
@@ -330,11 +332,19 @@ function DrawGraph({ points, solution, onToggle }) {
         </g>
       ))}
       <clipPath id="dg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
+      {curve && (() => {
+        const pl = [];
+        for (let px = -R; px <= R; px += 0.15) pl.push(`${X(px)},${Y(px * px + curve.a)}`);
+        return <polyline points={pl.join(" ")} fill="none" stroke="var(--ink)" strokeWidth="2" clipPath="url(#dg-clip)" />;
+      })()}
       {solution && lineFor(solution, "var(--green)", 3)}
       {lineFor(points, "var(--blue)", 2.4)}
       {dots}
       {points.map(([px, py], i) => (
         <circle key={`m${i}`} cx={X(px)} cy={Y(py)} r="4.5" fill="var(--blue)" stroke="var(--card)" strokeWidth="1.5" style={{ pointerEvents: "none" }} />
+      ))}
+      {(solvePoints || []).map(([px, py], i) => (
+        <circle key={`s${i}`} cx={X(px)} cy={Y(py)} r="5" fill="var(--green)" stroke="var(--card)" strokeWidth="1.5" style={{ pointerEvents: "none" }} />
       ))}
     </svg>
   );
@@ -1235,7 +1245,8 @@ const TOPICS = [
     } },
   { id: "graphicalsolutions", name: "Graphical Solutions", icon: "📉", prereqs: ["algebra", "coordgeo"],
     generate() {
-      if (Math.random() < 0.45) {
+      const roll = Math.random();
+      if (roll < 0.30) {
         // Draw the graph of a given straight line by tapping two points.
         const slopes = [[-3, 1], [-2, 1], [-1, 1], [1, 1], [2, 1], [3, 1], [1, 2], [-1, 2]];
         const [sn, sd] = slopes[randInt(0, slopes.length - 1)];
@@ -1255,6 +1266,66 @@ const TOPICS = [
           ],
         };
       }
+
+      if (roll < 0.65) {
+        // "By drawing a suitable line, solve …" — a parabola y = x² + a is
+        // already on the grid; the student draws the line and reads off x.
+        const build = () => {
+          const a = randInt(-3, 1);
+          const kind = Math.random();
+          let p, q;
+          if (kind < 0.2) { p = q = randInt(-2, 2); }
+          else if (kind < 0.55) { p = randInt(1, 2); q = -p; }
+          else { p = randInt(-2, 2); q = randInt(-2, 2); if (p === q || p + q === 0) return null; }
+          const M = p + q, K = p * q, C = a - K;
+          if (p * p + a > 6 || q * q + a > 6) return null;
+          if (Math.abs(C) > 6) return null;
+          let latt = 0;
+          for (let x = -6; x <= 6; x++) if (Math.abs(M * x + C) <= 6) latt++;
+          if (latt < 2) return null;
+
+          const plusA = a === 0 ? "" : a > 0 ? ` + ${a}` : ` - ${-a}`;
+          const midT = M === 0 ? "" : ` ${M < 0 ? "+" : "-"} ${Math.abs(M) === 1 ? "" : Math.abs(M)}x`;
+          const conT = K === 0 ? "" : ` ${K > 0 ? "+" : "-"} ${Math.abs(K)}`;
+          const eqShown = `x²${midT}${conT} = 0`;
+          const mt = M === 1 ? "x" : M === -1 ? "-x" : `${M}x`;
+          const ct = C === 0 ? "" : C > 0 ? ` + ${C}` : ` - ${-C}`;
+          const lineRHS = M === 0 ? `${C}` : `${mt}${ct}`;
+          const tangent = p === q;
+          const lo = Math.min(p, q), hi = Math.max(p, q);
+
+          return {
+            prompt: `The graph of y = x²${plusA} is drawn.\nBy drawing a suitable line, solve  ${eqShown}`,
+            curve: { a }, solveLine: { m: M, c: C },
+            solvePoints: tangent ? [[p, p * p + a]] : [[p, p * p + a], [q, q * q + a]],
+            fields: tangent
+              ? [{ key: "x", label: "x =" }, { key: "y", label: "y =" }]
+              : [{ key: "s1", label: "x =" }, { key: "s2", label: "x =" }],
+            answer: tangent ? `x = ${p},  y = ${p * p + a}` : `x = ${lo},  x = ${hi}`,
+            hint: tangent ? "draw the line, then type the point" : "draw the line, then the two x-values",
+            drawSolve: (pts, inp) => {
+              const [[X1, Y1], [X2, Y2]] = pts;
+              if (X1 === X2) return false;
+              const gm = (Y2 - Y1) / (X2 - X1), gc = Y1 - gm * X1;
+              if (Math.abs(gm - M) > 1e-9 || Math.abs(gc - C) > 1e-9) return false;
+              const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
+              if (tangent) return Math.abs(num(inp.x) - p) < 1e-6 && Math.abs(num(inp.y) - (p * p + a)) < 1e-6;
+              const g = [num(inp.s1), num(inp.s2)].sort((u, v) => u - v);
+              return Math.abs(g[0] - lo) < 1e-6 && Math.abs(g[1] - hi) < 1e-6;
+            },
+            steps: [
+              `The parabola drawn is y = x²${plusA}.`,
+              `Rearrange ${eqShown}  →  x²${plusA} = ${lineRHS}`,
+              `Draw the line y = ${lineRHS}, then read the x-values where it meets the curve.`,
+              tangent ? `The line is a tangent — one solution at (${p}, ${p * p + a})` : `x = ${lo}  and  x = ${hi}`,
+            ],
+          };
+        };
+        let qq;
+        for (let i = 0; i < 40; i++) { qq = build(); if (qq) break; }
+        if (qq) return qq;
+      }
+
       const xI = randInt(-6, 6);
       let m1 = randInt(-5, 5), m2 = randInt(-5, 5);
       while (m1 === m2) m2 = randInt(-5, 5);
@@ -2362,7 +2433,11 @@ export default function MathsUnlockedBN() {
   function submitAnswer() {
     if (feedback) return;
     let correct;
-    if (question.drawGraph) {
+    if (question.drawSolve) {
+      if (drawPts.length < 2) return;
+      if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return;
+      correct = !!question.drawSolve(drawPts, multiInput);
+    } else if (question.drawGraph) {
       if (drawPts.length < 2) return;
       const [[x1, y1], [x2, y2]] = drawPts;
       if (x1 === x2) correct = false; // a vertical line is never y = mx + c
@@ -3272,15 +3347,17 @@ export default function MathsUnlockedBN() {
 
               {question.graph && <LineGraph data={question.graph} />}
 
-              {question.drawGraph && (() => {
-                const { m, c } = question.drawGraph;
-                const solution = feedback ? [[-6, m * -6 + c], [6, m * 6 + c]] : null;
+              {(question.drawGraph || question.drawSolve) && (() => {
+                const sl = question.solveLine || question.drawGraph; // { m, c }
+                const solution = feedback && sl ? [[-6, sl.m * -6 + sl.c], [6, sl.m * 6 + sl.c]] : null;
                 return (
                   <div style={{ marginBottom: 12 }}>
-                    <DrawGraph points={drawPts} solution={solution} onToggle={feedback ? null : toggleDrawPoint} />
+                    <DrawGraph points={drawPts} curve={question.curve || null} solution={solution}
+                      solvePoints={feedback ? (question.solvePoints || null) : null}
+                      onToggle={feedback ? null : toggleDrawPoint} />
                     <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
-                      {feedback ? (feedback.correct ? "Your line (blue) matches" : "Green shows the correct line")
-                        : drawPts.length === 0 ? "Tap a point the line passes through"
+                      {feedback ? (feedback.correct ? "Your line (blue) is right" : "Green shows the correct line")
+                        : drawPts.length === 0 ? "Tap a point your line passes through"
                         : drawPts.length === 1 ? "Now tap a second point"
                         : "Tap another point to move the line"}
                     </div>
@@ -3340,7 +3417,8 @@ export default function MathsUnlockedBN() {
               })()}
 
               {!feedback && (() => {
-                const notReady = question.drawGraph && drawPts.length < 2;
+                const notReady = (question.drawGraph && drawPts.length < 2)
+                  || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
                     Check answer
