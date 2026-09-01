@@ -2554,7 +2554,7 @@ const TOPICS = [
       const roll = Math.random();
 
       // ---------- circumference:  C = 2πr = πd ----------
-      if (roll < 0.15) {
+      if (roll < 0.11) {
         const rad = randInt(3, 14), d = 2 * rad;
         const v = pick(["r2C", "d2C", "C2r", "C2d"]);
         if (v === "r2C") return {
@@ -2580,7 +2580,7 @@ const TOPICS = [
       }
 
       // ---------- area:  A = πr² = πd²/4 ----------
-      if (roll < 0.30) {
+      if (roll < 0.22) {
         const rad = randInt(2, 12), d = 2 * rad, k = rad * rad;
         const v = pick(["r2A", "d2A", "A2r", "A2d"]);
         if (v === "r2A") return {
@@ -2606,7 +2606,7 @@ const TOPICS = [
       }
 
       // ---------- arc length:  s = (θ/360) × 2πr ----------
-      if (roll < 0.46) {
+      if (roll < 0.335) {
         let th, rad, coeff;
         do { th = pick([30, 36, 40, 45, 60, 72, 80, 90, 120, 135, 150]); rad = randInt(3, 15); coeff = (th * rad) / 180; }
         while (!Number.isInteger(coeff) || coeff < 1 || coeff > 9);
@@ -2629,7 +2629,7 @@ const TOPICS = [
       }
 
       // ---------- sector area:  A = (θ/360) × πr² ----------
-      if (roll < 0.62) {
+      if (roll < 0.45) {
         let th, rad, coeff;
         do { th = pick([30, 36, 40, 45, 60, 72, 90, 120, 135, 150]); rad = randInt(3, 14); coeff = (th * rad * rad) / 360; }
         while (!Number.isInteger(coeff) || coeff < 1 || coeff > 30);
