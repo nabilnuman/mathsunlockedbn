@@ -1794,9 +1794,44 @@ const TOPICS = [
     } },
   { id: "mensuration", name: "Mensuration", icon: "▦", prereqs: [],
     generate() {
-      const l = randInt(3, 20), w = randInt(3, 20);
-      return { prompt: `Find the area of a rectangle with length ${l} cm and width ${w} cm`, answer: `${l * w}`, hint: "Enter a number (cm²).",
-        steps: [`Area of a rectangle = length × width`, `= ${l} × ${w} = ${l * w} cm²`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const r = Math.random();
+
+      // rectangle: area from the two sides
+      if (r < 0.32) {
+        const l = randInt(3, 20), w = randInt(3, 20);
+        return { prompt: `Find the area of a rectangle with length ${l} cm and width ${w} cm`, answer: `${l * w}`, hint: "Enter a number (cm²).",
+          steps: [`Area of a rectangle = length × width`, `= ${l} × ${w} = ${l * w} cm²`] };
+      }
+
+      // square: area from the side
+      if (r < 0.48) {
+        const s = randInt(3, 18);
+        return { prompt: `Find the area of a square with side ${s} cm`, answer: `${s * s}`, hint: "Enter a number (cm²).",
+          steps: [`Area of a square = side²`, `= ${s}² = ${s * s} cm²`] };
+      }
+
+      // square: side from the area
+      if (r < 0.68) {
+        const s = randInt(3, 20), area = s * s;
+        return { prompt: `A square has area ${area} cm². Find the length of one side`, answer: `${s}`, hint: "Enter a number (cm).",
+          steps: [`Side = √area`, `= √${area} = ${s} cm`] };
+      }
+
+      // rectangle: the other side from the area and one side
+      if (r < 0.88) {
+        const a = randInt(2, 15), b = randInt(2, 15), area = a * b;
+        const known = pick(["length", "width"]);
+        const kv = known === "length" ? a : b, ov = known === "length" ? b : a;
+        return { prompt: `A rectangle has area ${area} cm² and ${known} ${kv} cm. Find the ${known === "length" ? "width" : "length"}`,
+          answer: `${ov}`, hint: "Enter a number (cm).",
+          steps: [`Other side = area ÷ known side`, `= ${area} ÷ ${kv} = ${ov} cm`] };
+      }
+
+      // rectangle: perimeter from the two sides
+      const l = randInt(3, 18), w = randInt(3, 18);
+      return { prompt: `Find the perimeter of a rectangle with length ${l} cm and width ${w} cm`, answer: `${2 * (l + w)}`, hint: "Enter a number (cm).",
+        steps: [`Perimeter = 2 × (length + width)`, `= 2 × (${l} + ${w}) = 2 × ${l + w} = ${2 * (l + w)} cm`] };
     } },
   { id: "similarity", name: "Similarity", icon: "🔺", prereqs: ["mensuration"],
     generate() {
