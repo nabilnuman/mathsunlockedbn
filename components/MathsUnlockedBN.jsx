@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-react";
 import { storage } from "../lib/storage";
 
 /* ---------------------------------------------------------
@@ -487,6 +487,99 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo 
       <text x={ml + pw / 2} y={Hh - 4} fontSize="8.5" textAnchor="middle" fill="var(--muted)">time ({xUnit})</text>
       <text x={11} y={mt + ph / 2} fontSize="8.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 11 ${mt + ph / 2})`}>{yLabel} ({yUnit})</text>
     </svg>
+  );
+}
+
+// A translucent scratch sheet over the quiz card for rough working.
+// Strokes are normalised (0–1) so they survive card resizes; the parent
+// clears them when the question changes.
+function SketchOverlay({ active, strokes, setStrokes }) {
+  const canvasRef = useRef(null);
+  const cur = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv || !cv.parentElement) return;
+    const p = cv.parentElement;
+    const measure = () => setSize({ w: p.clientWidth, h: p.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(p);
+    return () => ro.disconnect();
+  }, []);
+
+  const redraw = () => {
+    const cv = canvasRef.current;
+    if (!cv || !size.w) return;
+    if (cv.width !== size.w) cv.width = size.w;
+    if (cv.height !== size.h) cv.height = size.h;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, size.w, size.h);
+    ctx.strokeStyle = "#1b2733";
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const st of strokes) {
+      if (!Array.isArray(st) || st.length === 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(st[0][0] * size.w, st[0][1] * size.h);
+      for (let i = 1; i < st.length; i++) ctx.lineTo(st[i][0] * size.w, st[i][1] * size.h);
+      if (st.length === 1) ctx.lineTo(st[0][0] * size.w + 0.5, st[0][1] * size.h + 0.5);
+      ctx.stroke();
+    }
+  };
+  useEffect(redraw, [strokes, size]);
+
+  const at = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+  };
+  const start = (e) => {
+    canvasRef.current.setPointerCapture(e.pointerId);
+    cur.current = [at(e)];
+    redraw();
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.beginPath();
+    ctx.arc(cur.current[0][0] * size.w, cur.current[0][1] * size.h, 1.2, 0, 7);
+    ctx.fillStyle = "#1b2733";
+    ctx.fill();
+  };
+  const move = (e) => {
+    if (!cur.current) return;
+    const p = at(e);
+    const prev = cur.current[cur.current.length - 1];
+    cur.current.push(p);
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.strokeStyle = "#1b2733";
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(prev[0] * size.w, prev[1] * size.h);
+    ctx.lineTo(p[0] * size.w, p[1] * size.h);
+    ctx.stroke();
+  };
+  const end = () => {
+    const done = cur.current; // capture before clearing — React runs the updater later
+    cur.current = null;
+    if (Array.isArray(done) && done.length) setStrokes((s) => [...s, done]);
+  };
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 5, background: "rgba(255,255,255,0.85)",
+      opacity: active ? 1 : 0, pointerEvents: active ? "auto" : "none", transition: "opacity 0.12s",
+    }}>
+      <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: "crosshair" }}
+        onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
+      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 10.5, fontWeight: 700, color: "#8a95a1", pointerEvents: "none" }}>rough working</div>
+      {strokes.length > 0 && (
+        <button onClick={() => setStrokes([])} style={{
+          position: "absolute", top: 6, right: 8, fontSize: 11, fontWeight: 700, padding: "4px 10px",
+          background: "#fff", border: "1px solid #c9d2da", borderRadius: 8, cursor: "pointer", color: "#1b2733",
+        }}>Clear all</button>
+      )}
+    </div>
   );
 }
 
@@ -2494,6 +2587,8 @@ export default function MathsUnlockedBN() {
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
+  const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
+  const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -2730,6 +2825,8 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setSketchStrokes([]);
+    setSketchOn(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2878,6 +2975,8 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setSketchStrokes([]);
+    setSketchOn(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -2889,6 +2988,8 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setSketchStrokes([]);
+    setSketchOn(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
   }
@@ -3984,6 +4085,22 @@ export default function MathsUnlockedBN() {
                   </div>
                 </div>
               )}
+
+              <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
+              <button
+                onClick={() => setSketchOn((v) => !v)}
+                title={sketchOn ? "Hide rough working" : "Rough working"}
+                style={{
+                  position: "absolute", bottom: 8, right: 8, zIndex: 6,
+                  width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                  border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`,
+                  background: sketchOn ? "var(--blue)" : "var(--card)",
+                  color: sketchOn ? "var(--on-accent)" : "var(--muted)",
+                  cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)",
+                }}
+              >
+                <Pencil size={15} />
+              </button>
             </div>
           </div>
         )}
