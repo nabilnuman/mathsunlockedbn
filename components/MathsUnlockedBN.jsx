@@ -337,7 +337,7 @@ function DrawGraph({ points, solution, curve, solvePoints, onToggle }) {
     dots.push(
       <circle key={`${x},${y}`} cx={X(x)} cy={Y(y)} r={chosen ? 4.5 : 8}
         fill={chosen ? "var(--blue)" : "transparent"} stroke={chosen ? "var(--card)" : "transparent"} strokeWidth={chosen ? 1.5 : 0}
-        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all" }}
+        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all", WebkitTapHighlightColor: "transparent", outline: "none" }}
         onClick={() => onToggle && onToggle([x, y])} />
     );
   }
@@ -431,7 +431,7 @@ function RegionGraph({ line, picked, showAnswer, onPick }) {
       {line.kind === "horiz" && <line x1={X(-R)} y1={Y(line.k)} x2={X(R)} y2={Y(line.k)} {...bs} />}
       {line.kind === "diag" && <line x1={X(-R)} y1={Y(line.m * -R + line.c)} x2={X(R)} y2={Y(line.m * R + line.c)} {...bs} />}
       <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="transparent"
-        style={{ cursor: onPick ? "crosshair" : "default", pointerEvents: "all" }}
+        style={{ cursor: onPick ? "crosshair" : "default", pointerEvents: "all", WebkitTapHighlightColor: "transparent", outline: "none", userSelect: "none" }}
         onClick={onPick ? (e) => {
           const b = e.currentTarget.getBoundingClientRect();
           const vx = (e.clientX - b.left) / b.width * 256;
@@ -556,7 +556,7 @@ function VennShade({ venn, pressed, onToggle, showAnswer }) {
       <text x={cir.B[0] + cir.B[2] - 13} y={cir.B[1] - cir.B[2] + 14} fontSize="12" fontWeight="700" fill="var(--ink)">B</text>
       {!two && <text x={cir.C[0] - 4} y={cir.C[1] + cir.C[2] - 5} fontSize="12" fontWeight="700" fill="var(--ink)">C</text>}
       <rect x={U.x} y={U.y} width={U.w} height={U.h} fill="transparent"
-        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all" }}
+        style={{ cursor: onToggle ? "pointer" : "default", pointerEvents: "all", WebkitTapHighlightColor: "transparent", outline: "none", userSelect: "none" }}
         onClick={onToggle ? (e) => {
           const b = e.currentTarget.getBoundingClientRect();
           onToggle(regionAt((e.clientX - b.left) / b.width * 240, (e.clientY - b.top) / b.height * 200));
@@ -3463,6 +3463,8 @@ export default function MathsUnlockedBN() {
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
         .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
         .mub-grid input::placeholder, .mub-grid textarea::placeholder { color: var(--muted); }
+        svg, svg *, button { -webkit-tap-highlight-color: transparent; }
+        svg [role], svg rect, svg circle, svg polygon { outline: none; }
       `}</style>
 
       <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", minHeight: 560 }}>
