@@ -2058,26 +2058,21 @@ const TOPICS = [
     } },
   { id: "symmetry", name: "Symmetry", icon: "🦋", prereqs: [],
     generate() {
-      if (Math.random() < 0.82) {
-        const keys = Object.keys(SHAPES);
-        const k = keys[randInt(0, keys.length - 1)];
-        const s = SHAPES[k];
-        const cap = (t) => t[0].toUpperCase() + t.slice(1);
-        const askLines = Math.random() < 0.5;
-        return {
-          prompt: askLines
-            ? `The shape shown is ${s.label}.\nHow many lines of symmetry does it have?`
-            : `The shape shown is ${s.label}.\nWhat is its order of rotational symmetry?`,
-          figure: { shape: k },
-          answer: `${askLines ? s.lines : s.rot}`, hint: "Enter a number.",
-          steps: askLines
-            ? [`${cap(s.label)} has ${s.lines} line${s.lines === 1 ? "" : "s"} of symmetry.`]
-            : [`Turned through a full circle, ${s.label} looks the same ${s.rot} time${s.rot === 1 ? "" : "s"}.`, `Order of rotational symmetry = ${s.rot}.`],
-        };
-      }
-      const n = randInt(3, 10);
-      return { prompt: `How many lines of symmetry does a regular polygon with ${n} sides have?`, answer: `${n}`, hint: "Enter a number.",
-        steps: [`A regular polygon has one line of symmetry per side`, `Answer: ${n}`] };
+      const keys = Object.keys(SHAPES);
+      const k = keys[randInt(0, keys.length - 1)];
+      const s = SHAPES[k];
+      const cap = (t) => t[0].toUpperCase() + t.slice(1);
+      const askLines = Math.random() < 0.5;
+      return {
+        prompt: askLines
+          ? `The shape shown is ${s.label}.\nHow many lines of symmetry does it have?`
+          : `The shape shown is ${s.label}.\nWhat is its order of rotational symmetry?`,
+        figure: { shape: k },
+        answer: `${askLines ? s.lines : s.rot}`, hint: "Enter a number.",
+        steps: askLines
+          ? [`${cap(s.label)} has ${s.lines} line${s.lines === 1 ? "" : "s"} of symmetry.`]
+          : [`Turned through a full circle, ${s.label} looks the same ${s.rot} time${s.rot === 1 ? "" : "s"}.`, `Order of rotational symmetry = ${s.rot}.`],
+      };
     } },
   { id: "polygons", name: "Polygons", icon: "⬡", prereqs: [],
     generate() {
