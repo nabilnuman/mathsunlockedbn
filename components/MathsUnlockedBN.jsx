@@ -572,7 +572,6 @@ function SketchOverlay({ active, strokes, setStrokes }) {
     }}>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: "crosshair" }}
         onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
-      <div style={{ position: "absolute", top: 8, left: 10, fontSize: 10.5, fontWeight: 700, color: "#8a95a1", pointerEvents: "none" }}>rough working</div>
       {strokes.length > 0 && (
         <button onClick={() => setStrokes([])} style={{
           position: "absolute", top: 6, right: 8, fontSize: 11, fontWeight: 700, padding: "4px 10px",
@@ -4246,9 +4245,6 @@ export default function MathsUnlockedBN() {
                               </button>
                             );
                           })}
-                          <div style={{ fontSize: 10.5, color: "var(--muted)", padding: "8px 14px 12px", borderTop: "1px solid var(--grid)" }}>
-                            The top 10 (above the dashed line) add up to the school score of {s.score}. Score per student = prestige × 20 + level.
-                          </div>
                         </div>
                       )}
                     </div>
