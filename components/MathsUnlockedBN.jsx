@@ -3565,19 +3565,42 @@ function blitzQuestion() {
   const onGrid = (b) => b.every((p) => Math.abs(p[0]) <= 7 && Math.abs(p[1]) <= 7);
   const distinct = (b) => new Set(b.map((p) => p.join(","))).size === 3;
   const randTri = () => {
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 200; i++) {
       const t = [0, 1, 2].map(() => [randInt(-4, 4), randInt(-4, 4)]);
       const ar = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]));
       const bw = Math.max(...t.map((p) => p[0])) - Math.min(...t.map((p) => p[0]));
       const bh = Math.max(...t.map((p) => p[1])) - Math.min(...t.map((p) => p[1]));
-      const longest = Math.max(
+      const sides = [
         (t[0][0] - t[1][0]) ** 2 + (t[0][1] - t[1][1]) ** 2,
         (t[1][0] - t[2][0]) ** 2 + (t[1][1] - t[2][1]) ** 2,
         (t[0][0] - t[2][0]) ** 2 + (t[0][1] - t[2][1]) ** 2,
-      );
-      if (ar >= 12 && bw >= 3 && bh >= 3 && ar * ar >= 2 * longest) return t;
+      ];
+      const longest = Math.max(...sides), shortest = Math.min(...sides);
+      // area ≥ 12, box ≥ 3×3, no side under √3, shortest altitude (2·area/longest) ≥ ~1.6
+      if (ar >= 12 && bw >= 3 && bh >= 3 && shortest >= 3 && ar * ar >= 2.6 * longest) return t;
     }
-    return [[0, 0], [3, 0], [1, 4]];
+    return [[-2, -1], [3, 0], [0, 3]];
+  };
+  // true when triangles P and Q are apart by at least `gap` (SAT)
+  const separated = (P, Q, gap) => {
+    const axes = [];
+    for (const poly of [P, Q]) for (let i = 0; i < 3; i++) {
+      const u = poly[i], v = poly[(i + 1) % 3];
+      const n = [-(v[1] - u[1]), v[0] - u[0]], L = Math.hypot(n[0], n[1]) || 1;
+      axes.push([n[0] / L, n[1] / L]);
+    }
+    for (const ax of axes) {
+      let mnP = Infinity, mxP = -Infinity, mnQ = Infinity, mxQ = -Infinity;
+      for (const p of P) { const d = p[0] * ax[0] + p[1] * ax[1]; mnP = Math.min(mnP, d); mxP = Math.max(mxP, d); }
+      for (const q of Q) { const d = q[0] * ax[0] + q[1] * ax[1]; mnQ = Math.min(mnQ, d); mxQ = Math.max(mxQ, d); }
+      if (mxP <= mnQ - gap || mxQ <= mnP - gap) return true;
+    }
+    return false;
+  };
+  const cend = (t) => t.reduce((s, p) => [s[0] + p[0] / 3, s[1] + p[1] / 3], [0, 0]);
+  const apart = (a, b) => {
+    const ca = cend(a), cb = cend(b);
+    return separated(a, b, 0.5) && Math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= 2.5;
   };
   const opts4 = (ans, deltas) => {
     const s = new Set([ans]);
@@ -3587,34 +3610,35 @@ function blitzQuestion() {
     while (s.size < 4) { if (!s.has(ans + g)) s.add(ans + g); g++; }
     return shuffle([...s]).map(String);
   };
-  const isPrime = (n) => { if (n < 2) return false; for (let d = 2; d * d <= n; d++) if (n % d === 0) return false; return true; };
 
   const build = () => {
-    const kind = pick(["trans", "trans", "rot", "sym", "sym", "venn", "num", "num", "num"]);
+    const kind = pick(["trans", "trans", "trans", "rot", "rot", "sym", "sym", "venn", "venn", "num", "num", "num"]);
 
     if (kind === "trans") {
       const A = randTri();
       const ap = (f) => A.map(f);
       const ansKind = pick(["Translation", "Rotation", "Reflection", "Enlargement"]);
       let B;
-      if (ansKind === "Translation") B = ap(([x, y]) => [x + pick([-4, -3, 3, 4]), y + pick([-3, 3])]);
-      else if (ansKind === "Rotation") { const c = [randInt(-1, 1), randInt(-1, 1)], d = pick([90, -90, 180]); B = ap(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return d === 90 ? [c[0] + dy, c[1] - dx] : d === -90 ? [c[0] - dy, c[1] + dx] : [c[0] - dx, c[1] - dy]; }); }
-      else if (ansKind === "Reflection") { const m = pick(["x", "y", "yx", "ymx"]); B = ap(([x, y]) => m === "x" ? [-x, y] : m === "y" ? [x, -y] : m === "yx" ? [y, x] : [-y, -x]); }
-      else { const c = [randInt(-2, 2), randInt(-2, 2)]; B = ap(([x, y]) => [c[0] - 2 * (x - c[0]), c[1] - 2 * (y - c[1])]); }
-      if (!onGrid(B) || !distinct(B)) return null;
-      // reject accidental pure-translations for non-translation answers
-      if (ansKind !== "Translation") { const o = [B[0][0] - A[0][0], B[0][1] - A[0][1]]; if (A.every((p, i) => B[i][0] - p[0] === o[0] && B[i][1] - p[1] === o[1])) return null; }
+      if (ansKind === "Translation") { const v = [pick([-5, -4, 4, 5]), pick([-4, -3, 3, 4])]; B = ap(([x, y]) => [x + v[0], y + v[1]]); }
+      else if (ansKind === "Rotation") { const c = [randInt(-3, 3), randInt(-3, 3)], d = pick([90, -90, 180]); B = ap(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return d === 90 ? [c[0] + dy, c[1] - dx] : d === -90 ? [c[0] - dy, c[1] + dx] : [c[0] - dx, c[1] - dy]; }); }
+      else if (ansKind === "Reflection") {
+        const m = pick([{ k: "x", o: randInt(-2, 2) }, { k: "y", o: randInt(-2, 2) }, { k: "yx" }, { k: "ymx" }]);
+        const side = (p) => m.k === "x" ? p[0] - m.o : m.k === "y" ? p[1] - m.o : m.k === "yx" ? p[1] - p[0] : p[0] + p[1];
+        const g = m.o === undefined ? 2 : 1;
+        const sd = A.map(side);
+        if (!(sd.every((v) => v >= g) || sd.every((v) => v <= -g))) return null;
+        B = ap(([x, y]) => m.k === "x" ? [2 * m.o - x, y] : m.k === "y" ? [x, 2 * m.o - y] : m.k === "yx" ? [y, x] : [-y, -x]);
+      }
+      else { const c = [randInt(-3, 3), randInt(-3, 3)]; B = ap(([x, y]) => [c[0] - 2 * (x - c[0]), c[1] - 2 * (y - c[1])]); }
+      if (!onGrid(B) || !distinct(B) || !apart(A, B)) return null;
       return { prompt: "Which transformation maps A onto B?", transform: { a: A, b: B }, choices: ["Translation", "Rotation", "Enlargement", "Reflection"], answer: ansKind };
     }
 
     if (kind === "rot") {
-      const A = randTri(), c = [randInt(-2, 2), randInt(-2, 2)];
+      const A = randTri(), c = [randInt(-3, 3), randInt(-3, 3)];
       const spec = pick([{ d: 90, t: "90° clockwise" }, { d: -90, t: "90° anticlockwise" }, { d: 180, t: "180°" }]);
       const B = A.map(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return spec.d === 90 ? [c[0] + dy, c[1] - dx] : spec.d === -90 ? [c[0] - dy, c[1] + dx] : [c[0] - dx, c[1] - dy]; });
-      if (!onGrid(B) || !distinct(B)) return null;
-      const ca = A.reduce((s, p) => [s[0] + p[0] / 3, s[1] + p[1] / 3], [0, 0]);
-      const cb = B.reduce((s, p) => [s[0] + p[0] / 3, s[1] + p[1] / 3], [0, 0]);
-      if (Math.hypot(ca[0] - cb[0], ca[1] - cb[1]) < 3) return null; // keep A and B apart so the turn is legible
+      if (!onGrid(B) || !distinct(B) || !apart(A, B)) return null;
       return { prompt: "Describe the rotation that maps A onto B", transform: { a: A, b: B, centre: c }, choices: ["90° clockwise", "90° anticlockwise", "180°"], answer: spec.t };
     }
 
