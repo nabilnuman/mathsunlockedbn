@@ -5484,6 +5484,7 @@ export default function MathsUnlockedBN() {
       next.consecWrong = 0;
       if (scoredId === "surds") next.solvedSurd = true; // "Root of the Problem"
       if (String(question.answer).trim() === "67") next.got67 = true; // "67"
+      if ((next.streak || 0) >= 67) next.got67 = true;                 // …or a 67-long correct streak (secret)
       d.correct = (d.correct || 0) + 1;
       d.streakToday = (d.streakToday || 0) + 1;
       d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
