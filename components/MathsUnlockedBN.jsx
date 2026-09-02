@@ -3497,8 +3497,8 @@ const TOPICS = [
       // shade-the-region on a Venn diagram
       if (Math.random() < 0.6) {
         const three = Math.random() < 0.25;
-        const nm2 = { a: "A only", b: "B only", ab: "A ∩ B", out: "outside A and B" };
-        const nm3 = { a: "A only", b: "B only", c: "C only", ab: "A ∩ B only", ac: "A ∩ C only", bc: "B ∩ C only", abc: "A ∩ B ∩ C", out: "outside all three" };
+        const nm2 = { a: "A ∩ B'", b: "A' ∩ B", ab: "A ∩ B", out: "(A ∪ B)'" };
+        const nm3 = { a: "A ∩ B' ∩ C'", b: "A' ∩ B ∩ C'", c: "A' ∩ B' ∩ C", ab: "A ∩ B ∩ C'", ac: "A ∩ B' ∩ C", bc: "A' ∩ B ∩ C", abc: "A ∩ B ∩ C", out: "(A ∪ B ∪ C)'" };
         const list2 = [
           { e: "A", t: ["a", "ab"] },
           { e: "B", t: ["b", "ab"] },
@@ -3534,8 +3534,8 @@ const TOPICS = [
       const ask = pick([
         { q: "A ∪ B", ans: union, s: [`n(A ∪ B) = n(A) + n(B) − n(A ∩ B)`, `= ${a} + ${b} − ${both} = ${union}`] },
         { q: "A ∩ B", ans: both, s: [`${both} elements are stated to be in both sets`, `n(A ∩ B) = ${both}`] },
-        { q: "A only (in A but not B)", ans: aOnly, s: [`n(A only) = n(A) − n(A ∩ B)`, `= ${a} − ${both} = ${aOnly}`] },
-        { q: "B only (in B but not A)", ans: bOnly, s: [`n(B only) = n(B) − n(A ∩ B)`, `= ${b} − ${both} = ${bOnly}`] },
+        { q: "A ∩ B'  (in A but not B)", ans: aOnly, s: [`n(A ∩ B') = n(A) − n(A ∩ B)`, `= ${a} − ${both} = ${aOnly}`] },
+        { q: "A' ∩ B  (in B but not A)", ans: bOnly, s: [`n(A' ∩ B) = n(B) − n(A ∩ B)`, `= ${b} − ${both} = ${bOnly}`] },
       ]);
       return { prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in ${ask.q}`,
         answer: `${ask.ans}`, hint: "Enter a number.", steps: ask.s };
@@ -3658,8 +3658,8 @@ function blitzQuestion() {
     if (kind === "venn") {
       const two = Math.random() < 0.7;
       const q = two
-        ? pick([{ e: "A ∩ B", t: "ab" }, { e: "A only", t: "a" }, { e: "B only", t: "b" }, { e: "outside A and B", t: "out" }])
-        : pick([{ e: "A ∩ B ∩ C", t: "abc" }, { e: "outside all three sets", t: "out" }]);
+        ? pick([{ e: "A ∩ B", t: "ab" }, { e: "A ∩ B'", t: "a" }, { e: "A' ∩ B", t: "b" }, { e: "(A ∪ B)'", t: "out" }])
+        : pick([{ e: "A ∩ B ∩ C", t: "abc" }, { e: "(A ∪ B ∪ C)'", t: "out" }]);
       return { prompt: `Tap the region:  ${q.e}`, venn: { sets: two ? 2 : 3, target: [q.t] }, answer: q.e };
     }
 
