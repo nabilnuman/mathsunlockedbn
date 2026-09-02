@@ -741,6 +741,63 @@ function MensurationFigure({ shape, dims = {} }) {
   );
 }
 
+// A labelled vector diagram for the Vectors topic — a 3/4-sided figure
+// with named vertices, optional diagonals (dashed) and marked points, and
+// one or more directed vector arrows labelled a / b. All coords are raw
+// [x,y] (y-up); the whole scene is scaled to fit the viewBox.
+function VectorFigure({ labels = [], marks = [], edges = [], dashed = [], arrows = [] }) {
+  const W = 250, H = 200, m = 24;
+  const all = [
+    ...labels.map((l) => l.p), ...marks.map((l) => l.p),
+    ...edges.flat(), ...dashed.flat(),
+    ...arrows.flatMap((a) => [a.a, a.b]),
+  ];
+  if (!all.length) return null;
+  const xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const s = Math.min((W - 2 * m) / ((maxX - minX) || 1), (H - 2 * m) / ((maxY - minY) || 1));
+  const cx = (W - s * (maxX - minX)) / 2, cy = (H - s * (maxY - minY)) / 2;
+  const T = ([x, y]) => [cx + (x - minX) * s, cy + (maxY - y) * s];
+  const F = (n) => n.toFixed(1);
+  const cen = T([(minX + maxX) / 2, (minY + maxY) / 2]);
+  const nrm = (v) => { const L = Math.hypot(v[0], v[1]) || 1; return [v[0] / L, v[1] / L]; };
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.4, strokeLinejoin: "round" };
+  const seg = (a, b, extra) => { const p = T(a), q = T(b); return <line x1={F(p[0])} y1={F(p[1])} x2={F(q[0])} y2={F(q[1])} {...extra} />; };
+  const lbl = (p, t, fill) => {
+    const sp = T(p), d = nrm([sp[0] - cen[0], sp[1] - cen[1]]);
+    return <text x={F(sp[0] + d[0] * 13)} y={F(sp[1] + d[1] * 13)} fontSize="11.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill={fill} style={halo}>{t}</text>;
+  };
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="vector diagram"
+      style={{ maxWidth: 300, display: "block", margin: "0 auto 10px" }}>
+      <defs>
+        <marker id="vf-head" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6.5,3 L0,6 Z" fill="var(--blue)" />
+        </marker>
+      </defs>
+      {edges.map((e, i) => <g key={`e${i}`}>{seg(e[0], e[1], { stroke: "var(--ink)", strokeWidth: 1.7, strokeLinecap: "round" })}</g>)}
+      {dashed.map((e, i) => <g key={`d${i}`}>{seg(e[0], e[1], { stroke: "var(--muted)", strokeWidth: 1.3, strokeDasharray: "4 3" })}</g>)}
+      {arrows.map((ar, i) => {
+        const p = T(ar.a), q = T(ar.b);
+        const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1;
+        const end = [p[0] + dx * 0.82, p[1] + dy * 0.82];
+        const n = [-dy / L, dx / L];
+        const mid = [(p[0] + q[0]) / 2 + n[0] * 12, (p[1] + q[1]) / 2 + n[1] * 12];
+        return (
+          <g key={`a${i}`}>
+            <line x1={F(p[0])} y1={F(p[1])} x2={F(end[0])} y2={F(end[1])} stroke="var(--blue)" strokeWidth="2.3" markerEnd="url(#vf-head)" />
+            <text x={F(mid[0])} y={F(mid[1])} fontSize="12.5" fontWeight="800" fontStyle="italic" textAnchor="middle" dominantBaseline="middle" fill="var(--blue)" style={halo}>{ar.t}</text>
+          </g>
+        );
+      })}
+      {marks.map((mk, i) => { const p = T(mk.p); return <circle key={`mc${i}`} cx={F(p[0])} cy={F(p[1])} r="2.8" fill="var(--red)" />; })}
+      {labels.map((l, i) => { const p = T(l.p); return <circle key={`lc${i}`} cx={F(p[0])} cy={F(p[1])} r="2.4" fill="var(--ink)" />; })}
+      {labels.map((l, i) => <g key={`ll${i}`}>{lbl(l.p, l.t, "var(--ink)")}</g>)}
+      {marks.map((mk, i) => <g key={`ml${i}`}>{lbl(mk.p, mk.t, "var(--red)")}</g>)}
+    </svg>
+  );
+}
+
 // A schematic triangle with labelled sides / angles, for Trigonometry.
 // verts: 3 [x,y] points (screen orientation). sideLabels[i] labels the
 // edge opposite vertex i; angleLabels[i] labels the angle at vertex i;
@@ -3542,9 +3599,180 @@ const TOPICS = [
     } },
   { id: "vectors", name: "Vectors", icon: "➡️", prereqs: ["algebra"],
     generate() {
-      const p1 = randInt(-8, 8), p2 = randInt(-8, 8), q1 = randInt(-8, 8), q2 = randInt(-8, 8);
-      return { prompt: `p = (${p1}, ${p2})  and  q = (${q1}, ${q2}).  Find the x-component of p + q`, answer: `${p1 + q1}`, hint: "Enter a number.",
-        steps: [`Add the x-components of the two vectors`, `= ${p1} + ${q1} = ${p1 + q1}`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+
+      // ---- a checker + display for expressions linear in a and b ----
+      const evalVec = (str, A, B) => {
+        let s = String(str).trim().toLowerCase().replace(/[−–—]/g, "-").replace(/\s+/g, "")
+          .replace(/½/g, "(1/2)").replace(/⅓/g, "(1/3)").replace(/⅔/g, "(2/3)").replace(/¼/g, "(1/4)").replace(/¾/g, "(3/4)");
+        if (!s) return NaN;
+        s = s.replace(/([0-9ab)])(?=[ab(])/g, "$1*").replace(/([ab)])(?=[0-9])/g, "$1*");
+        s = s.replace(/a/g, `(${A})`).replace(/b/g, `(${B})`);
+        if (!/^[-+*/().0-9]+$/.test(s)) return NaN;
+        try { const r = Function(`"use strict";return (${s})`)(); return typeof r === "number" && Number.isFinite(r) ? r : NaN; }
+        catch (e) { return NaN; }
+      };
+      const checkVec = (ca, cb) => (inp) => {
+        for (const [A, B] of [[1, 0], [0, 1], [3, 2], [-1, 4], [2.5, -1.5]]) {
+          const u = evalVec(inp, A, B);
+          if (!Number.isFinite(u) || Math.abs(u - (ca * A + cb * B)) > 1e-6) return false;
+        }
+        return true;
+      };
+      const FR = [[1, 2, "½"], [1, 3, "⅓"], [2, 3, "⅔"], [1, 4, "¼"], [3, 4, "¾"]];
+      const coef = (c) => {
+        const m = Math.abs(c), sign = c < 0 ? "−" : "";
+        if (Math.abs(m - 1) < 1e-9) return sign;
+        for (const [n, d, ch] of FR) if (Math.abs(m - n / d) < 1e-9) return sign + ch;
+        return sign + `${Math.round(m * 100) / 100}`;
+      };
+      const term = (ca, cb) => {
+        const nz = (v) => Math.abs(v) > 1e-9;
+        if (!nz(ca) && !nz(cb)) return "0";
+        if (nz(ca) && nz(cb) && Math.abs(Math.abs(ca) - Math.abs(cb)) < 1e-9 && Math.abs(ca) - 1 < -1e-9) {
+          const k = coef(Math.abs(ca)); // magnitude, no sign
+          if (ca > 0 && cb > 0) return `${k}(a + b)`;
+          if (ca < 0 && cb < 0) return `−${k}(a + b)`;
+          if (ca > 0 && cb < 0) return `${k}(a − b)`;
+          return `${k}(b − a)`;
+        }
+        const parts = [];
+        if (nz(ca)) parts.push({ c: ca, v: "a" });
+        if (nz(cb)) parts.push({ c: cb, v: "b" });
+        parts.sort((p, q) => (q.c > 0 ? 1 : 0) - (p.c > 0 ? 1 : 0));
+        return parts.map((p, i) => {
+          const body = coef(Math.abs(p.c)) + p.v;
+          if (i === 0) return (p.c < 0 ? "−" : "") + body;
+          return (p.c < 0 ? " − " : " + ") + body;
+        }).join("");
+      };
+      const mkVec = (ca, cb, extra) => ({
+        check: checkVec(ca, cb), answer: term(ca, cb), answerDisplay: term(ca, cb),
+        hint: "answer in terms of a and b", symbols: ["a", "b"],
+        ...extra,
+      });
+
+      const roll = Math.random();
+
+      // ===== 1. parallelogram — express a vector =====
+      if (roll < 0.28) {
+        const A = [0, 0], B = [4.2, 0], D = [1.3, 3], C = [5.5, 3];
+        const opt = pick([
+          { q: "DC", ca: 1, cb: 0, why: "DC = AB (opposite sides of a parallelogram are equal)" },
+          { q: "BC", ca: 0, cb: 1, why: "BC = AD (opposite sides are equal)" },
+          { q: "CB", ca: 0, cb: -1, why: "CB = −BC = −AD" },
+          { q: "AC", ca: 1, cb: 1, why: "AC = AB + BC = a + b", diag: [A, C] },
+          { q: "CA", ca: -1, cb: -1, why: "CA = −AC = −(a + b)", diag: [A, C] },
+          { q: "BD", ca: -1, cb: 1, why: "BD = BA + AD = −a + b", diag: [B, D] },
+          { q: "DB", ca: 1, cb: -1, why: "DB = DA + AB = −b + a", diag: [B, D] },
+        ]);
+        return mkVec(opt.ca, opt.cb, {
+          prompt: `ABCD is a parallelogram.  AB = a  and  AD = b.\nWrite ${opt.q} in terms of a and b`,
+          vec: {
+            labels: [{ p: A, t: "A" }, { p: B, t: "B" }, { p: C, t: "C" }, { p: D, t: "D" }],
+            edges: [[A, B], [B, C], [C, D], [D, A]],
+            dashed: opt.diag ? [opt.diag] : [],
+            arrows: [{ a: A, b: B, t: "a" }, { a: A, b: D, t: "b" }],
+          },
+          steps: [`${opt.why}.`, `${opt.q} = ${term(opt.ca, opt.cb)}`],
+        });
+      }
+
+      // ===== 2. add two vectors round a figure  (X→Y + Y→Z = X→Z) =====
+      if (roll < 0.48) {
+        const O = [0, 0], A = [4, 0], Bp = [1.4, 3];
+        const v = pick([
+          { first: "OA", second: "OB", ask: "AB", ca: -1, cb: 1, work: "AB = AO + OB = −a + b" },
+          { first: "AB", second: "BC", ask: "AC", ca: 1, cb: 1, work: "AC = AB + BC = a + b" },
+          { first: "AB", second: "BC", ask: "CA", ca: -1, cb: -1, work: "CA = CB + BA = −b − a" },
+        ]);
+        const isO = v.first === "OA";
+        const N = isO ? { X: "O", Y: "A", Z: "B" } : { X: "A", Y: "B", Z: "C" };
+        return mkVec(v.ca, v.cb, {
+          prompt: `In the diagram, ${v.first} = a  and  ${v.second} = b.\nWrite ${v.ask} in terms of a and b`,
+          vec: {
+            labels: [{ p: O, t: N.X }, { p: A, t: N.Y }, { p: Bp, t: N.Z }],
+            edges: [],
+            dashed: [[isO ? A : Bp, isO ? Bp : O]],
+            arrows: isO
+              ? [{ a: O, b: A, t: "a" }, { a: O, b: Bp, t: "b" }]
+              : [{ a: O, b: A, t: "a" }, { a: A, b: Bp, t: "b" }],
+          },
+          steps: [`Travel along the arrows:  ${v.work}.`, `${v.ask} = ${term(v.ca, v.cb)}`],
+        });
+      }
+
+      // ===== 3. reversing a vector  (OA = −AO) in context =====
+      if (roll < 0.62) {
+        const A = [0, 0], B = [4, 0.4], C = [1.2, 3];
+        const v = pick([
+          { g1: "AB", g2: "AC", ask: "CB", ca: 1, cb: -1, work: "CB = CA + AB = −b + a" },
+          { g1: "AB", g2: "AC", ask: "BC", ca: -1, cb: 1, work: "BC = BA + AC = −a + b" },
+          { g1: "OA", g2: "OB", ask: "BA", ca: 1, cb: -1, work: "BA = BO + OA = −b + a" },
+        ]);
+        const isO = v.g1 === "OA";
+        const N = isO ? ["O", "A", "B"] : ["A", "B", "C"];
+        return mkVec(v.ca, v.cb, {
+          prompt: `${v.g1} = a  and  ${v.g2} = b.\nWrite ${v.ask} in terms of a and b   (remember XY = −YX)`,
+          vec: {
+            labels: [{ p: A, t: N[0] }, { p: B, t: N[1] }, { p: C, t: N[2] }],
+            edges: [],
+            dashed: [[B, C]],
+            arrows: [{ a: A, b: B, t: "a" }, { a: A, b: C, t: "b" }],
+          },
+          steps: [`Reverse where needed, then add:  ${v.work}.`, `${v.ask} = ${term(v.ca, v.cb)}`],
+        });
+      }
+
+      // ===== 4. midpoint =====
+      if (roll < 0.82) {
+        const O = [0, 0], A = [4, 0], Bp = [1.2, 3.2];
+        const M = [(A[0] + Bp[0]) / 2, (A[1] + Bp[1]) / 2];
+        const v = pick([
+          { ask: "OM", ca: 0.5, cb: 0.5, work: "OM = OA + AM = a + ½(b − a) = ½a + ½b" },
+          { ask: "AM", ca: -0.5, cb: 0.5, work: "AM = ½ AB = ½(b − a)" },
+          { ask: "MB", ca: -0.5, cb: 0.5, work: "MB = ½ AB = ½(b − a)" },
+        ]);
+        return mkVec(v.ca, v.cb, {
+          prompt: `M is the midpoint of AB.  OA = a  and  OB = b.\nWrite ${v.ask} in terms of a and b`,
+          vec: {
+            labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
+            marks: [{ p: M, t: "M" }],
+            edges: [[A, Bp]],
+            dashed: [[O, M]],
+            arrows: [{ a: O, b: A, t: "a" }, { a: O, b: Bp, t: "b" }],
+          },
+          steps: [`${v.work}.`, `${v.ask} = ${term(v.ca, v.cb)}`],
+        });
+      }
+
+      // ===== 5. ratio point on a line =====
+      {
+        const O = [0, 0], A = [4, 0], Bp = [1.2, 3.2];
+        const r = pick([[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]]);
+        const t = r[0] / (r[0] + r[1]);
+        const M = [A[0] + t * (Bp[0] - A[0]), A[1] + t * (Bp[1] - A[1])];
+        const askOM = Math.random() < 0.5;
+        const ca = askOM ? (1 - t) : -t, cb = askOM ? t : t;
+        const work = askOM
+          ? `OM = OA + AM = a + ${coef(t)}(b − a) = ${term(1 - t, t)}`
+          : `AM = ${coef(t)} AB = ${coef(t)}(b − a)`;
+        return mkVec(ca, cb, {
+          prompt: `M lies on AB with AM : MB = ${r[0]} : ${r[1]}.  OA = a  and  OB = b.\nWrite ${askOM ? "OM" : "AM"} in terms of a and b`,
+          vec: {
+            labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
+            marks: [{ p: M, t: "M" }],
+            edges: [[A, Bp]],
+            dashed: [[O, M]],
+            arrows: [{ a: O, b: A, t: "a" }, { a: O, b: Bp, t: "b" }],
+          },
+          steps: [
+            `AM : MB = ${r[0]} : ${r[1]}, so AM = ${coef(t)} of AB.`,
+            `${work}.`,
+            `${askOM ? "OM" : "AM"} = ${term(ca, cb)}`,
+          ],
+        });
+      }
     } },
 ];
 const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
@@ -5844,6 +6072,7 @@ export default function MathsUnlockedBN() {
               {question.tri && <TriangleFigure {...question.tri} />}
               {question.circle && <CircleFigure {...question.circle} />}
               {question.solid && <MensurationFigure {...question.solid} />}
+              {question.vec && <VectorFigure {...question.vec} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
