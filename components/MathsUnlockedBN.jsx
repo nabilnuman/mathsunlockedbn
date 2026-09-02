@@ -2292,11 +2292,38 @@ const TOPICS = [
         enlarge: (t, c, k) => t.map(([x, y]) => [c[0] + k * (x - c[0]), c[1] + k * (y - c[1])]),
       };
       const distinct = (b) => new Set(b.map(key)).size === 3;
+      // true when triangles P and Q are apart by at least `gap` units (SAT)
+      const separated = (P, Q, gap) => {
+        const axes = [];
+        for (const poly of [P, Q]) for (let i = 0; i < 3; i++) {
+          const u = poly[i], v = poly[(i + 1) % 3];
+          const n = [-(v[1] - u[1]), v[0] - u[0]], L = Math.hypot(n[0], n[1]) || 1;
+          axes.push([n[0] / L, n[1] / L]);
+        }
+        for (const ax of axes) {
+          let mnP = Infinity, mxP = -Infinity, mnQ = Infinity, mxQ = -Infinity;
+          for (const p of P) { const d = p[0] * ax[0] + p[1] * ax[1]; mnP = Math.min(mnP, d); mxP = Math.max(mxP, d); }
+          for (const q of Q) { const d = q[0] * ax[0] + q[1] * ax[1]; mnQ = Math.min(mnQ, d); mxQ = Math.max(mxQ, d); }
+          if (mxP <= mnQ - gap || mxQ <= mnP - gap) return true;
+        }
+        return false;
+      };
+      const cend = (t) => [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+      const apart = (a, b) => {
+        const ca = cend(a), cb = cend(b);
+        return separated(a, b, 0.8) && Math.hypot(ca[0] - cb[0], ca[1] - cb[1]) >= 3;
+      };
+      const sideOf = (m, p) => m.kind === "x" ? p[0] - m.k : m.kind === "y" ? p[1] - m.k : m.kind === "yx" ? p[1] - p[0] : p[1] + p[0];
+      const clearMirror = (m, a) => {
+        const g = (m.kind === "x" || m.kind === "y") ? 1 : 2;
+        const s = a.map((p) => sideOf(m, p));
+        return s.every((v) => v >= g) || s.every((v) => v <= -g);
+      };
       const roll = Math.random();
 
       // ---------- 1. identify the transformation type ----------
       if (roll < 0.24) {
-        for (let tries = 0; tries < 140; tries++) {
+        for (let tries = 0; tries < 400; tries++) {
           const kind = pick(["translation", "rotation", "reflection", "enlargement"]);
           const a = randTri(-5, 3);
           let b, why;
@@ -2304,16 +2331,18 @@ const TOPICS = [
             b = T.translate(a, [pick([-6, -5, -4, -3, 3, 4, 5, 6]), pick([-5, -4, -3, 3, 4, 5])]);
             why = "is the same size and the same way round — it has just slid across";
           } else if (kind === "rotation") {
-            b = T.rotate(a, [randInt(-2, 2), randInt(-2, 2)], pick([90, -90, 180]));
+            b = T.rotate(a, [randInt(-3, 3), randInt(-3, 3)], pick([90, -90, 180]));
             why = "is the same size and the same way round, but turned";
           } else if (kind === "reflection") {
-            b = T.reflect(a, pick([{ kind: "x", k: randInt(-2, 2) }, { kind: "y", k: randInt(-2, 2) }, { kind: "yx" }, { kind: "y-x" }]));
+            const m = pick([{ kind: "x", k: randInt(-3, 3) }, { kind: "y", k: randInt(-3, 3) }, { kind: "yx" }, { kind: "y-x" }]);
+            if (!clearMirror(m, a)) continue;
+            b = T.reflect(a, m);
             why = "is the same size but flipped — a mirror image";
           } else {
-            b = T.enlarge(a, [randInt(-3, 3), randInt(-3, 3)], pick([2, 3, -2]));
+            b = T.enlarge(a, [randInt(-3, 3), randInt(-3, 3)], pick([-2, -2, -3]));
             why = "has changed size";
           }
-          if (!b.every(inGrid) || !distinct(b)) continue;
+          if (!b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
           if (kind !== "translation" && isSlide(a, b)) continue;
           const answer = kind[0].toUpperCase() + kind.slice(1);
           return {
@@ -2332,11 +2361,11 @@ const TOPICS = [
 
       // ---------- 2. translation → find the vector ----------
       if (roll < 0.40) {
-        for (let tries = 0; tries < 140; tries++) {
+        for (let tries = 0; tries < 240; tries++) {
           const a = randTri(-5, 4);
           const v = [pick([-6, -5, -4, -3, -2, 2, 3, 4, 5, 6]), pick([-5, -4, -3, -2, 2, 3, 4, 5])];
           const b = T.translate(a, v);
-          if (!b.every(inGrid)) continue;
+          if (!b.every(inGrid) || !apart(a, b)) continue;
           return {
             prompt: `Triangle A is translated to triangle B. Write down the translation vector as (x, y)`,
             transform: { a, b },
@@ -2353,15 +2382,16 @@ const TOPICS = [
 
       // ---------- 3. reflection → find the mirror line ----------
       if (roll < 0.56) {
-        for (let tries = 0; tries < 200; tries++) {
+        for (let tries = 0; tries < 300; tries++) {
           const a = randTri(-5, 5);
           const m = pick([
-            { kind: "x", k: pick([-3, -2, -1, 0, 1, 2, 3]) },
-            { kind: "y", k: pick([-3, -2, -1, 0, 1, 2, 3]) },
+            { kind: "x", k: pick([-4, -3, -2, -1, 0, 1, 2, 3, 4]) },
+            { kind: "y", k: pick([-4, -3, -2, -1, 0, 1, 2, 3, 4]) },
             { kind: "yx" }, { kind: "y-x" },
           ]);
+          if (!clearMirror(m, a)) continue;
           const b = T.reflect(a, m);
-          if (!b.every(inGrid) || !distinct(b)) continue;
+          if (!b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
           const eqn = m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x";
           const norm = (s) => String(s).toLowerCase().replace(/\s+/g, "");
           const accept = new Set([norm(eqn)]);
@@ -2383,12 +2413,12 @@ const TOPICS = [
 
       // ---------- 4. enlargement → scale factor (centre given) or centre (SF given) ----------
       if (roll < 0.72) {
-        for (let tries = 0; tries < 200; tries++) {
+        for (let tries = 0; tries < 320; tries++) {
           const a = randTri(-2, 2);
-          const c = [randInt(-4, 4), randInt(-4, 4)];
-          const k = pick([2, 3, -2, 2]);
+          const c = [randInt(-3, 3), randInt(-3, 3)];
+          const k = pick([-2, -2, -2, -3]);   // negative: B lands on the far side of the centre
           const b = T.enlarge(a, c, k);
-          if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b)) continue;
+          if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
           if (area2(b) === area2(a)) continue;
           if (Math.random() < 0.55) return {
             prompt: `Triangle A is enlarged onto triangle B, centre (${c[0]}, ${c[1]}). Find the scale factor`,
@@ -2417,12 +2447,12 @@ const TOPICS = [
 
       // ---------- 5. rotation → centre, or describe the rotation ----------
       if (roll < 0.86) {
-        for (let tries = 0; tries < 200; tries++) {
+        for (let tries = 0; tries < 400; tries++) {
           const a = randTri(-5, 3);
-          const c = [randInt(-2, 2), randInt(-2, 2)];
+          const c = [randInt(-3, 3), randInt(-3, 3)];
           const spec = pick([{ deg: 90, t: "90° clockwise" }, { deg: -90, t: "90° anticlockwise" }, { deg: 180, t: "180°" }]);
           const b = T.rotate(a, c, spec.deg);
-          if (!b.every(inGrid) || !distinct(b) || isSlide(a, b)) continue;
+          if (!b.every(inGrid) || !distinct(b) || isSlide(a, b) || !apart(a, b)) continue;
           if (Math.random() < 0.5) return {
             prompt: `Triangle A is rotated ${spec.t} onto triangle B. Find the centre of rotation as (x, y)`,
             transform: { a, b, answerCentre: c },
@@ -2449,7 +2479,7 @@ const TOPICS = [
       }
 
       // ---------- 6. draw the image (tap 3 vertices) ----------
-      for (let tries = 0; tries < 240; tries++) {
+      for (let tries = 0; tries < 500; tries++) {
         const a = randTri(-4, 4);
         const kind = pick(["translation", "reflection", "rotation", "enlargement"]);
         let b, desc;
@@ -2457,17 +2487,18 @@ const TOPICS = [
           const v = [pick([-5, -4, -3, -2, 2, 3, 4, 5]), pick([-4, -3, -2, 2, 3, 4])];
           b = T.translate(a, v); desc = `Translate triangle A by the vector (${v[0]}, ${v[1]}).`;
         } else if (kind === "reflection") {
-          const m = pick([{ kind: "x", k: pick([-2, -1, 0, 1, 2]) }, { kind: "y", k: pick([-2, -1, 0, 1, 2]) }, { kind: "yx" }, { kind: "y-x" }]);
+          const m = pick([{ kind: "x", k: pick([-3, -2, -1, 0, 1, 2, 3]) }, { kind: "y", k: pick([-3, -2, -1, 0, 1, 2, 3]) }, { kind: "yx" }, { kind: "y-x" }]);
+          if (!clearMirror(m, a)) continue;
           b = T.reflect(a, m);
           desc = `Reflect triangle A in the line ${m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x"}.`;
         } else if (kind === "rotation") {
-          const c = [randInt(-2, 2), randInt(-2, 2)], s = pick([{ d: 90, t: "90° clockwise" }, { d: -90, t: "90° anticlockwise" }, { d: 180, t: "180°" }]);
+          const c = [randInt(-3, 3), randInt(-3, 3)], s = pick([{ d: 90, t: "90° clockwise" }, { d: -90, t: "90° anticlockwise" }, { d: 180, t: "180°" }]);
           b = T.rotate(a, c, s.d); desc = `Rotate triangle A ${s.t} about (${c[0]}, ${c[1]}).`;
         } else {
-          const c = [randInt(-3, 3), randInt(-3, 3)], k = pick([2, -2, 2]);
+          const c = [randInt(-3, 3), randInt(-3, 3)], k = pick([-2, -2, -3]);
           b = T.enlarge(a, c, k); desc = `Enlarge triangle A by scale factor ${k}, centre (${c[0]}, ${c[1]}).`;
         }
-        if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b)) continue;
+        if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
         return {
           prompt: `${desc}\nTap the three vertices of the image triangle.`,
           transform: { a, draw: true, image: b },
