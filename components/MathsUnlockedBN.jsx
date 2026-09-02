@@ -471,7 +471,7 @@ function parseVec(s) {
 // A coordinate grid for Transformations: shape A (blue) and its image B
 // (green), with optional mirror line / centre marker, or an interactive
 // mode where the student taps three lattice points to place the image.
-function TransformFigure({ a, b, mirror, centre, tapPts, onTap, showImage = true }) {
+function TransformFigure({ a, b, mirror, centre, rays, tapPts, onTap, lineMode, showImage = true }) {
   const R = 8, U = 14, O = 128;
   const X = (x) => O + x * U;
   const Y = (y) => O - y * U;
@@ -498,7 +498,14 @@ function TransformFigure({ a, b, mirror, centre, tapPts, onTap, showImage = true
       style={{ cursor: "pointer", pointerEvents: "all", WebkitTapHighlightColor: "transparent", outline: "none" }}
       onClick={() => onTap([x, y])} />);
   }
-  const tapPoly = (tapPts || []).length === 3 ? tapPts : null;
+  const tapPoly = !lineMode && (tapPts || []).length === 3 ? tapPts : null;
+  const tp = tapPts || [];
+  const stLine = lineMode && tp.length === 2 && (tp[0][0] !== tp[1][0] || tp[0][1] !== tp[1][1]) && (() => {
+    const [p, q] = tp;
+    if (p[0] === q[0]) return [[p[0], -R], [p[0], R]];
+    const m = (q[1] - p[1]) / (q[0] - p[0]), c = p[1] - m * p[0];
+    return [[-R, m * -R + c], [R, m * R + c]];
+  })();
   return (
     <svg viewBox="0 0 256 256" width="248" height="248" role="img" aria-label="transformation on a coordinate grid"
       style={{ maxWidth: "100%", display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
@@ -512,7 +519,12 @@ function TransformFigure({ a, b, mirror, centre, tapPts, onTap, showImage = true
           <text x={X(0) - 4} y={Y(t) + 3} fontSize="7.5" textAnchor="end" fill="var(--muted)">{t}</text>
         </g>
       ))}
+      {(rays || []).map(([p, q], i) => (
+        <line key={`ray${i}`} x1={X(p[0])} y1={Y(p[1])} x2={X(q[0] + (q[0] - p[0]) * 0.12)} y2={Y(q[1] + (q[1] - p[1]) * 0.12)}
+          stroke="var(--muted)" strokeWidth="1" strokeDasharray="3 3" />
+      ))}
       {mLine && <line x1={X(mLine[0][0])} y1={Y(mLine[0][1])} x2={X(mLine[1][0])} y2={Y(mLine[1][1])} stroke="var(--red)" strokeWidth="1.6" strokeDasharray="5 4" />}
+      {stLine && <line x1={X(stLine[0][0])} y1={Y(stLine[0][1])} x2={X(stLine[1][0])} y2={Y(stLine[1][1])} stroke="var(--blue)" strokeWidth="2.4" strokeLinecap="round" />}
       <polygon points={poly(a)} fill="var(--blue)" fillOpacity="0.16" stroke="var(--blue)" strokeWidth="2" strokeLinejoin="round" />
       {(() => { const c = cen(a); return <text x={X(c[0])} y={Y(c[1])} fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--blue)" style={halo}>A</text>; })()}
       {b && showImage && (
@@ -2319,6 +2331,12 @@ const TOPICS = [
         const s = a.map((p) => sideOf(m, p));
         return s.every((v) => v >= g) || s.every((v) => v <= -g);
       };
+      const pointInTri = (p, t) => {
+        const cr = (o, u, w) => (u[0] - o[0]) * (w[1] - o[1]) - (w[0] - o[0]) * (u[1] - o[1]);
+        const d1 = cr(t[0], t[1], p), d2 = cr(t[1], t[2], p), d3 = cr(t[2], t[0], p);
+        return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+      };
+      const mEqn = (m) => m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x";
       const roll = Math.random();
 
       // ---------- 1. identify the transformation type ----------
@@ -2367,20 +2385,23 @@ const TOPICS = [
           const b = T.translate(a, v);
           if (!b.every(inGrid) || !apart(a, b)) continue;
           return {
-            prompt: `Triangle A is translated to triangle B. Write down the translation vector as (x, y)`,
+            prompt: `Triangle A is translated to triangle B. Write down the translation vector`,
             transform: { a, b },
-            check: (inp) => { const p = parseVec(inp); return !!p && p[0] === v[0] && p[1] === v[1]; },
-            answer: `(${v[0]}, ${v[1]})`, hint: "e.g. (3, -2)",
+            vector: true,
+            fields: [{ key: "vx" }, { key: "vy" }],
+            answers: { vx: `${v[0]}`, vy: `${v[1]}` },
+            answer: `( ${v[0]} , ${v[1]} )`,
+            hint: "top: across (+ right),  bottom: up/down (+ up)",
             steps: [
               `Pick a vertex of A and the matching vertex of B.`,
-              `Across: ${v[0] >= 0 ? `${v[0]} right` : `${-v[0]} left`}.   Up/down: ${v[1] >= 0 ? `${v[1]} up` : `${-v[1]} down`}.`,
-              `Translation vector = (${v[0]}, ${v[1]}).`,
+              `Across: ${v[0] >= 0 ? `${v[0]} right` : `${-v[0]} left`}  →  top number ${v[0]}.`,
+              `Up/down: ${v[1] >= 0 ? `${v[1]} up` : `${-v[1]} down`}  →  bottom number ${v[1]}.`,
             ],
           };
         }
       }
 
-      // ---------- 3. reflection → find the mirror line ----------
+      // ---------- 3. reflection → identify / draw the mirror line ----------
       if (roll < 0.56) {
         for (let tries = 0; tries < 300; tries++) {
           const a = randTri(-5, 5);
@@ -2392,7 +2413,20 @@ const TOPICS = [
           if (!clearMirror(m, a)) continue;
           const b = T.reflect(a, m);
           if (!b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
-          const eqn = m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x";
+          const eqn = mEqn(m);
+          if (Math.random() < 0.5) {
+            return {
+              prompt: `Triangle A is reflected onto triangle B. Draw the mirror line by tapping two points on it`,
+              transform: { a, b },
+              drawMirror: m,
+              answer: eqn, hint: "tap two lattice points that lie on the mirror line",
+              steps: [
+                `Join each vertex of A to its image on B; the mirror line cuts every join in half at right angles.`,
+                `Every matching pair of points is the same distance from it, on opposite sides.`,
+                `The mirror line is ${eqn}.`,
+              ],
+            };
+          }
           const norm = (s) => String(s).toLowerCase().replace(/\s+/g, "");
           const accept = new Set([norm(eqn)]);
           if (m.kind === "yx") { accept.add("y=x"); accept.add("x=y"); }
@@ -2413,27 +2447,40 @@ const TOPICS = [
 
       // ---------- 4. enlargement → scale factor (centre given) or centre (SF given) ----------
       if (roll < 0.72) {
-        for (let tries = 0; tries < 320; tries++) {
-          const a = randTri(-2, 2);
+        for (let tries = 0; tries < 400; tries++) {
           const c = [randInt(-3, 3), randInt(-3, 3)];
-          const k = pick([-2, -2, -2, -3]);   // negative: B lands on the far side of the centre
-          const b = T.enlarge(a, c, k);
-          if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
+          const kind = pick(["p", "p", "p", "half", "neg", "neg"]);   // mostly positive
+          let a, b, k, kTxt;
+          if (kind === "half") {
+            const inner = randTri(-2, 2);            // this becomes B
+            a = inner.map(([x, y]) => [c[0] + 2 * (x - c[0]), c[1] + 2 * (y - c[1])]);
+            b = inner; k = 0.5; kTxt = "1/2";
+          } else if (kind === "neg") {
+            a = randTri(-2, 2); k = -2; kTxt = "-2";
+            b = T.enlarge(a, c, k);
+          } else {
+            a = randTri(-2, 2); k = pick([2, 2, 3]); kTxt = `${k}`;
+            b = T.enlarge(a, c, k);
+          }
+          if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b) || !distinct(a)) continue;
           if (area2(b) === area2(a)) continue;
+          if (pointInTri(c, a) || pointInTri(c, b)) continue;
+          if (k < 0 && !apart(a, b)) continue;   // negative SF: object and image must be clearly apart
+          const rays = a.map((p, i) => [c, b[i]]);
           if (Math.random() < 0.55) return {
             prompt: `Triangle A is enlarged onto triangle B, centre (${c[0]}, ${c[1]}). Find the scale factor`,
-            transform: { a, b, centre: c },
+            transform: { a, b, centre: c, rays },
             check: (inp) => { try { return Math.abs(evalString(String(inp), 0) - k) < 1e-6; } catch (e) { return false; } },
-            answer: `${k}`, hint: "a number — negative if B is on the far side of the centre",
+            answer: kTxt, hint: k === 0.5 ? "a fraction — B is smaller than A" : "a number — negative if B is on the far side of the centre",
             steps: [
               `Scale factor = image length ÷ object length for a pair of matching sides.`,
-              `A side of B is ${Math.abs(k)} times the matching side of A${k < 0 ? ", and on the opposite side of the centre" : ""}.`,
-              `Scale factor = ${k}.`,
+              `A side of B is ${k === 0.5 ? "half" : Math.abs(k) + " times"} the matching side of A${k < 0 ? ", and on the opposite side of the centre" : ""}.`,
+              `Scale factor = ${kTxt}.`,
             ],
           };
           return {
-            prompt: `Triangle A is enlarged onto triangle B with scale factor ${k}. Find the centre of enlargement as (x, y)`,
-            transform: { a, b, answerCentre: c },
+            prompt: `Triangle A is enlarged onto triangle B with scale factor ${kTxt}. Find the centre of enlargement as (x, y)`,
+            transform: { a, b, answerCentre: c, answerRays: rays },
             check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
             answer: `(${c[0]}, ${c[1]})`, hint: "e.g. (1, -2)",
             steps: [
@@ -2453,7 +2500,7 @@ const TOPICS = [
           const spec = pick([{ deg: 90, t: "90° clockwise" }, { deg: -90, t: "90° anticlockwise" }, { deg: 180, t: "180°" }]);
           const b = T.rotate(a, c, spec.deg);
           if (!b.every(inGrid) || !distinct(b) || isSlide(a, b) || !apart(a, b)) continue;
-          if (Math.random() < 0.5) return {
+          if (Math.random() < 0.22) return {   // "find the centre" is hard — keep it rare
             prompt: `Triangle A is rotated ${spec.t} onto triangle B. Find the centre of rotation as (x, y)`,
             transform: { a, b, answerCentre: c },
             check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
@@ -4318,6 +4365,12 @@ export default function MathsUnlockedBN() {
     } else if (question.choices) {
       if (!mcPick) return;
       correct = mcPick === question.answer;
+    } else if (question.drawMirror) {
+      if (drawPts.length !== 2) return;
+      if (drawPts[0][0] === drawPts[1][0] && drawPts[0][1] === drawPts[1][1]) return;
+      const mm = question.drawMirror;
+      const onL = (p) => mm.kind === "x" ? p[0] === mm.k : mm.kind === "y" ? p[1] === mm.k : mm.kind === "yx" ? p[0] === p[1] : p[0] === -p[1];
+      correct = drawPts.every(onL);
     } else if (question.drawTransform) {
       if (drawTri.length !== 3) return;
       const tgt = question.drawTransform.image;
@@ -5289,18 +5342,24 @@ export default function MathsUnlockedBN() {
                     a={question.transform.a}
                     b={question.transform.draw ? (feedback ? question.transform.image : null) : question.transform.b}
                     centre={question.transform.centre || (feedback ? question.transform.answerCentre : null)}
-                    mirror={feedback ? question.transform.answerMirror : null}
-                    tapPts={question.transform.draw ? drawTri : null}
-                    onTap={question.transform.draw && !feedback ? toggleTriPoint : null}
+                    mirror={feedback ? (question.drawMirror || question.transform.answerMirror) : null}
+                    rays={question.transform.rays || (feedback ? question.transform.answerRays : null)}
+                    lineMode={!!question.drawMirror}
+                    tapPts={question.transform.draw ? drawTri : question.drawMirror ? drawPts : null}
+                    onTap={feedback ? null : question.transform.draw ? toggleTriPoint : question.drawMirror ? toggleDrawPoint : null}
                   />
                   <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
-                    {question.transform.draw
+                    {question.drawMirror
                       ? (feedback
-                        ? (feedback.correct ? "Image placed correctly" : "Green shows the correct image")
-                        : drawTri.length === 0 ? "Tap the first vertex of the image"
-                          : drawTri.length < 3 ? `${3 - drawTri.length} more to tap`
-                            : "Tap a different point to adjust a vertex")
-                      : "Triangle A (blue) is mapped onto triangle B (green)"}
+                        ? (feedback.correct ? "Mirror line correct" : "Red shows the correct mirror line")
+                        : drawPts.length < 2 ? "Tap two points on the mirror line" : "Tap a different point to adjust the line")
+                      : question.transform.draw
+                        ? (feedback
+                          ? (feedback.correct ? "Image placed correctly" : "Green shows the correct image")
+                          : drawTri.length === 0 ? "Tap the first vertex of the image"
+                            : drawTri.length < 3 ? `${3 - drawTri.length} more to tap`
+                              : "Tap a different point to adjust a vertex")
+                        : "Triangle A (blue) is mapped onto triangle B (green)"}
                   </div>
                 </div>
               )}
@@ -5322,7 +5381,28 @@ export default function MathsUnlockedBN() {
                 )
               )}
 
-              {(question.drawGraph || question.region || question.venn || question.choices || question.drawTransform) ? null : question.fields ? (
+              {(question.drawGraph || question.region || question.venn || question.choices || question.drawTransform || question.drawMirror) ? null : question.vector ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                  <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>(</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {["vx", "vy"].map((k, i) => (
+                      <input key={k}
+                        ref={i === 0 ? answerRef : undefined}
+                        autoFocus={i === 0}
+                        className="mub-mono" inputMode="numeric"
+                        autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                        value={multiInput[k] || ""}
+                        onChange={(e) => setMultiInput((m) => ({ ...m, [k]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
+                        placeholder="?"
+                        disabled={!!feedback}
+                        style={{ width: 74, padding: "8px 10px", fontSize: 17, textAlign: "center", border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
+                      />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>)</span>
+                </div>
+              ) : question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   {question.fields.map((f, i) => (
                     <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -5378,6 +5458,8 @@ export default function MathsUnlockedBN() {
                   || (question.region && !regionPick)
                   || (question.venn && vennPressed.length === 0)
                   || (question.choices && !mcPick)
+                  || (question.drawMirror && drawPts.length < 2)
+                  || (question.vector && (!(multiInput.vx || "").trim() || !(multiInput.vy || "").trim()))
                   || (question.drawTransform && drawTri.length !== 3)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
