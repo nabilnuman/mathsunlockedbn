@@ -6216,22 +6216,26 @@ export default function MathsUnlockedBN() {
                     </div>
                   )}
 
-                  {blitzQ.choices && (
-                    <div style={{ display: "grid", gridTemplateColumns: blitzQ.choices.some((c) => c.length > 6) ? "1fr" : "1fr 1fr", gap: 8 }}>
-                      {blitzQ.choices.map((opt) => {
-                        const picked = blitzPick && blitzPick.value === opt;
-                        const isAns = blitzPick && opt === blitzQ.answer;
-                        const bg = picked ? (blitzPick.correct ? "var(--green)" : "var(--red)") : isAns ? "var(--green)" : "var(--paper)";
-                        const fg = picked || isAns ? "var(--on-accent)" : "var(--ink)";
-                        return (
-                          <button key={opt} type="button" disabled={!!blitzPick} onClick={() => answerBlitz(opt)}
-                            style={{ padding: "13px 12px", fontSize: 15, fontWeight: 700, cursor: blitzPick ? "default" : "pointer", borderRadius: 10, border: `1.5px solid ${bg === "var(--paper)" ? "var(--grid)" : bg}`, background: bg, color: fg, transition: "background 0.1s" }}>
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {blitzQ.choices && (() => {
+                    const twoCol = blitzQ.choices.length === 4;
+                    const longLabel = blitzQ.choices.some((c) => c.length > 9);
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: twoCol ? "1fr 1fr" : "1fr", gap: 8 }}>
+                        {blitzQ.choices.map((opt) => {
+                          const picked = blitzPick && blitzPick.value === opt;
+                          const isAns = blitzPick && opt === blitzQ.answer;
+                          const bg = picked ? (blitzPick.correct ? "var(--green)" : "var(--red)") : isAns ? "var(--green)" : "var(--paper)";
+                          const fg = picked || isAns ? "var(--on-accent)" : "var(--ink)";
+                          return (
+                            <button key={opt} type="button" disabled={!!blitzPick} onClick={() => answerBlitz(opt)}
+                              style={{ padding: twoCol ? "14px 6px" : "13px 12px", fontSize: twoCol && longLabel ? 13.5 : 15, fontWeight: 700, cursor: blitzPick ? "default" : "pointer", borderRadius: 10, border: `1.5px solid ${bg === "var(--paper)" ? "var(--grid)" : bg}`, background: bg, color: fg, transition: "background 0.1s" }}>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
