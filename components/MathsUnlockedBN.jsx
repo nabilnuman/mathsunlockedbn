@@ -758,36 +758,45 @@ function starPoly(n, startDeg = -90, ro = 1, ri = 0.42) {
   }
   return pts;
 }
+// axis angles (deg) for a regular n-gon / n-point star drawn with `startDeg`
+const regSym = (n, startDeg) => Array.from({ length: n }, (_, i) => startDeg + (i * 180) / n);
 const SHAPES = {
-  isotri: { label: "an isosceles triangle", lines: 1, rot: 1, p: [[0, -1], [0.85, 0.75], [-0.85, 0.75]] },
-  eqtri: { label: "an equilateral triangle", lines: 3, rot: 3, p: regPoly(3, -90) },
-  rect: { label: "a rectangle", lines: 2, rot: 2, p: [[-1, -0.62], [1, -0.62], [1, 0.62], [-1, 0.62]] },
-  square: { label: "a square", lines: 4, rot: 4, p: [[-0.82, -0.82], [0.82, -0.82], [0.82, 0.82], [-0.82, 0.82]] },
-  rhombus: { label: "a rhombus", lines: 2, rot: 2, p: [[0, -1], [0.68, 0], [0, 1], [-0.68, 0]] },
-  parallelogram: { label: "a parallelogram", lines: 0, rot: 2, p: [[-0.95, -0.55], [0.5, -0.55], [0.95, 0.55], [-0.5, 0.55]] },
-  kite: { label: "a kite", lines: 1, rot: 1, p: [[0, -1], [0.62, -0.15], [0, 1], [-0.62, -0.15]] },
-  pentagon: { label: "a regular pentagon", lines: 5, rot: 5, p: regPoly(5, -90) },
-  hexagon: { label: "a regular hexagon", lines: 6, rot: 6, p: regPoly(6, -90) },
-  octagon: { label: "a regular octagon", lines: 8, rot: 8, p: regPoly(8, -112.5) },
-  plus: { label: "a plus shape", lines: 4, rot: 4, p: [[-0.3, -0.9], [0.3, -0.9], [0.3, -0.3], [0.9, -0.3], [0.9, 0.3], [0.3, 0.3], [0.3, 0.9], [-0.3, 0.9], [-0.3, 0.3], [-0.9, 0.3], [-0.9, -0.3], [-0.3, -0.3]] },
-  arrow: { label: "an arrow", lines: 1, rot: 1, p: [[-0.9, -0.32], [0.15, -0.32], [0.15, -0.7], [0.9, 0], [0.15, 0.7], [0.15, 0.32], [-0.9, 0.32]] },
-  lshape: { label: "an L-shape", lines: 0, rot: 1, p: [[-0.6, -0.9], [-0.1, -0.9], [-0.1, 0.4], [0.7, 0.4], [0.7, 0.9], [-0.6, 0.9]] },
-  tshape: { label: "a T-shape", lines: 1, rot: 1, p: [[-0.9, -0.9], [0.9, -0.9], [0.9, -0.35], [0.28, -0.35], [0.28, 0.9], [-0.28, 0.9], [-0.28, -0.35], [-0.9, -0.35]] },
-  hletter: { label: "the letter H", lines: 2, rot: 2, p: [[-0.7, -0.9], [-0.35, -0.9], [-0.35, -0.2], [0.35, -0.2], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [0.35, 0.2], [-0.35, 0.2], [-0.35, 0.9], [-0.7, 0.9]] },
-  iletter: { label: "the letter I", lines: 2, rot: 2, p: [[-0.7, -0.9], [0.7, -0.9], [0.7, -0.55], [0.2, -0.55], [0.2, 0.55], [0.7, 0.55], [0.7, 0.9], [-0.7, 0.9], [-0.7, 0.55], [-0.2, 0.55], [-0.2, -0.55], [-0.7, -0.55]] },
-  nletter: { label: "the letter N", lines: 0, rot: 2, p: [[-0.7, -0.9], [-0.35, -0.9], [0.35, 0.35], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [-0.35, -0.35], [-0.35, 0.9], [-0.7, 0.9]] },
-  zletter: { label: "the letter Z", lines: 0, rot: 2, p: [[-0.75, -0.9], [0.75, -0.9], [0.75, -0.5], [-0.2, 0.5], [0.75, 0.5], [0.75, 0.9], [-0.75, 0.9], [-0.75, 0.5], [0.2, -0.5], [-0.75, -0.5]] },
-  star5: { label: "a five-pointed star", lines: 5, rot: 5, p: starPoly(5, -90, 1, 0.4) },
-  star6: { label: "a six-pointed star", lines: 6, rot: 6, p: starPoly(6, -90, 1, 0.55) },
+  isotri: { label: "an isosceles triangle", lines: 1, rot: 1, sym: [90], p: [[0, -1], [0.85, 0.75], [-0.85, 0.75]] },
+  eqtri: { label: "an equilateral triangle", lines: 3, rot: 3, sym: regSym(3, -90), p: regPoly(3, -90) },
+  rect: { label: "a rectangle", lines: 2, rot: 2, sym: [0, 90], p: [[-1, -0.62], [1, -0.62], [1, 0.62], [-1, 0.62]] },
+  square: { label: "a square", lines: 4, rot: 4, sym: [0, 45, 90, 135], p: [[-0.82, -0.82], [0.82, -0.82], [0.82, 0.82], [-0.82, 0.82]] },
+  rhombus: { label: "a rhombus", lines: 2, rot: 2, sym: [0, 90], p: [[0, -1], [0.68, 0], [0, 1], [-0.68, 0]] },
+  parallelogram: { label: "a parallelogram", lines: 0, rot: 2, sym: [], p: [[-0.95, -0.55], [0.5, -0.55], [0.95, 0.55], [-0.5, 0.55]] },
+  kite: { label: "a kite", lines: 1, rot: 1, sym: [90], p: [[0, -1], [0.62, -0.15], [0, 1], [-0.62, -0.15]] },
+  pentagon: { label: "a regular pentagon", lines: 5, rot: 5, sym: regSym(5, -90), p: regPoly(5, -90) },
+  hexagon: { label: "a regular hexagon", lines: 6, rot: 6, sym: regSym(6, -90), p: regPoly(6, -90) },
+  octagon: { label: "a regular octagon", lines: 8, rot: 8, sym: regSym(8, -112.5), p: regPoly(8, -112.5) },
+  plus: { label: "a plus shape", lines: 4, rot: 4, sym: [0, 45, 90, 135], p: [[-0.3, -0.9], [0.3, -0.9], [0.3, -0.3], [0.9, -0.3], [0.9, 0.3], [0.3, 0.3], [0.3, 0.9], [-0.3, 0.9], [-0.3, 0.3], [-0.9, 0.3], [-0.9, -0.3], [-0.3, -0.3]] },
+  arrow: { label: "an arrow", lines: 1, rot: 1, sym: [0], p: [[-0.9, -0.32], [0.15, -0.32], [0.15, -0.7], [0.9, 0], [0.15, 0.7], [0.15, 0.32], [-0.9, 0.32]] },
+  lshape: { label: "an L-shape", lines: 0, rot: 1, sym: [], p: [[-0.6, -0.9], [-0.1, -0.9], [-0.1, 0.4], [0.7, 0.4], [0.7, 0.9], [-0.6, 0.9]] },
+  tshape: { label: "a T-shape", lines: 1, rot: 1, sym: [90], p: [[-0.9, -0.9], [0.9, -0.9], [0.9, -0.35], [0.28, -0.35], [0.28, 0.9], [-0.28, 0.9], [-0.28, -0.35], [-0.9, -0.35]] },
+  hletter: { label: "the letter H", lines: 2, rot: 2, sym: [0, 90], p: [[-0.7, -0.9], [-0.35, -0.9], [-0.35, -0.2], [0.35, -0.2], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [0.35, 0.2], [-0.35, 0.2], [-0.35, 0.9], [-0.7, 0.9]] },
+  iletter: { label: "the letter I", lines: 2, rot: 2, sym: [0, 90], p: [[-0.7, -0.9], [0.7, -0.9], [0.7, -0.55], [0.2, -0.55], [0.2, 0.55], [0.7, 0.55], [0.7, 0.9], [-0.7, 0.9], [-0.7, 0.55], [-0.2, 0.55], [-0.2, -0.55], [-0.7, -0.55]] },
+  nletter: { label: "the letter N", lines: 0, rot: 2, sym: [], p: [[-0.7, -0.9], [-0.35, -0.9], [0.35, 0.35], [0.35, -0.9], [0.7, -0.9], [0.7, 0.9], [0.35, 0.9], [-0.35, -0.35], [-0.35, 0.9], [-0.7, 0.9]] },
+  zletter: { label: "the letter Z", lines: 0, rot: 2, sym: [], p: [[-0.75, -0.9], [0.75, -0.9], [0.75, -0.5], [-0.2, 0.5], [0.75, 0.5], [0.75, 0.9], [-0.75, 0.9], [-0.75, 0.5], [0.2, -0.5], [-0.75, -0.5]] },
+  star5: { label: "a five-pointed star", lines: 5, rot: 5, sym: regSym(5, -90), p: starPoly(5, -90, 1, 0.4) },
+  star6: { label: "a six-pointed star", lines: 6, rot: 6, sym: regSym(6, -90), p: starPoly(6, -90, 1, 0.55) },
 };
-function ShapeFigure({ shape }) {
+function ShapeFigure({ shape, showSym }) {
   const s = SHAPES[shape];
   const S = 56, O = 72;
   const pts = s.p.map(([x, y]) => `${(O + x * S).toFixed(1)},${(O + y * S).toFixed(1)}`).join(" ");
+  const axes = showSym ? (s.sym || []) : [];
+  const R = 66;
   return (
     <svg viewBox="0 0 144 144" width="150" height="150" role="img" aria-label={s.label}
       style={{ display: "block", margin: "0 auto 10px" }}>
       <polygon points={pts} fill="var(--blue)" fillOpacity="0.16" stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" />
+      {axes.map((deg, i) => {
+        const t = deg * Math.PI / 180, dx = Math.cos(t) * R, dy = Math.sin(t) * R;
+        return <line key={i} x1={(O - dx).toFixed(1)} y1={(O - dy).toFixed(1)} x2={(O + dx).toFixed(1)} y2={(O + dy).toFixed(1)}
+          stroke="var(--red)" strokeWidth="1.6" strokeDasharray="5 4" strokeLinecap="round" />;
+      })}
     </svg>
   );
 }
@@ -1292,8 +1301,8 @@ function VennShade({ venn, pressed, onToggle, showAnswer }) {
   );
 }
 
-// A translucent scratch sheet over the quiz card for rough working.
-// Strokes are normalised (0–1) so they survive card resizes; the parent
+// A fixed-height scratch pad in the quiz-card flow for rough working.
+// Strokes are normalised (0–1) so they survive resizes; the parent
 // clears them when the question changes.
 function SketchOverlay({ active, strokes, setStrokes }) {
   const canvasRef = useRef(null);
@@ -1304,12 +1313,14 @@ function SketchOverlay({ active, strokes, setStrokes }) {
     const cv = canvasRef.current;
     if (!cv || !cv.parentElement) return;
     const p = cv.parentElement;
-    const measure = () => setSize({ w: p.clientWidth, h: p.clientHeight });
+    const measure = () => setSize((s) => (s.w === p.clientWidth && s.h === p.clientHeight ? s : { w: p.clientWidth, h: p.clientHeight }));
     measure();
+    // the pad only has a real size once it's open — re-measure on the next frame too
+    const raf = requestAnimationFrame(measure);
     const ro = new ResizeObserver(measure);
     ro.observe(p);
-    return () => ro.disconnect();
-  }, []);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [active]);
 
   const redraw = () => {
     const cv = canvasRef.current;
@@ -1367,16 +1378,21 @@ function SketchOverlay({ active, strokes, setStrokes }) {
     if (Array.isArray(done) && done.length) setStrokes((s) => [...s, done]);
   };
 
+  // A constant-size scratch pad that sits in the card flow (so it never
+  // covers the question and the card just grows). Toggled with the pencil.
   return (
     <div style={{
-      position: "absolute", inset: 0, zIndex: 5, background: "rgba(255,255,255,0.85)",
-      opacity: active ? 1 : 0, pointerEvents: active ? "auto" : "none", transition: "opacity 0.12s",
+      position: "relative", width: "100%", height: active ? 320 : 0,
+      overflow: "hidden", marginTop: active ? 12 : 0,
+      border: active ? "1.5px dashed #c9d2da" : "none", borderRadius: 10,
+      background: "#fff",
     }}>
+      <div style={{ position: "absolute", top: 6, left: 10, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "#8a97a3", pointerEvents: "none" }}>rough working</div>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: "crosshair" }}
         onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
       {strokes.length > 0 && (
         <button onClick={() => setStrokes([])} style={{
-          position: "absolute", top: 6, right: 8, fontSize: 11, fontWeight: 700, padding: "4px 10px",
+          position: "absolute", top: 4, right: 8, fontSize: 11, fontWeight: 700, padding: "4px 10px",
           background: "#fff", border: "1px solid #c9d2da", borderRadius: 8, cursor: "pointer", color: "#1b2733",
         }}>Clear all</button>
       )}
@@ -1575,17 +1591,18 @@ const TOPICS = [
           const b = [2, 3, 5, 6, 7, 10, 11, 13][randInt(0, 7)];
           const a = randInt(1, 6), g = gcd(a, b), nc = a / g, den = b / g;
           const ans = den === 1 ? surdStr(nc, b) : `${nc === 1 ? "" : nc}√${b}/${den}`;
+          const ansDisp = den === 1 ? surdStr(nc, b) : frac(`${nc === 1 ? "" : nc}√${b}`, `${den}`);
           return {
-            prompt: `Rationalise the denominator:   ${a}/√${b}`,
-            answer: ans, hint: "e.g. 3√5/5",
+            prompt: `Rationalise the denominator:   ${frac(`${a}`, `√${b}`)}`,
+            answer: ans, answerDisplay: ansDisp, hint: "e.g. 3√5/5",
             check: (inp) => {
               const s = String(inp).replace(/\s/g, "");
               return checkEquivalent(inp, ans) && /√|sqrt/i.test(s) && !/\/[^/]*(√|sqrt)/i.test(s);
             },
             steps: [
-              `Multiply top and bottom by √${b}:  ${a}/√${b} × √${b}/√${b}`,
-              `= ${a}√${b} / ${b}`,
-              den === 1 ? `= ${ans}` : `Cancel the common factor ${g}:  = ${ans}`,
+              `Multiply top and bottom by √${b}:  ${frac(`${a}`, `√${b}`)} × ${frac(`√${b}`, `√${b}`)}`,
+              `= ${frac(`${a}√${b}`, `${b}`)}`,
+              g === 1 ? `= ${ansDisp}` : `Cancel the common factor ${g}:  = ${ansDisp}`,
             ],
           };
         },
@@ -2032,11 +2049,12 @@ const TOPICS = [
           return {
             prompt: `Solve, giving each answer to 2 decimal places:   ${aT}x² ${bT} ${cT} = 0`,
             answer: `x = ${f(r1)},  x = ${f(r2)}`,
-            hint: "use the quadratic formula; give both answers, comma separated",
-            check: (inp) => {
-              const ns = String(inp).match(/-?\d+(?:\.\d+)?/g);
-              if (!ns || ns.length !== 2) return false;
-              const g = ns.map(Number).sort((u, v) => u - v);
+            hint: "use the quadratic formula",
+            fields: [{ key: "x1", label: "x =", placeholder: "?" }, { key: "x2", label: "x =", placeholder: "?" }],
+            check: (m) => {
+              const g = [m.x1, m.x2].map((s) => parseFloat(String(s).replace(/[−–—]/g, "-").replace(/[^0-9.\-]/g, "")));
+              if (g.some((v) => !Number.isFinite(v))) return false;
+              g.sort((u, v) => u - v);
               return Math.abs(g[0] - r1) < 0.02 && Math.abs(g[1] - r2) < 0.02;
             },
             steps: [
@@ -3281,7 +3299,7 @@ const TOPICS = [
         prompt: askLines
           ? `The shape shown is ${s.label}.\nHow many lines of symmetry does it have?`
           : `The shape shown is ${s.label}.\nWhat is its order of rotational symmetry?`,
-        figure: { shape: k },
+        figure: { shape: k, showSymAfter: askLines },
         answer: `${askLines ? s.lines : s.rot}`, hint: "Enter a number.",
         steps: askLines
           ? [`${cap(s.label)} has ${s.lines} line${s.lines === 1 ? "" : "s"} of symmetry.`]
@@ -4711,7 +4729,8 @@ function taskDone(task, day) {
   return (task.id === "showup" ? 1 : task.progress(day)) >= task.goal;
 }
 
-// Record level-ups (timestamps + Skeleton Keys) after any XP change.
+// Record level-ups (timestamps + Skeleton Keys + XP Boosts) after any XP
+// change. Keys land on 5/10/15/20; ×2 XP Boosts on 4/8/12/16/20.
 function creditLevelUps(next, expBefore) {
   const before = levelFromExp(expBefore);
   const after = levelFromExp(totalExp(next));
@@ -4720,6 +4739,7 @@ function creditLevelUps(next, expBefore) {
     for (let L = before + 1; L <= after; L++) {
       if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
       if (L % 5 === 0) next.keys = (next.keys || 0) + 1;
+      if (L % 4 === 0) next.boosts = (next.boosts || 0) + 1;
     }
   }
   return after > before ? after : null;
@@ -4732,6 +4752,7 @@ const emptyProfile = () => ({
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
+  boosts: 0, boostUntil: 0,
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 // A student is identified by name + 4-digit PIN, so two students who share
@@ -4804,6 +4825,7 @@ export default function MathsUnlockedBN() {
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
+  const [clockTick, setClockTick] = useState(0); // ticks every 20s so the XP-Boost countdown stays live
   const [blitzPhase, setBlitzPhase] = useState("idle"); // idle | intro | playing | over
   const [blitzScore, setBlitzScore] = useState(0);
   const [blitzLeft, setBlitzLeft] = useState(BLITZ_SECONDS);
@@ -5117,7 +5139,11 @@ export default function MathsUnlockedBN() {
     const newBest = sc > (n.blitzBest || 0);
     if (newBest) n.blitzBest = sc;
     const before = totalExp(n);
-    if (sc > 0) { n.bonusExp = (n.bonusExp || 0) + sc * CORRECT_XP; bumpWeek(n, sc * CORRECT_XP); }
+    if (sc > 0) {
+      const gain = sc * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
+      n.bonusExp = (n.bonusExp || 0) + gain;
+      bumpWeek(n, gain);
+    }
     creditLevelUps(n, before);
     const unlocked = [];
     n.achievedAt = n.achievedAt || {};
@@ -5134,6 +5160,13 @@ export default function MathsUnlockedBN() {
     setBlitzPhase("idle");
     setScreen("dashboard");
   }
+
+  // Keep the XP-Boost countdown fresh while one is running.
+  useEffect(() => {
+    if ((profile.boostUntil || 0) <= Date.now()) return;
+    const iv = setInterval(() => setClockTick((t) => t + 1), 20000);
+    return () => clearInterval(iv);
+  }, [profile.boostUntil]);
 
   // Blitz countdown — one interval while a run is live.
   useEffect(() => {
@@ -5273,6 +5306,12 @@ export default function MathsUnlockedBN() {
   function devAddKeys(n) {
     saveProfile({ ...profile, keys: (profile.keys || 0) + n });
   }
+  // Spend one ×2 XP Boost — starts a 1-hour window of double correct-answer XP.
+  function activateBoost() {
+    if ((profile.boosts || 0) <= 0) return;
+    if ((profile.boostUntil || 0) > Date.now()) return; // one at a time
+    saveProfile({ ...profile, boosts: profile.boosts - 1, boostUntil: Date.now() + 3600 * 1000 });
+  }
   function devHardReset() {
     if (typeof window !== "undefined" && !window.confirm("Reset this account to a blank Level 1 / Prestige 0? Progress, prestige, Skeleton Keys and achievements are all wiped. Name, school and PIN are kept.")) return;
     const { name, school, pin, parentToken, createdAt } = profile;
@@ -5398,7 +5437,9 @@ export default function MathsUnlockedBN() {
       }
     } else if (question.fields) {
       if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return; // all cells required
-      correct = question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
+      correct = question.check
+        ? !!question.check(multiInput)
+        : question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
     } else {
       if (!answerInput.trim()) return;
       correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
@@ -5445,7 +5486,9 @@ export default function MathsUnlockedBN() {
       d.streakToday = (d.streakToday || 0) + 1;
       d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
       if (scoredId === d.weakTopicId) d.weakCorrect = (d.weakCorrect || 0) + 1;
-      next.bonusExp = (next.bonusExp || 0) + CORRECT_XP; // small XP for every correct answer
+      // small XP for every correct answer — doubled while a ×2 XP Boost is running
+      const boosted = (profile.boostUntil || 0) > Date.now();
+      next.bonusExp = (next.bonusExp || 0) + CORRECT_XP * (boosted ? 2 : 1);
     } else {
       next.streak = 0;
       next.consecWrong = (next.consecWrong || 0) + 1;
@@ -5456,6 +5499,8 @@ export default function MathsUnlockedBN() {
     bumpWeek(next, expGain); // feed the weekly school leaderboard
     const leveledTo = creditLevelUps(next, expBefore);
     const keysWon = (next.keys || 0) - (profile.keys || 0);
+    const boostsWon = (next.boosts || 0) - (profile.boosts || 0);
+    const xpDoubled = (profile.boostUntil || 0) > Date.now();
 
     const unlocked = [];
     next.achievedAt = next.achievedAt || {};
@@ -5467,7 +5512,7 @@ export default function MathsUnlockedBN() {
       }
     });
     if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
-    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon, rankedUp });
+    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp });
     saveProfile(next);
   }
 
@@ -5593,7 +5638,7 @@ export default function MathsUnlockedBN() {
   // two boards — all-time (top-10 leaderboard scores) and this week (sum
   // of every student's XP earned since Monday).
   async function loadBoard() {
-    setBoard({ loading: true, schools: [], weekly: [] });
+    setBoard({ loading: true, schools: [], weekly: [], players: [] });
     let all = [];
     try {
       const listRes = await storage.list("student_", true);
@@ -5659,7 +5704,26 @@ export default function MathsUnlockedBN() {
     weekly.sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name));
     const lastChampion = [...weekly].filter((s) => s.lastXp > 0).sort((a, b) => b.lastXp - a.lastXp)[0] || null;
 
-    setBoard({ loading: false, schools, weekly, weekOf: wk, lastChampion });
+    // ---- individual players (every student, all schools + solo) ----
+    const players = all
+      .filter((m) => m && m.name)
+      .map((m) => ({
+        name: m.name,
+        school: m.school && m.school !== SOLO_SCHOOL ? m.school : null,
+        score: leaderboardScore(m),
+        prestige: m.prestige || 0,
+        level: levelFromExp(totalExp(m)),
+        title: titleForLevel(levelFromExp(totalExp(m))),
+        correct: m.totalCorrect || 0,
+        achievements: (m.achievements || []).length,
+        bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
+        at: lastImprovementAt(m),
+        full: m,
+      }))
+      .sort((a, b) => b.score - a.score || a.at - b.at || a.name.localeCompare(b.name))
+      .slice(0, 50);
+
+    setBoard({ loading: false, schools, weekly, players, weekOf: wk, lastChampion });
   }
 
   function openQuestionBank() {
@@ -5891,6 +5955,31 @@ export default function MathsUnlockedBN() {
                 <span style={{ opacity: 0.7 }}>· opens a locked topic early</span>
               </div>
 
+              {(() => {
+                const active = (profile.boostUntil || 0) > Date.now();
+                const held = profile.boosts || 0;
+                if (!active && held === 0) return null;
+                const minsLeft = Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000));
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 15 }}>⚡</span>
+                    {active ? (
+                      <span style={{ color: "var(--green)", fontWeight: 700 }}>
+                        ×2 XP active · {minsLeft} min left
+                      </span>
+                    ) : (
+                      <>
+                        <span><b style={{ color: "var(--ink)" }}>{held}</b> XP Boost{held === 1 ? "" : "s"}</span>
+                        <button onClick={activateBoost} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "3px 10px", cursor: "pointer" }}>
+                          Activate ×2 (1 hr)
+                        </button>
+                      </>
+                    )}
+                    {active && held > 0 && <span style={{ opacity: 0.7 }}>· {held} more ready</span>}
+                  </div>
+                );
+              })()}
+
               {teacherMode && (
                 <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
                   <div style={{ fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>🛠 Teacher / dev tools <span style={{ fontWeight: 400, color: "var(--muted)" }}>— affects your own account</span></div>
@@ -5902,6 +5991,7 @@ export default function MathsUnlockedBN() {
                           <button onClick={devMaxAll} style={b}>Max all topics → S+ (Level 20)</button>
                           <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
+                          <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
@@ -6346,7 +6436,18 @@ export default function MathsUnlockedBN() {
 
               {question.graph && <LineGraph data={question.graph} />}
               {question.motion && <MotionGraph {...question.motion} />}
-              {question.figure && <ShapeFigure shape={question.figure.shape} />}
+              {question.figure && (
+                <div>
+                  <ShapeFigure shape={question.figure.shape} showSym={!!feedback && question.figure.showSymAfter} />
+                  {!!feedback && question.figure.showSymAfter && (
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: -4, marginBottom: 8 }}>
+                      {(SHAPES[question.figure.shape].sym || []).length === 0
+                        ? "No lines of symmetry"
+                        : `Dashed = the ${(SHAPES[question.figure.shape].sym || []).length} line${(SHAPES[question.figure.shape].sym || []).length === 1 ? "" : "s"} of symmetry`}
+                    </div>
+                  )}
+                </div>
+              )}
               {question.tri && <TriangleFigure {...question.tri} />}
               {question.circle && <CircleFigure {...question.circle} />}
               {question.solid && <MensurationFigure {...question.solid} />}
@@ -6579,11 +6680,14 @@ export default function MathsUnlockedBN() {
                     <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
                       ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
                       {feedback.keysWon > 0 && ` · 🔑 +${feedback.keysWon} Skeleton Key${feedback.keysWon > 1 ? "s" : ""}`}
+                      {feedback.boostsWon > 0 && ` · ⚡ +${feedback.boostsWon} ×2 XP Boost${feedback.boostsWon > 1 ? "s" : ""}`}
                     </div>
                   )}
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>+{feedback.expGain} XP</div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>
+                        +{feedback.expGain} XP{feedback.xpDoubled && feedback.correct ? <span style={{ color: "var(--green)", fontWeight: 700 }}> · ⚡×2</span> : ""}
+                      </div>
                       <LevelBar profile={profile} />
                     </div>
                   )}
@@ -6787,13 +6891,13 @@ export default function MathsUnlockedBN() {
               <ArrowLeft size={14} /> back
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, gap: 10, flexWrap: "wrap" }}>
-              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>School Leaderboard</div>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Leaderboard</div>
               <button onClick={loadBoard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
             <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
-              {[["alltime", "All-time"], ["week", "This week"]].map(([id, label]) => (
+              {[["alltime", "Schools"], ["players", "Top players"], ["week", "This week"]].map(([id, label]) => (
                 <button key={id} onClick={() => { setBoardTab(id); setOpenSchool(null); }} style={{
                   flex: 1, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", borderRadius: 8,
                   border: `1.5px solid ${boardTab === id ? "var(--blue)" : "var(--grid)"}`,
@@ -6857,6 +6961,42 @@ export default function MathsUnlockedBN() {
                   </div>
                 )}
               </div>
+            ) : boardTab === "players" ? (
+              (board.players || []).length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>No players ranked yet.</div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+                    Every player, ranked by lifetime score (Prestige × 20 + Level). Tap a name to see their profile.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {board.players.map((m, i) => {
+                      const mine = m.full && profile.name === m.name && (profile.pin === m.full.pin);
+                      const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
+                      const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                      return (
+                        <button key={i} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer",
+                            color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
+                          <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, minWidth: 26, flexShrink: 0 }}>#{i + 1}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
+                              {mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                              {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
+                              {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                            </div>
+                            <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                              {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""} · {m.correct} correct
+                            </div>
+                          </div>
+                          <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )
             ) : board.schools.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>No schools ranked yet — students choose a school when they register.</div>
             ) : (
