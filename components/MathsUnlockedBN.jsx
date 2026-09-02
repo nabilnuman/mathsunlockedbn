@@ -3865,10 +3865,12 @@ const TOPICS = [
 
       // ---- a checker + display for expressions linear in a and b ----
       const evalVec = (str, A, B) => {
-        let s = String(str).trim().toLowerCase().replace(/[−–—]/g, "-").replace(/\s+/g, "")
+        let s = String(str).trim().toLowerCase().replace(/[−–—]/g, "-")
+          .replace(/[×·∙•]/g, "*").replace(/x/g, "*")   // accept ×, ·, or a typed "x" as multiply
+          .replace(/\s+/g, "")
           .replace(/½/g, "(1/2)").replace(/⅓/g, "(1/3)").replace(/⅔/g, "(2/3)").replace(/¼/g, "(1/4)").replace(/¾/g, "(3/4)");
         if (!s) return NaN;
-        s = s.replace(/([0-9ab)])(?=[ab(])/g, "$1*").replace(/([ab)])(?=[0-9])/g, "$1*");
+        s = s.replace(/\*+/g, "*").replace(/([0-9ab)])(?=[ab(])/g, "$1*").replace(/([ab)])(?=[0-9])/g, "$1*");
         s = s.replace(/a/g, `(${A})`).replace(/b/g, `(${B})`);
         if (!/^[-+*/().0-9]+$/.test(s)) return NaN;
         try { const r = Function(`"use strict";return (${s})`)(); return typeof r === "number" && Number.isFinite(r) ? r : NaN; }
