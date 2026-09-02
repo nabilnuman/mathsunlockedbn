@@ -230,9 +230,11 @@ const sfPretty = (mant, exp) => `${Math.round(mant * 1e6) / 1e6} × 10^${exp}`;
 // doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
 function splitPrompt(prompt) {
   const p = prompt || "";
-  const i = p.indexOf(": ");
-  // Only split on a colon followed by a space (the "Instruction: expr" form).
-  // A colon inside a clock time like "6:23" is left alone.
+  // Split on a colon that follows a word character and precedes a space
+  // (the "Instruction: expr" form). Leaves clock times like "6:23" and
+  // spaced ratios like "AM : MB = 1 : 2" alone.
+  const m = p.match(/\S: /);
+  const i = m ? m.index + 1 : -1;
   if (i === -1 || i > p.length - 3) return { lead: p, expr: "" };
   return { lead: p.slice(0, i + 1).trim(), expr: p.slice(i + 1).trim() };
 }
@@ -244,8 +246,44 @@ const FR = { a: "", b: "", c: "" };
 const frac = (num, den) => `${FR.a}${num}${FR.b}${den}${FR.c}`;
 const FRAC_CHARS = [FR.a, FR.b, FR.c].join("");
 
+// Vector over-arrow markup. Generators emit vov("AB") and <MathText> draws
+// the letters with a left-to-right arrow above them (the AB with an arrow
+// hat that exam papers use). Private-use delimiters, like frac.
+const VEC = { a: "", b: "" };
+const vov = (s) => `${VEC.a}${s}${VEC.b}`;
+
+// "AB" (or any short label) with a small left-to-right arrow drawn above
+// it — the arrow is absolutely positioned so it never changes line height.
+function VecOver({ children }) {
+  const n = Math.max(2, String(children).length);
+  const w = (n * 0.64).toFixed(2);
+  return (
+    <span style={{ position: "relative", display: "inline-block", whiteSpace: "pre", verticalAlign: "baseline" }}>
+      <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: "1.14em", display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+        <svg viewBox="0 0 24 6" width={`${w}em`} height={`${(w / 4).toFixed(2)}em`} style={{ display: "block", overflow: "visible" }}>
+          <line x1="0.6" y1="3" x2="20" y2="3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+          <path d="M23.4 3 L18.7 0.7 L18.7 5.3 Z" fill="currentColor" />
+        </svg>
+      </span>
+      {children}
+    </span>
+  );
+}
+
 function MathText({ text, style }) {
   const s = String(text ?? "");
+  if (s.includes(VEC.a)) {
+    const re = new RegExp(`${VEC.a}([^${VEC.a}${VEC.b}]*)${VEC.b}`, "g");
+    const nodes = [];
+    let last = 0, m, i = 0;
+    while ((m = re.exec(s))) {
+      if (m.index > last) nodes.push(s.slice(last, m.index));
+      nodes.push(<VecOver key={i++}>{m[1]}</VecOver>);
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) nodes.push(s.slice(last));
+    return <span style={{ whiteSpace: "pre-line", ...style }}>{nodes}</span>;
+  }
   if (!s.includes(FR.a)) return <span style={{ whiteSpace: "pre-line", ...style }}>{s}</span>;
   const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
   const parts = [];
@@ -3891,7 +3929,7 @@ const TOPICS = [
           { q: "DB", ca: 1, cb: -1, why: "DB = DA + AB = −b + a", diag: [B, D] },
         ]);
         return mkVec(opt.ca, opt.cb, {
-          prompt: `ABCD is a parallelogram.  AB = a  and  AD = b.\nWrite ${opt.q} in terms of a and b`,
+          prompt: `ABCD is a parallelogram.  ${vov("AB")} = a  and  ${vov("AD")} = b.\nWrite ${vov(opt.q)} in terms of a and b`,
           vec: {
             labels: [{ p: A, t: "A" }, { p: B, t: "B" }, { p: C, t: "C" }, { p: D, t: "D" }],
             edges: [[A, B], [B, C], [C, D], [D, A]],
@@ -3913,7 +3951,7 @@ const TOPICS = [
         const isO = v.first === "OA";
         const N = isO ? { X: "O", Y: "A", Z: "B" } : { X: "A", Y: "B", Z: "C" };
         return mkVec(v.ca, v.cb, {
-          prompt: `In the diagram, ${v.first} = a  and  ${v.second} = b.\nWrite ${v.ask} in terms of a and b`,
+          prompt: `In the diagram, ${vov(v.first)} = a  and  ${vov(v.second)} = b.\nWrite ${vov(v.ask)} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: N.X }, { p: A, t: N.Y }, { p: Bp, t: N.Z }],
             edges: [],
@@ -3937,7 +3975,7 @@ const TOPICS = [
         const isO = v.g1 === "OA";
         const N = isO ? ["O", "A", "B"] : ["A", "B", "C"];
         return mkVec(v.ca, v.cb, {
-          prompt: `${v.g1} = a  and  ${v.g2} = b.\nWrite ${v.ask} in terms of a and b   (remember XY = −YX)`,
+          prompt: `${vov(v.g1)} = a  and  ${vov(v.g2)} = b.\nWrite ${vov(v.ask)} in terms of a and b   (remember ${vov("XY")} = −${vov("YX")})`,
           vec: {
             labels: [{ p: A, t: N[0] }, { p: B, t: N[1] }, { p: C, t: N[2] }],
             edges: [],
@@ -3958,7 +3996,7 @@ const TOPICS = [
           { ask: "MB", ca: -0.5, cb: 0.5, work: "MB = ½ AB = ½(b − a)" },
         ]);
         return mkVec(v.ca, v.cb, {
-          prompt: `M is the midpoint of AB.  OA = a  and  OB = b.\nWrite ${v.ask} in terms of a and b`,
+          prompt: `M is the midpoint of ${vov("AB")}.  ${vov("OA")} = a  and  ${vov("OB")} = b.\nWrite ${vov(v.ask)} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
             marks: [{ p: M, t: "M" }],
@@ -3982,7 +4020,7 @@ const TOPICS = [
           ? `OM = OA + AM = a + ${coef(t)}(b − a) = ${term(1 - t, t)}`
           : `AM = ${coef(t)} AB = ${coef(t)}(b − a)`;
         return mkVec(ca, cb, {
-          prompt: `M lies on AB with AM : MB = ${r[0]} : ${r[1]}.  OA = a  and  OB = b.\nWrite ${askOM ? "OM" : "AM"} in terms of a and b`,
+          prompt: `M lies on ${vov("AB")} with ${vov("AM")} : ${vov("MB")} = ${r[0]} : ${r[1]}.  ${vov("OA")} = a  and  ${vov("OB")} = b.\nWrite ${vov(askOM ? "OM" : "AM")} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
             marks: [{ p: M, t: "M" }],
