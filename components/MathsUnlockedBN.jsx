@@ -598,33 +598,73 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo,
   );
 }
 
+// Monotone cubic (Fritsch–Carlson) interpolation through the class-boundary
+// points, sampled densely so the ogive draws as a smooth curve that never
+// dips (a cumulative total can only rise). Returns a fine [x, y] array.
+function densifyOgive(pts, sub = 18) {
+  const nP = pts.length;
+  if (nP < 3) return pts.map((p) => [p[0], p[1]]);
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const dx = [], slope = [];
+  for (let i = 0; i < nP - 1; i++) { dx[i] = xs[i + 1] - xs[i]; slope[i] = (ys[i + 1] - ys[i]) / dx[i]; }
+  const m = [slope[0]];
+  for (let i = 1; i < nP - 1; i++) {
+    if (slope[i - 1] * slope[i] <= 0) { m[i] = 0; continue; }
+    const w1 = 2 * dx[i] + dx[i - 1], w2 = dx[i] + 2 * dx[i - 1];
+    m[i] = (w1 + w2) / (w1 / slope[i - 1] + w2 / slope[i]);
+  }
+  m[nP - 1] = slope[nP - 2];
+  for (let i = 0; i < nP - 1; i++) {
+    if (slope[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / slope[i], b = m[i + 1] / slope[i], s = a * a + b * b;
+    if (s > 9) { const tau = 3 / Math.sqrt(s); m[i] = tau * a * slope[i]; m[i + 1] = tau * b * slope[i]; }
+  }
+  const out = [];
+  for (let i = 0; i < nP - 1; i++) {
+    for (let s = 0; s < sub; s++) {
+      const t = s / sub, h = dx[i];
+      const h00 = (1 + 2 * t) * (1 - t) * (1 - t), h10 = t * (1 - t) * (1 - t);
+      const h01 = t * t * (3 - 2 * t), h11 = t * t * (t - 1);
+      out.push([xs[i] + t * h, h00 * ys[i] + h10 * h * m[i] + h01 * ys[i + 1] + h11 * h * m[i + 1]]);
+    }
+  }
+  out.push([xs[nP - 1], ys[nP - 1]]);
+  return out;
+}
+
 // A cumulative-frequency curve (ogive). The student can tap the x- or
 // y-axis strip to drop a dashed guide line that runs to the curve and
 // then across to the other axis — an aid for reading off medians and
 // quartiles. The guide never prints the value it lands on. `picks` holds
-// up to two guides ({ axis, v }).
+// up to two guides ({ axis, v }). Fine minor gridlines let the student
+// count along to whichever value a guide line lands on.
 function CumFreqGraph({ points, xLabel, n, picks = [], onPick }) {
-  const W = 300, Hh = 244, ml = 42, mr = 14, mt = 12, mb = 36;
+  const W = 320, Hh = 260, ml = 44, mr = 14, mt = 12, mb = 38;
   const pw = W - ml - mr, ph = Hh - mt - mb;
   const xMin = points[0][0], xMax = points[points.length - 1][0];
   const X = (x) => ml + ((x - xMin) / (xMax - xMin)) * pw;
   const Y = (y) => mt + ph - (y / n) * ph;
+  const dense = densifyOgive(points);
   const f = (x) => {
-    for (let i = 0; i < points.length - 1; i++) {
-      const [x0, y0] = points[i], [x1, y1] = points[i + 1];
+    for (let i = 0; i < dense.length - 1; i++) {
+      const [x0, y0] = dense[i], [x1, y1] = dense[i + 1];
       if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0 || 1);
     }
     return x < xMin ? 0 : n;
   };
   const invF = (y) => {
-    for (let i = 0; i < points.length - 1; i++) {
-      const [x0, y0] = points[i], [x1, y1] = points[i + 1];
+    for (let i = 0; i < dense.length - 1; i++) {
+      const [x0, y0] = dense[i], [x1, y1] = dense[i + 1];
       if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0);
     }
     return y <= 0 ? xMin : xMax;
   };
   const xStep = points[1][0] - points[0][0];
-  const yStep = n % 5 === 0 ? n / 5 : n / 4;
+  const yTick = n % 10 === 0 ? n / 10 : n / 8;
+  const xMinor = xStep >= 20 ? 5 : xStep >= 10 ? 2 : 1;
+  const yMinor = yTick / 2;
+  const snapX = Math.min(xMinor, xStep / 2);
+  const range = (lo, hi, st) => Array.from({ length: Math.round((hi - lo) / st) + 1 }, (_, i) => +(lo + i * st).toFixed(4));
   const guides = picks.map((p) => {
     if (p.axis === "x") { const yv = f(p.v); return [[[p.v, 0], [p.v, yv]], [[p.v, yv], [xMin, yv]]]; }
     const xv = invF(p.v); return [[[xMin, p.v], [xv, p.v]], [[xv, p.v], [xv, 0]]];
@@ -632,31 +672,32 @@ function CumFreqGraph({ points, xLabel, n, picks = [], onPick }) {
   const gl = (a, b) => <line x1={X(a[0])} y1={Y(a[1])} x2={X(b[0])} y2={Y(b[1])} stroke="var(--red)" strokeWidth="1.4" strokeDasharray="4 3" />;
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label="cumulative frequency graph"
-      style={{ maxWidth: 340, display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      style={{ maxWidth: 360, display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
       <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
-      {Array.from({ length: Math.round((xMax - xMin) / xStep) + 1 }, (_, i) => xMin + i * xStep).map((x) => (
+      {range(xMin, xMax, xMinor).map((x) => <line key={`xm${x}`} x1={X(x)} y1={mt} x2={X(x)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" strokeOpacity="0.7" />)}
+      {range(0, n, yMinor).map((y) => <line key={`ym${y}`} x1={ml} y1={Y(y)} x2={ml + pw} y2={Y(y)} stroke="var(--grid)" strokeWidth="0.5" strokeOpacity="0.7" />)}
+      {range(xMin, xMax, xStep).map((x) => (
         <g key={`x${x}`}>
-          <line x1={X(x)} y1={mt} x2={X(x)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
+          <line x1={X(x)} y1={mt} x2={X(x)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.8" />
           <text x={X(x)} y={mt + ph + 12} fontSize="8" textAnchor="middle" fill="var(--muted)">{x}</text>
         </g>
       ))}
-      {Array.from({ length: Math.round(n / yStep) + 1 }, (_, i) => i * yStep).map((y) => (
+      {range(0, n, yTick).map((y) => (
         <g key={`y${y}`}>
-          <line x1={ml} y1={Y(y)} x2={ml + pw} y2={Y(y)} stroke="var(--grid)" strokeWidth="0.5" />
+          <line x1={ml} y1={Y(y)} x2={ml + pw} y2={Y(y)} stroke="var(--grid)" strokeWidth="0.8" />
           <text x={ml - 5} y={Y(y) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{y}</text>
         </g>
       ))}
       {guides.map((g, i) => <g key={`g${i}`}>{gl(...g[0])}{gl(...g[1])}</g>)}
-      <polyline points={points.map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")} fill="none" stroke="var(--blue)" strokeWidth="2.4" strokeLinejoin="round" />
-      {points.map((p, i) => <circle key={`p${i}`} cx={X(p[0])} cy={Y(p[1])} r="2.2" fill="var(--blue)" />)}
+      <polyline points={dense.map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")} fill="none" stroke="var(--blue)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
       <text x={ml + pw / 2} y={Hh - 4} fontSize="8.5" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
       <text x={11} y={mt + ph / 2} fontSize="8.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 11 ${mt + ph / 2})`}>cumulative frequency</text>
       {onPick && (
         <>
           <rect x={ml} y={mt + ph} width={pw} height={mb} fill="transparent" style={{ cursor: "pointer" }}
-            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vx = (e.clientX - b.left) / b.width * pw; const raw = xMin + (vx / pw) * (xMax - xMin); onPick({ axis: "x", v: Math.round(raw / (xStep / 2)) * (xStep / 2) }); }} />
+            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vx = (e.clientX - b.left) / b.width * pw; const raw = xMin + (vx / pw) * (xMax - xMin); onPick({ axis: "x", v: Math.max(xMin, Math.min(xMax, Math.round(raw / snapX) * snapX)) }); }} />
           <rect x={0} y={mt} width={ml} height={ph} fill="transparent" style={{ cursor: "pointer" }}
-            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vy = (e.clientY - b.top) / b.height * ph; const raw = (1 - vy / ph) * n; onPick({ axis: "y", v: Math.max(0, Math.min(n, Math.round(raw / (yStep / 4)) * (yStep / 4))) }); }} />
+            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vy = (e.clientY - b.top) / b.height * ph; const raw = (1 - vy / ph) * n; onPick({ axis: "y", v: Math.max(0, Math.min(n, Math.round(raw / yMinor) * yMinor)) }); }} />
         </>
       )}
     </svg>
@@ -3679,8 +3720,10 @@ const TOPICS = [
       mids.sort((a, b) => a - b);
       const cf = [0, ...mids, n];
       const pts = bounds.map((b, i) => [b, cf[i]]);
-      const f = (x) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return x < bounds[0] ? 0 : n; };
-      const invF = (y) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0); } return bounds[0]; };
+      // read the estimates off the SAME smooth curve the student sees
+      const dense = densifyOgive(pts);
+      const f = (x) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0 || 1); } return x < bounds[0] ? 0 : n; };
+      const invF = (y) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0); } return bounds[0]; };
       const xStep = bounds[1] - bounds[0];
       const cfg = { points: pts, xLabel: pick(["mark", "score", "time (s)", "mass (kg)"]), n };
       const r2 = Math.random();
