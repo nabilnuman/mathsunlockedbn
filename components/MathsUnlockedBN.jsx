@@ -4564,19 +4564,57 @@ function bannerBadges(profile) {
     .slice(0, BANNER_MAX);
 }
 
-/* Shareable summary of a student's progress. Pure display — takes a
-   profile object, so the same card backs the Parent Link and friend
-   search pages. Sized to screenshot cleanly. */
-function ProfileCard({ profile }) {
+// one badge chip with a tier-coloured border (bronze/silver/gold/platinum)
+function BadgeChip({ a, size = 32, on = true }) {
+  const col = TIER_COLOR[a.tier];
+  return (
+    <span title={a.name} style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      width: size, height: size, borderRadius: 9, fontSize: Math.round(size * 0.55), lineHeight: 1,
+      border: `2px solid ${col}`, background: on ? "var(--paper)" : "transparent",
+    }}>{a.icon}</span>
+  );
+}
+
+/* Shareable summary of a student's progress. Pure display unless
+   onEditIcon / onEditBanner are supplied (own card) — then the icon and
+   the banner are tappable to open their pickers. */
+function ProfileCard({ profile, onEditIcon, onEditBanner }) {
   const level = levelFromExp(totalExp(profile));
   const title = titleForLevel(level);
   const prestige = profile.prestige || 0;
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
   const badges = bannerBadges(profile);
+  const showBanner = badges.length > 0 || !!onEditBanner; // header slot: banner if there's one to show, else name
   const stat = (label, value) => (
     <div style={{ textAlign: "center" }}>
       <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
       <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
+    </div>
+  );
+  const nameBlock = (
+    <div style={{ minWidth: 0 }}>
+      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
+      <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600, marginTop: 2 }}>
+        {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
+      </div>
+      {profile.school && profile.school !== SOLO_SCHOOL && (
+        <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, wordBreak: "break-word" }}>{profile.school}</div>
+      )}
+    </div>
+  );
+  const bannerBox = (
+    <div
+      onClick={onEditBanner}
+      style={{
+        flex: 1, minWidth: 0, alignSelf: "stretch", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 7,
+        background: "var(--card)", border: `1px ${badges.length ? "solid" : "dashed"} var(--grid)`, borderRadius: 12,
+        padding: "8px 10px", cursor: onEditBanner ? "pointer" : "default",
+      }}
+    >
+      {badges.length > 0
+        ? badges.map((a) => <BadgeChip key={a.id} a={a} />)
+        : <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>＋ Choose badges</span>}
     </div>
   );
   return (
@@ -4586,35 +4624,27 @@ function ProfileCard({ profile }) {
         <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "22px 0 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "20px 0 14px" }}>
         <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, ...frameStyle(profile) }}>
+          <div
+            onClick={onEditIcon}
+            style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, cursor: onEditIcon ? "pointer" : "default", ...frameStyle(profile) }}
+          >
             {avatarChar(profile)}
           </div>
+          {onEditIcon && (
+            <div style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--blue)", color: "var(--on-accent)", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</div>
+          )}
           {prestige > 0 && (
             <div style={{ position: "absolute", right: -6, bottom: -4 }}>
               <PrestigeBadge prestige={prestige} size={22} />
             </div>
           )}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
-          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600, marginTop: 2 }}>
-            {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
-          </div>
-          {profile.school && profile.school !== SOLO_SCHOOL && (
-            <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, wordBreak: "break-word" }}>{profile.school}</div>
-          )}
-        </div>
+        {showBanner ? bannerBox : nameBlock}
       </div>
 
-      {badges.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 12px", marginBottom: 14 }}>
-          {badges.map((a) => (
-            <span key={a.id} title={a.name} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${TIER_COLOR[a.tier]}`, fontSize: 16, lineHeight: 1 }}>{a.icon}</span>
-          ))}
-        </div>
-      )}
+      {showBanner && <div style={{ marginBottom: 14 }}>{nameBlock}</div>}
 
       <div style={{ display: "flex", justifyContent: "space-around", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "12px 8px", marginBottom: 14 }}>
         {stat("Best streak", profile.bestStreak || 0)}
@@ -4630,9 +4660,57 @@ function ProfileCard({ profile }) {
   );
 }
 
-/* Picker shown under the user's own card: choose the profile icon, its
-   border, and which earned badges appear in the card banner. */
-function ProfileCustomizer({ profile, onChange }) {
+/* Full-screen sheet for the two profile-card pickers. */
+function EditSheet({ title, onClose, children }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", zIndex: 70, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 380, maxWidth: "100%", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, color: "var(--ink)", fontFamily: "Inter, sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+          <button onClick={onClose} style={{ fontSize: 12, fontWeight: 600, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer" }}>Done</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function IconPickerModal({ profile, onChange, onClose }) {
+  const Head = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>{children}</div>
+  );
+  return (
+    <EditSheet title="Profile icon" onClose={onClose}>
+      <Head>Icon</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+        {AVATAR_IDS.map((id) => {
+          const on = (profile.avatar || "grad") === id;
+          return (
+            <button key={id} type="button" onClick={() => onChange(() => ({ avatar: id }))} style={{
+              width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: "pointer",
+              background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+            }}>{AVATARS[id]}</button>
+          );
+        })}
+      </div>
+      <Head>Border</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        {FRAME_IDS.map((id) => {
+          const on = (profile.avatarFrame || "plain") === id;
+          return (
+            <button key={id} type="button" onClick={() => onChange(() => ({ avatarFrame: id }))} style={{
+              width: 46, height: 46, borderRadius: "50%", background: "var(--card)", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1,
+              ...FRAMES[id], outline: on ? "2px solid var(--blue)" : "none", outlineOffset: 3,
+            }}>{avatarChar(profile)}</button>
+          );
+        })}
+      </div>
+    </EditSheet>
+  );
+}
+
+function BannerPickerModal({ profile, onChange, onClose }) {
   const earned = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
   const banner = (profile.banner || []).filter((id) => earned.some((a) => a.id === id));
   const toggle = (id) => onChange((p) => {
@@ -4640,46 +4718,25 @@ function ProfileCustomizer({ profile, onChange }) {
     if (b.includes(id)) return { banner: b.filter((x) => x !== id) };
     return b.length < BANNER_MAX ? { banner: [...b, id] } : {};
   });
-  const Head = ({ children }) => (
-    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{children}</div>
-  );
-  const cell = (on) => ({
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: 38, height: 38, borderRadius: 10, cursor: "pointer", fontSize: 20, lineHeight: 1,
-    background: on ? "var(--blue)" : "var(--paper)",
-    border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-    color: on ? "var(--on-accent)" : "var(--ink)",
-  });
   return (
-    <div className="mub-grid" style={{ width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 16, padding: 16, color: "var(--ink)" }}>
-      <Head>Profile icon</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
-        {AVATAR_IDS.map((id) => (
-          <button key={id} type="button" onClick={() => onChange(() => ({ avatar: id }))} style={cell((profile.avatar || "grad") === id)}>{AVATARS[id]}</button>
-        ))}
-      </div>
-
-      <Head>Icon border</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-        {FRAME_IDS.map((id) => (
-          <button key={id} type="button" onClick={() => onChange(() => ({ avatarFrame: id }))}
-            style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--paper)", cursor: "pointer",
-              ...FRAMES[id],
-              outline: (profile.avatarFrame || "plain") === id ? "2px solid var(--blue)" : "none", outlineOffset: 2 }} />
-        ))}
-      </div>
-
-      <Head>Banner — pin your best badges ({banner.length}/{BANNER_MAX})</Head>
+    <EditSheet title={`Banner · ${banner.length}/${BANNER_MAX}`} onClose={onClose}>
       {earned.length === 0 ? (
-        <div style={{ fontSize: 12, color: "var(--muted)" }}>Earn badges to pin them here.</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Earn badges and they&rsquo;ll show up here to choose from.</div>
       ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-          {earned.map((a) => (
-            <button key={a.id} type="button" title={a.name} onClick={() => toggle(a.id)} style={cell(banner.includes(a.id))}>{a.icon}</button>
-          ))}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
+          {earned.map((a) => {
+            const on = banner.includes(a.id);
+            const col = TIER_COLOR[a.tier];
+            return (
+              <button key={a.id} type="button" title={a.name} onClick={() => toggle(a.id)} style={{
+                width: 46, height: 46, borderRadius: 11, fontSize: 22, lineHeight: 1, cursor: "pointer",
+                border: `2px solid ${col}`, background: on ? col : "var(--paper)", opacity: on ? 1 : 0.9,
+              }}>{a.icon}</button>
+            );
+          })}
         </div>
       )}
-    </div>
+    </EditSheet>
   );
 }
 
@@ -4933,6 +4990,8 @@ export default function MathsUnlockedBN() {
   const [qbEditingId, setQbEditingId] = useState(null);
   const [qbPreview, setQbPreview] = useState(null);
   const [showCard, setShowCard] = useState(false);
+  const [pickIcon, setPickIcon] = useState(false);   // profile-card icon/border picker
+  const [pickBanner, setPickBanner] = useState(false); // profile-card badge banner picker
   const [showParentLink, setShowParentLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
@@ -7166,16 +7225,17 @@ export default function MathsUnlockedBN() {
 
       {showCard && (
         <div
-          onClick={() => setShowCard(false)}
+          onClick={() => { setShowCard(false); setPickIcon(false); setPickBanner(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px", zIndex: 50, overflowY: "auto" }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <ProfileCard profile={profile} />
-            <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Screenshot this to share · tap outside to close</div>
-            <ProfileCustomizer profile={profile} onChange={patchProfile} />
+            <ProfileCard profile={profile} onEditIcon={() => setPickIcon(true)} onEditBanner={() => setPickBanner(true)} />
+            <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Tap your icon or banner to customise · screenshot to share · tap outside to close</div>
           </div>
         </div>
       )}
+      {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
+      {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
 
       {rosterProfile && (
         <div onClick={() => setRosterProfile(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", zIndex: 60, overflowY: "auto" }}>
