@@ -548,68 +548,38 @@ function TransformFigure({ a, b, mirror, centre, rays, tapPts, onTap, lineMode, 
   );
 }
 
-// A piecewise motion graph (distance–time or speed–time). A fine grid,
-// plus dashed guide lines and axis readings at every corner of the graph
-// so the student can read exact values. One segment can be highlighted
+// A piecewise motion graph (distance–time or speed–time). The generator
+// produces round values that sit exactly on gridlines so the student can
+// read every corner straight off the grid. One segment can be highlighted
 // and an area beneath it shaded.
-function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo }) {
-  const W = 300, Hh = 232, ml = 46, mr = 14, mt = 12, mb = 34;
+function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo, gridY, gridX }) {
+  const W = 300, Hh = 232, ml = 44, mr = 14, mt = 12, mb = 34;
   const pw = W - ml - mr, ph = Hh - mt - mb;
-  const niceMax = (v) => {
-    const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
-    const n = v / p;
-    const m = n <= 1 ? 1 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 4 ? 4 : n <= 5 ? 5 : n <= 6 ? 6 : n <= 8 ? 8 : 10;
-    return m * p;
-  };
-  // smallest "nice" spacing that keeps the grid to <= `target` divisions
-  const niceStep = (range) => {
-    for (const s of [0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 500, 1000]) if (range / s <= 15) return s;
-    return Math.ceil(range / 15);
-  };
-  const rawYMax = Math.max(...pts.map((p) => p[1]), 1);
-  const yStep = niceStep(niceMax(rawYMax));
-  const yMax = Math.ceil((rawYMax * 1.05) / yStep) * yStep;
-  const xMax = Math.max(...pts.map((p) => p[0]));
-  const xStep = niceStep(xMax);
+  const yVals = pts.map((p) => p[1]), xVals = pts.map((p) => p[0]);
+  const yStep = gridY || 1;
+  const xStep = gridX || 1;
+  const yMax = Math.ceil((Math.max(...yVals) + yStep * 0.5) / yStep) * yStep;
+  const xMax = Math.max(...xVals);
   const X = (x) => ml + (x / xMax) * pw;
   const Y = (y) => mt + ph - (y / yMax) * ph;
-  const range = (max, step) => { const out = []; for (let v = step; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100); return out; };
-  const xGrid = range(xMax, xStep), yGrid = range(yMax, yStep);
-  const xLabelEvery = xGrid.length > 9 ? 2 : 1;
-  const yLabelEvery = yGrid.length > 9 ? 2 : 1;
-  // distinct corner readings — the values the student needs
-  const cornerY = [...new Set(pts.map((p) => p[1]).filter((v) => v > 0))];
-  const cornerX = [...new Set(pts.map((p) => p[0]).filter((v) => v > 0))];
+  const mk = (max, step) => { const out = []; for (let v = step; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100); return out; };
+  const xGrid = mk(xMax, xStep), yGrid = mk(yMax, yStep);
+  const yLabelEvery = yGrid.length > 26 ? 5 : yGrid.length > 12 ? 2 : 1;
+  const xLabelEvery = xGrid.length > 14 ? 2 : 1;
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label={`${yLabel} against time graph`}
       style={{ maxWidth: 340, display: "block", margin: "0 auto 10px" }}>
       <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
-      {xGrid.map((t) => (
+      {xGrid.map((t, i) => (
         <g key={`x${t}`}>
           <line x1={X(t)} y1={mt} x2={X(t)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
-          {Math.round(t / xStep) % xLabelEvery === 0 && !cornerX.some((c) => Math.abs(c - t) < xStep * 0.75)
-            && <text x={X(t)} y={mt + ph + 12} fontSize="7.5" textAnchor="middle" fill="var(--muted)">{t}</text>}
+          {(i + 1) % xLabelEvery === 0 && <text x={X(t)} y={mt + ph + 12} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>}
         </g>
       ))}
-      {yGrid.map((t) => (
+      {yGrid.map((t, i) => (
         <g key={`y${t}`}>
           <line x1={ml} y1={Y(t)} x2={ml + pw} y2={Y(t)} stroke="var(--grid)" strokeWidth="0.5" />
-          {Math.round(t / yStep) % yLabelEvery === 0 && !cornerY.some((c) => Math.abs(c - t) < yStep * 0.75)
-            && <text x={ml - 5} y={Y(t) + 3} fontSize="7.5" textAnchor="end" fill="var(--muted)">{t}</text>}
-        </g>
-      ))}
-      {cornerY.map((v) => (
-        <g key={`gy${v}`}>
-          <line x1={ml} y1={Y(v)} x2={X(xMax)} y2={Y(v)} stroke="var(--ink)" strokeWidth="0.8" strokeDasharray="3 2" opacity="0.55" />
-          <text x={ml - 5} y={Y(v) + 3} fontSize="8.5" fontWeight="700" textAnchor="end" fill="var(--ink)"
-            style={{ paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.5 }}>{v}</text>
-        </g>
-      ))}
-      {cornerX.map((v) => (
-        <g key={`gx${v}`}>
-          <line x1={X(v)} y1={mt} x2={X(v)} y2={mt + ph} stroke="var(--ink)" strokeWidth="0.8" strokeDasharray="3 2" opacity="0.55" />
-          <text x={X(v)} y={mt + ph + 12} fontSize="8.5" fontWeight="700" textAnchor="middle" fill="var(--ink)"
-            style={{ paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.5 }}>{v}</text>
+          {(i + 1) % yLabelEvery === 0 && <text x={ml - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>}
         </g>
       ))}
       {shadeFrom != null && (() => {
@@ -674,6 +644,99 @@ function ShapeFigure({ shape }) {
     <svg viewBox="0 0 144 144" width="150" height="150" role="img" aria-label={s.label}
       style={{ display: "block", margin: "0 auto 10px" }}>
       <polygon points={pts} fill="var(--blue)" fillOpacity="0.16" stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// A labelled figure for Mensuration — 2-D shapes and 3-D solids drawn
+// schematically with their dimensions marked.
+function MensurationFigure({ shape, dims = {} }) {
+  const d = dims, W = 210, H = 152;
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3, strokeLinejoin: "round" };
+  const L = (props) => <text fontSize="10" fontWeight="700" fill="var(--ink)" textAnchor="middle" dominantBaseline="middle" style={halo} {...props} />;
+  const fill = { fill: "var(--blue)", fillOpacity: 0.14, stroke: "var(--ink)", strokeWidth: 1.8, strokeLinejoin: "round" };
+  const face = { fill: "var(--blue)", fillOpacity: 0.07, stroke: "var(--ink)", strokeWidth: 1.8, strokeLinejoin: "round" };
+  const dash = { stroke: "var(--muted)", strokeWidth: 1.2, strokeDasharray: "4 3", fill: "none" };
+  const P = (x, y) => `${x},${y}`;
+  let body = null;
+  if (shape === "rect" || shape === "square") {
+    const rw = 132, rh = shape === "square" ? 118 : 82, x0 = (W - rw) / 2, y0 = (H - rh) / 2 - 4;
+    body = <>
+      <rect x={x0} y={y0} width={rw} height={rh} {...fill} />
+      <L x={x0 + rw / 2} y={y0 + rh + 15}>{shape === "square" ? `${d.s} cm` : `${d.l} cm`}</L>
+      <L x={x0 - 18} y={y0 + rh / 2}>{shape === "square" ? `${d.s} cm` : `${d.w} cm`}</L>
+    </>;
+  } else if (shape === "triangle") {
+    const bw = 150, th = 96, x0 = (W - bw) / 2, yb = H - 26, ax = x0 + bw * 0.36, ay = yb - th;
+    body = <>
+      <polygon points={`${x0},${yb} ${x0 + bw},${yb} ${ax},${ay}`} {...fill} />
+      <line x1={ax} y1={ay} x2={ax} y2={yb} {...dash} />
+      <rect x={ax} y={yb - 8} width="8" height="8" fill="none" stroke="var(--muted)" strokeWidth="1" />
+      <L x={x0 + bw / 2} y={yb + 15}>{`${d.b} cm`}</L>
+      <L x={ax + 16} y={(ay + yb) / 2}>{`${d.h} cm`}</L>
+    </>;
+  } else if (shape === "parallelogram") {
+    const bw = 122, ph = 80, sk = 34, x0 = 26, yb = H - 22;
+    body = <>
+      <polygon points={`${x0},${yb} ${x0 + bw},${yb} ${x0 + bw + sk},${yb - ph} ${x0 + sk},${yb - ph}`} {...fill} />
+      <line x1={x0 + sk} y1={yb - ph} x2={x0 + sk} y2={yb} {...dash} />
+      <L x={x0 + bw / 2 + 8} y={yb + 15}>{`${d.b} cm`}</L>
+      <L x={x0 + sk - 17} y={yb - ph / 2}>{`${d.h} cm`}</L>
+    </>;
+  } else if (shape === "trapezium") {
+    const bw = 150, tw = 82, tp = 78, x0 = (W - bw) / 2, yb = H - 22, tx = x0 + (bw - tw) / 2;
+    body = <>
+      <polygon points={`${x0},${yb} ${x0 + bw},${yb} ${tx + tw},${yb - tp} ${tx},${yb - tp}`} {...fill} />
+      <line x1={tx} y1={yb - tp} x2={tx} y2={yb} {...dash} />
+      <L x={x0 + bw / 2} y={yb + 15}>{`${d.b} cm`}</L>
+      <L x={tx + tw / 2} y={yb - tp - 12}>{`${d.a} cm`}</L>
+      <L x={tx - 18} y={yb - tp / 2}>{`${d.h} cm`}</L>
+    </>;
+  } else if (shape === "cuboid") {
+    const w = 100, h = 64, dp = 34, x0 = 30, y0 = 52;
+    body = <>
+      <polygon points={[P(x0, y0), P(x0 + dp, y0 - dp), P(x0 + w + dp, y0 - dp), P(x0 + w, y0)].join(" ")} {...face} />
+      <polygon points={[P(x0 + w, y0), P(x0 + w + dp, y0 - dp), P(x0 + w + dp, y0 + h - dp), P(x0 + w, y0 + h)].join(" ")} {...face} />
+      <rect x={x0} y={y0} width={w} height={h} {...fill} />
+      <L x={x0 + w / 2} y={y0 + h + 15}>{`${d.l} cm`}</L>
+      <L x={x0 - 17} y={y0 + h / 2}>{`${d.h} cm`}</L>
+      <L x={x0 + w + dp / 2 + 12} y={y0 - dp / 2 - 4}>{`${d.w} cm`}</L>
+    </>;
+  } else if (shape === "cylinder") {
+    const cx = W / 2, rx = 46, ry = 15, top = 28, bot = 122;
+    body = <>
+      <path d={`M ${cx - rx} ${top} L ${cx - rx} ${bot} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bot} L ${cx + rx} ${top}`} {...fill} />
+      <path d={`M ${cx - rx} ${bot} A ${rx} ${ry} 0 0 1 ${cx + rx} ${bot}`} {...dash} />
+      <ellipse cx={cx} cy={top} rx={rx} ry={ry} fill="var(--blue)" fillOpacity="0.2" stroke="var(--ink)" strokeWidth="1.8" />
+      <line x1={cx} y1={top} x2={cx + rx} y2={top} {...dash} />
+      <L x={cx + rx / 2} y={top - 10}>{d.r != null ? `r = ${d.r}` : `d = ${d.dm}`}</L>
+      <line x1={cx + rx + 12} y1={top} x2={cx + rx + 12} y2={bot} {...dash} />
+      <L x={cx + rx + 26} y={(top + bot) / 2}>{`${d.h} cm`}</L>
+    </>;
+  } else if (shape === "cone") {
+    const cx = W / 2, rx = 48, ry = 15, ay = 24, by = 120;
+    body = <>
+      <path d={`M ${cx - rx} ${by} A ${rx} ${ry} 0 0 0 ${cx + rx} ${by} L ${cx} ${ay} Z`} {...fill} />
+      <path d={`M ${cx - rx} ${by} A ${rx} ${ry} 0 0 1 ${cx + rx} ${by}`} {...dash} />
+      <line x1={cx} y1={ay} x2={cx} y2={by} {...dash} />
+      <line x1={cx} y1={by} x2={cx + rx} y2={by} {...dash} />
+      <L x={cx + rx / 2} y={by + 13}>{`r = ${d.r}`}</L>
+      <L x={cx - 16} y={(ay + by) / 2}>{d.slant != null ? `l = ${d.slant}` : `${d.h} cm`}</L>
+    </>;
+  } else if (shape === "sphere") {
+    const cx = W / 2, cy = H / 2 - 2, R = 54;
+    body = <>
+      <circle cx={cx} cy={cy} r={R} {...fill} />
+      <ellipse cx={cx} cy={cy} rx={R} ry={17} {...dash} />
+      <line x1={cx} y1={cy} x2={cx + R} y2={cy} stroke="var(--ink)" strokeWidth="1.4" />
+      <circle cx={cx} cy={cy} r="2" fill="var(--ink)" />
+      <L x={cx + R / 2} y={cy - 9}>{`r = ${d.r}`}</L>
+    </>;
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`${shape} diagram`}
+      style={{ maxWidth: 272, display: "block", margin: "0 auto 10px" }}>
+      {body}
     </svg>
   );
 }
@@ -1652,6 +1715,7 @@ const TOPICS = [
   { id: "factorization", name: "Factorisation", icon: "🧩", prereqs: ["algebra"],
     generate() {
       const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
+      const pick = (arr) => arr[randInt(0, arr.length - 1)];
       const sgn = (n) => (n >= 0 ? "+" : "-");
       const co = (n) => (Math.abs(n) === 1 ? "" : `${Math.abs(n)}`); // coefficient text, hides a bare 1
       const xterm = (n) => (n === 0 ? "" : ` ${sgn(n)} ${co(n)}x`);
@@ -1704,6 +1768,77 @@ const TOPICS = [
         return { prompt: `Factorise:   x² ${sgn(B)} ${Math.abs(B)}x + ${C}`,
           answer: `(x${tight(n)})^2`, hint: "It's a perfect square: (x + a)²",
           steps: [`Half the x-term: ${B} ÷ 2 = ${n}`, `${n}² = ${C} ✓`, `= (x ${sgn(n)} ${Math.abs(n)})²`] };
+      }
+
+      // 14% — by factorising, solve x² + bx + c = 0
+      if (r < 0.54) {
+        // factors (x + a)(x + b)  ⇒  roots are −a and −b
+        const a = nz(-8, 8), b = nz(-8, 8);
+        const B = a + b, C = a * b;
+        const tail = `${xterm(B)} ${spaced(C)}`.replace(/\s+/g, " ").trim();
+        const roots = a === b ? [-a] : [Math.min(-a, -b), Math.max(-a, -b)];
+        return {
+          prompt: `By factorising, solve:   x² ${tail} = 0`,
+          answer: roots.map((v) => `x = ${v}`).join(",  "),
+          hint: a === b ? "one repeated solution" : "give both values of x, separated by a comma",
+          check: (inp) => {
+            const ns = String(inp).match(/-?\d+(?:\.\d+)?/g);
+            if (!ns || ns.length !== roots.length) return false;
+            const g = ns.map(Number).sort((u, v) => u - v);
+            return roots.every((rt, i) => Math.abs(g[i] - rt) < 1e-9);
+          },
+          steps: [
+            `Factorise:  x² ${tail} = (x${tight(a)})(x${tight(b)})`,
+            `(x${tight(a)})(x${tight(b)}) = 0`,
+            a === b
+              ? `x ${sgn(a)} ${Math.abs(a)} = 0,  so x = ${-a}`
+              : `x ${sgn(a)} ${Math.abs(a)} = 0   or   x ${sgn(b)} ${Math.abs(b)} = 0`,
+            a === b ? "" : `x = ${roots[0]}   or   x = ${roots[1]}`,
+          ].filter(Boolean),
+        };
+      }
+
+      // 12% — quadratic formula, answer to 2 decimal places (never factorises)
+      if (r < 0.66) {
+        const near5 = (n) => Math.abs(Math.abs((n * 100) % 1) - 0.5) < 0.08;
+        let a, b, c, D;
+        for (let i = 0; i < 200; i++) {
+          a = pick([1, 1, 2]);
+          b = nz(-9, 9);
+          c = nz(-8, 8);
+          D = b * b - 4 * a * c;
+          const rt = Math.sqrt(D);
+          if (D > 0 && !Number.isInteger(rt)) {
+            const r1 = (-b - rt) / (2 * a), r2 = (-b + rt) / (2 * a);
+            if (Math.abs(r1) <= 20 && Math.abs(r2) <= 20 && !near5(r1) && !near5(r2)) break;
+          }
+          D = -1;
+        }
+        if (D > 0) {
+          const rt = Math.sqrt(D);
+          const r1 = (-b - rt) / (2 * a), r2 = (-b + rt) / (2 * a);
+          const f = (n) => (Math.round(n * 100) / 100).toFixed(2);
+          const aT = a === 1 ? "" : `${a}`;
+          const bT = `${b > 0 ? "+ " : "− "}${Math.abs(b) === 1 ? "" : Math.abs(b)}x`;
+          const cT = `${c > 0 ? "+ " : "− "}${Math.abs(c)}`;
+          return {
+            prompt: `Solve, giving each answer to 2 decimal places:   ${aT}x² ${bT} ${cT} = 0`,
+            answer: `x = ${f(r1)},  x = ${f(r2)}`,
+            hint: "use the quadratic formula; give both answers, comma separated",
+            check: (inp) => {
+              const ns = String(inp).match(/-?\d+(?:\.\d+)?/g);
+              if (!ns || ns.length !== 2) return false;
+              const g = ns.map(Number).sort((u, v) => u - v);
+              return Math.abs(g[0] - r1) < 0.02 && Math.abs(g[1] - r2) < 0.02;
+            },
+            steps: [
+              `a = ${a},  b = ${b},  c = ${c}`,
+              `b² − 4ac = ${b * b} − 4(${a})(${c}) = ${D}`,
+              `x = (${-b} ± √${D}) ÷ ${2 * a} = (${-b} ± ${f(rt)}) ÷ ${2 * a}`,
+              `x = ${f(r1)}   or   x = ${f(r2)}`,
+            ],
+          };
+        }
       }
 
       // rest — standard x² + (p+q)x + pq
@@ -2654,61 +2789,65 @@ const TOPICS = [
 
       // C — distance–time graph → gradient → speed of one stage
       if (r < 0.78) {
-        const km = Math.random() < 0.5;
-        const xU = km ? "h" : "s", yU = km ? "km" : "m", spU = km ? "km/h" : "m/s";
-        const t1 = randInt(1, 3), s1 = km ? randInt(20, 60) : randInt(4, 15), d1 = s1 * t1;
-        const stopLen = randInt(1, 3), t2 = t1 + stopLen;
-        const dt3 = randInt(2, 3), s3 = km ? randInt(20, 60) : randInt(4, 15), d3 = d1 + s3 * dt3, t3 = t2 + dt3;
+        // speeds are multiples of 10 so every point sits on a gridline
+        const t1 = randInt(1, 2), s1 = 10 * randInt(2, 4), d1 = s1 * t1;
+        const stopLen = randInt(1, 2), t2 = t1 + stopLen;
+        const dt3 = randInt(2, 3), s3 = 10 * randInt(2, 4), d3 = d1 + s3 * dt3, t3 = t2 + dt3;
         const pts = [[0, 0], [t1, d1], [t2, d1], [t3, d3]];
         const stage = pick([1, 3]);
         const ans = stage === 1 ? s1 : s3;
         const hi = stage === 1 ? [0, 1] : [2, 3];
         return {
-          prompt: `From the distance–time graph, find the speed during ${stage === 1 ? "the first stage" : "the final stage"} in ${spU}`,
-          motion: { pts, yLabel: "distance", xUnit: xU, yUnit: yU, highlight: hi },
+          prompt: `From the distance–time graph, find the speed during ${stage === 1 ? "the first stage" : "the final stage"} in km/h`,
+          motion: { pts, yLabel: "distance", xUnit: "h", yUnit: "km", highlight: hi, gridY: 10, gridX: 1 },
           answer: `${ans}`, hint: "speed = gradient of the line",
           steps: [
             `Speed = gradient = change in distance ÷ change in time`,
-            stage === 1 ? `= (${d1} − 0) ÷ (${t1} − 0) = ${d1} ÷ ${t1} = ${ans} ${spU}`
-              : `= (${d3} − ${d1}) ÷ (${t3} − ${t2}) = ${d3 - d1} ÷ ${t3 - t2} = ${ans} ${spU}`,
+            stage === 1 ? `= (${d1} − 0) ÷ (${t1} − 0) = ${d1} ÷ ${t1} = ${ans} km/h`
+              : `= (${d3} − ${d1}) ÷ (${t3} − ${t2}) = ${d3 - d1} ÷ ${t3 - t2} = ${ans} km/h`,
           ],
         };
       }
 
       // D — speed–time graph → area (distance) or gradient (acceleration)
-      const t1 = randInt(2, 5), cruise = randInt(2, 5), decel = randInt(2, 4);
       const kind = pick(["accel", "decel", "distTri", "distRect", "distTotal"]);
-      const v1 = kind === "accel" ? t1 * randInt(2, 6) : kind === "decel" ? decel * randInt(2, 6) : 2 * randInt(3, 9);
+      const cruise = randInt(2, 5);
+      // keep the peak speed even so it lands on the step-2 grid
+      let t1, decel, v1;
+      if (kind === "accel") { t1 = pick([2, 4]); decel = randInt(2, 4); v1 = t1 * pick([2, 3, 4, 5]); }
+      else if (kind === "decel") { decel = pick([2, 4]); t1 = randInt(2, 5); v1 = decel * pick([2, 3, 4, 5]); }
+      else { t1 = randInt(2, 5); decel = randInt(2, 4); v1 = 2 * randInt(3, 10); }
       const t2 = t1 + cruise, t3 = t2 + decel;
       const pts = [[0, 0], [t1, v1], [t2, v1], [t3, 0]];
+      const stg = { yLabel: "speed", xUnit: "s", yUnit: "m/s", gridY: 2, gridX: 1 };
       if (kind === "accel") return {
         prompt: `From the speed–time graph, find the acceleration during the first ${t1} s in m/s²`,
-        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [0, 1] },
+        motion: { pts, ...stg, highlight: [0, 1] },
         answer: `${v1 / t1}`, hint: "acceleration = gradient",
         steps: [`Acceleration = gradient = ${v1} ÷ ${t1} = ${v1 / t1} m/s²`],
       };
       if (kind === "decel") return {
         prompt: `From the speed–time graph, find the deceleration during the last ${decel} s in m/s²`,
-        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [2, 3] },
+        motion: { pts, ...stg, highlight: [2, 3] },
         answer: `${v1 / decel}`, hint: "deceleration = size of the gradient",
         steps: [`Deceleration = gradient size = ${v1} ÷ ${decel} = ${v1 / decel} m/s²`],
       };
       if (kind === "distTri") return {
         prompt: `From the speed–time graph, find the distance travelled in the first ${t1} s in m`,
-        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [0, 1], shadeFrom: 0, shadeTo: t1 },
+        motion: { pts, ...stg, highlight: [0, 1], shadeFrom: 0, shadeTo: t1 },
         answer: `${(t1 * v1) / 2}`, hint: "distance = area under the graph",
         steps: [`Area of the triangle = ½ × base × height`, `= ½ × ${t1} × ${v1} = ${(t1 * v1) / 2} m`],
       };
       if (kind === "distRect") return {
         prompt: `From the speed–time graph, find the distance travelled while the speed is constant, in m`,
-        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", highlight: [1, 2], shadeFrom: t1, shadeTo: t2 },
+        motion: { pts, ...stg, highlight: [1, 2], shadeFrom: t1, shadeTo: t2 },
         answer: `${cruise * v1}`, hint: "distance = area under the graph",
         steps: [`Area of the rectangle = ${cruise} × ${v1} = ${cruise * v1} m`],
       };
       const total = (t1 * v1) / 2 + cruise * v1 + (decel * v1) / 2;
       return {
         prompt: `From the speed–time graph, find the total distance travelled in m`,
-        motion: { pts, yLabel: "speed", xUnit: "s", yUnit: "m/s", shadeFrom: 0, shadeTo: t3 },
+        motion: { pts, ...stg, shadeFrom: 0, shadeTo: t3 },
         answer: `${total}`, hint: "distance = total area under the graph",
         steps: [
           `Split into triangle + rectangle + triangle`,
@@ -2796,43 +2935,126 @@ const TOPICS = [
   { id: "mensuration", name: "Mensuration", icon: "▦", prereqs: [],
     generate() {
       const pick = (a) => a[randInt(0, a.length - 1)];
+      const even = (lo, hi) => 2 * randInt(Math.ceil(lo / 2), Math.floor(hi / 2));
       const r = Math.random();
 
-      // rectangle: area from the two sides
-      if (r < 0.32) {
-        const l = randInt(3, 20), w = randInt(3, 20);
-        return { prompt: `Find the area of a rectangle with length ${l} cm and width ${w} cm`, answer: `${l * w}`, hint: "Enter a number (cm²).",
-          steps: [`Area of a rectangle = length × width`, `= ${l} × ${w} = ${l * w} cm²`] };
+      // ---------- rectangle ----------
+      if (r < 0.13) {
+        const l = randInt(4, 18), w = randInt(3, 12);
+        if (Math.random() < 0.5) return {
+          prompt: `Find the area of this rectangle`, solid: { shape: "rect", dims: { l, w } },
+          answer: `${l * w}`, hint: "Enter a number (cm²).",
+          steps: [`Area = length × width`, `= ${l} × ${w} = ${l * w} cm²`] };
+        return {
+          prompt: `Find the perimeter of this rectangle`, solid: { shape: "rect", dims: { l, w } },
+          answer: `${2 * (l + w)}`, hint: "Enter a number (cm).",
+          steps: [`Perimeter = 2 × (length + width)`, `= 2 × (${l} + ${w}) = ${2 * (l + w)} cm`] };
       }
 
-      // square: area from the side
-      if (r < 0.48) {
-        const s = randInt(3, 18);
-        return { prompt: `Find the area of a square with side ${s} cm`, answer: `${s * s}`, hint: "Enter a number (cm²).",
-          steps: [`Area of a square = side²`, `= ${s}² = ${s * s} cm²`] };
+      // ---------- square ----------
+      if (r < 0.23) {
+        const s = randInt(4, 16), area = s * s;
+        if (Math.random() < 0.5) return {
+          prompt: `Find the area of this square`, solid: { shape: "square", dims: { s } },
+          answer: `${area}`, hint: "Enter a number (cm²).",
+          steps: [`Area = side²`, `= ${s}² = ${area} cm²`] };
+        return {
+          prompt: `This square has area ${area} cm². Find the length of one side`,
+          solid: { shape: "square", dims: { s: "?" } },
+          answer: `${s}`, hint: "Enter a number (cm).",
+          steps: [`side = √area`, `= √${area} = ${s} cm`] };
       }
 
-      // square: side from the area
-      if (r < 0.68) {
-        const s = randInt(3, 20), area = s * s;
-        return { prompt: `A square has area ${area} cm². Find the length of one side`, answer: `${s}`, hint: "Enter a number (cm).",
-          steps: [`Side = √area`, `= √${area} = ${s} cm`] };
+      // ---------- triangle: area = ½ × base × height ----------
+      if (r < 0.36) {
+        const b = randInt(5, 18), h = even(4, 14);
+        return {
+          prompt: `Find the area of this triangle`, solid: { shape: "triangle", dims: { b, h } },
+          answer: `${(b * h) / 2}`, hint: "Enter a number (cm²).",
+          steps: [`Area = ½ × base × height`, `= ½ × ${b} × ${h} = ${(b * h) / 2} cm²`] };
       }
 
-      // rectangle: the other side from the area and one side
-      if (r < 0.88) {
-        const a = randInt(2, 15), b = randInt(2, 15), area = a * b;
-        const known = pick(["length", "width"]);
-        const kv = known === "length" ? a : b, ov = known === "length" ? b : a;
-        return { prompt: `A rectangle has area ${area} cm² and ${known} ${kv} cm. Find the ${known === "length" ? "width" : "length"}`,
-          answer: `${ov}`, hint: "Enter a number (cm).",
-          steps: [`Other side = area ÷ known side`, `= ${area} ÷ ${kv} = ${ov} cm`] };
+      // ---------- parallelogram: area = base × height ----------
+      if (r < 0.46) {
+        const b = randInt(5, 16), h = randInt(3, 12);
+        return {
+          prompt: `Find the area of this parallelogram`, solid: { shape: "parallelogram", dims: { b, h } },
+          answer: `${b * h}`, hint: "Enter a number (cm²).",
+          steps: [`Area = base × perpendicular height`, `= ${b} × ${h} = ${b * h} cm²`] };
       }
 
-      // rectangle: perimeter from the two sides
-      const l = randInt(3, 18), w = randInt(3, 18);
-      return { prompt: `Find the perimeter of a rectangle with length ${l} cm and width ${w} cm`, answer: `${2 * (l + w)}`, hint: "Enter a number (cm).",
-        steps: [`Perimeter = 2 × (length + width)`, `= 2 × (${l} + ${w}) = 2 × ${l + w} = ${2 * (l + w)} cm`] };
+      // ---------- trapezium: area = ½ (a + b) h ----------
+      if (r < 0.58) {
+        let a = randInt(4, 12), b = randInt(a + 2, a + 12), h = randInt(3, 12);
+        if ((a + b) % 2 && h % 2) h += 1;
+        return {
+          prompt: `Find the area of this trapezium`, solid: { shape: "trapezium", dims: { a, b, h } },
+          answer: `${((a + b) * h) / 2}`, hint: "Enter a number (cm²).",
+          steps: [`Area = ½ × (sum of the parallel sides) × height`, `= ½ × (${a} + ${b}) × ${h} = ½ × ${a + b} × ${h} = ${((a + b) * h) / 2} cm²`] };
+      }
+
+      // ---------- cuboid: volume or surface area ----------
+      if (r < 0.70) {
+        const l = randInt(3, 9), w = randInt(2, 7), h = randInt(2, 7);
+        if (Math.random() < 0.55) return {
+          prompt: `Find the volume of this cuboid`, solid: { shape: "cuboid", dims: { l, w, h } },
+          answer: `${l * w * h}`, hint: "Enter a number (cm³).",
+          steps: [`Volume = length × width × height`, `= ${l} × ${w} × ${h} = ${l * w * h} cm³`] };
+        const sa = 2 * (l * w + l * h + w * h);
+        return {
+          prompt: `Find the total surface area of this cuboid`, solid: { shape: "cuboid", dims: { l, w, h } },
+          answer: `${sa}`, hint: "Enter a number (cm²).",
+          steps: [`Surface area = 2(lw + lh + wh)`, `= 2(${l * w} + ${l * h} + ${w * h}) = 2 × ${l * w + l * h + w * h} = ${sa} cm²`] };
+      }
+
+      // ---------- cylinder: volume or curved surface area (in terms of π) ----------
+      if (r < 0.82) {
+        const rad = randInt(2, 7), h = randInt(3, 12);
+        if (Math.random() < 0.55) return {
+          prompt: `Find the volume of this cylinder. Leave your answer in terms of π`,
+          solid: { shape: "cylinder", dims: { r: rad, h } },
+          answer: `${rad * rad * h}π`, hint: "give your answer as a multiple of π",
+          steps: [`Volume = πr²h`, `= π × ${rad}² × ${h} = ${rad * rad * h}π cm³`] };
+        return {
+          prompt: `Find the curved surface area of this cylinder. Leave your answer in terms of π`,
+          solid: { shape: "cylinder", dims: { r: rad, h } },
+          answer: `${2 * rad * h}π`, hint: "give your answer as a multiple of π",
+          steps: [`Curved surface area = 2πrh`, `= 2 × π × ${rad} × ${h} = ${2 * rad * h}π cm²`] };
+      }
+
+      // ---------- cone: volume or curved surface area (in terms of π) ----------
+      if (r < 0.91) {
+        if (Math.random() < 0.5) {
+          const rad = pick([3, 6]), h = randInt(3, 10);
+          return {
+            prompt: `Find the volume of this cone. Leave your answer in terms of π`,
+            solid: { shape: "cone", dims: { r: rad, h } },
+            answer: `${(rad * rad * h) / 3}π`, hint: "give your answer as a multiple of π",
+            steps: [`Volume = ⅓ × πr²h`, `= ⅓ × π × ${rad}² × ${h} = ${(rad * rad * h) / 3}π cm³`] };
+        }
+        const [rad, , slant] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [9, 12, 15], [8, 15, 17]]);
+        return {
+          prompt: `This cone has base radius ${rad} cm and slant height ${slant} cm. Find the curved surface area in terms of π`,
+          solid: { shape: "cone", dims: { r: rad, slant } },
+          answer: `${rad * slant}π`, hint: "give your answer as a multiple of π",
+          steps: [`Curved surface area = πrl`, `= π × ${rad} × ${slant} = ${rad * slant}π cm²`] };
+      }
+
+      // ---------- sphere: volume or surface area (in terms of π) ----------
+      if (Math.random() < 0.5) {
+        const rad = pick([3, 6]);
+        return {
+          prompt: `Find the volume of this sphere. Leave your answer in terms of π`,
+          solid: { shape: "sphere", dims: { r: rad } },
+          answer: `${(4 * rad * rad * rad) / 3}π`, hint: "give your answer as a multiple of π",
+          steps: [`Volume = 4⁄3 × πr³`, `= 4⁄3 × π × ${rad}³ = ${(4 * rad * rad * rad) / 3}π cm³`] };
+      }
+      const rad = randInt(2, 8);
+      return {
+        prompt: `Find the surface area of this sphere. Leave your answer in terms of π`,
+        solid: { shape: "sphere", dims: { r: rad } },
+        answer: `${4 * rad * rad}π`, hint: "give your answer as a multiple of π",
+        steps: [`Surface area = 4πr²`, `= 4 × π × ${rad}² = ${4 * rad * rad}π cm²`] };
     } },
   { id: "similarity", name: "Similarity", icon: "🔺", prereqs: ["mensuration"],
     generate() {
@@ -5327,6 +5549,7 @@ export default function MathsUnlockedBN() {
               {question.figure && <ShapeFigure shape={question.figure.shape} />}
               {question.tri && <TriangleFigure {...question.tri} />}
               {question.circle && <CircleFigure {...question.circle} />}
+              {question.solid && <MensurationFigure {...question.solid} />}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
