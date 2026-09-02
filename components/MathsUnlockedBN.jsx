@@ -460,6 +460,82 @@ function RegionGraph({ line, picked, showAnswer, onPick }) {
   );
 }
 
+// Parse a vector / coordinate typed as "(3, -2)", "3,-2", "3 -2", "[3;-2]" …
+function parseVec(s) {
+  if (!s) return null;
+  const m = String(s).replace(/[()[\]{}]/g, " ").match(/(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  return [parseFloat(m[1]), parseFloat(m[2])];
+}
+
+// A coordinate grid for Transformations: shape A (blue) and its image B
+// (green), with optional mirror line / centre marker, or an interactive
+// mode where the student taps three lattice points to place the image.
+function TransformFigure({ a, b, mirror, centre, tapPts, onTap, showImage = true }) {
+  const R = 8, U = 14, O = 128;
+  const X = (x) => O + x * U;
+  const Y = (y) => O - y * U;
+  const grid = [];
+  for (let i = -R; i <= R; i++) {
+    if (i === 0) continue;
+    grid.push(<line key={`v${i}`} x1={X(i)} y1={Y(-R)} x2={X(i)} y2={Y(R)} stroke="var(--grid)" strokeWidth="0.5" />);
+    grid.push(<line key={`h${i}`} x1={X(-R)} y1={Y(i)} x2={X(R)} y2={Y(i)} stroke="var(--grid)" strokeWidth="0.5" />);
+  }
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.2, strokeLinejoin: "round" };
+  const poly = (pts) => pts.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ");
+  const cen = (pts) => [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+  const mLine = mirror && (() => {
+    if (mirror.kind === "x") return [[mirror.k, -R], [mirror.k, R]];
+    if (mirror.kind === "y") return [[-R, mirror.k], [R, mirror.k]];
+    if (mirror.kind === "yx") return [[-R, -R], [R, R]];
+    return [[-R, R], [R, -R]]; // y = -x
+  })();
+  const dots = [];
+  if (onTap) for (let x = -R; x <= R; x++) for (let y = -R; y <= R; y++) {
+    const chosen = (tapPts || []).some(([px, py]) => px === x && py === y);
+    dots.push(<circle key={`d${x},${y}`} cx={X(x)} cy={Y(y)} r={chosen ? 4 : 6}
+      fill={chosen ? "var(--blue)" : "transparent"} stroke={chosen ? "var(--card)" : "transparent"} strokeWidth={chosen ? 1.4 : 0}
+      style={{ cursor: "pointer", pointerEvents: "all", WebkitTapHighlightColor: "transparent", outline: "none" }}
+      onClick={() => onTap([x, y])} />);
+  }
+  const tapPoly = (tapPts || []).length === 3 ? tapPts : null;
+  return (
+    <svg viewBox="0 0 256 256" width="248" height="248" role="img" aria-label="transformation on a coordinate grid"
+      style={{ maxWidth: "100%", display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      <rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} fill="var(--card)" stroke="var(--grid)" />
+      {grid}
+      <line x1={X(-R)} y1={Y(0)} x2={X(R)} y2={Y(0)} stroke="var(--ink)" strokeWidth="1.2" />
+      <line x1={X(0)} y1={Y(-R)} x2={X(0)} y2={Y(R)} stroke="var(--ink)" strokeWidth="1.2" />
+      {[-6, -4, -2, 2, 4, 6].map((t) => (
+        <g key={t}>
+          <text x={X(t)} y={Y(0) + 10} fontSize="7.5" textAnchor="middle" fill="var(--muted)">{t}</text>
+          <text x={X(0) - 4} y={Y(t) + 3} fontSize="7.5" textAnchor="end" fill="var(--muted)">{t}</text>
+        </g>
+      ))}
+      {mLine && <line x1={X(mLine[0][0])} y1={Y(mLine[0][1])} x2={X(mLine[1][0])} y2={Y(mLine[1][1])} stroke="var(--red)" strokeWidth="1.6" strokeDasharray="5 4" />}
+      <polygon points={poly(a)} fill="var(--blue)" fillOpacity="0.16" stroke="var(--blue)" strokeWidth="2" strokeLinejoin="round" />
+      {(() => { const c = cen(a); return <text x={X(c[0])} y={Y(c[1])} fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--blue)" style={halo}>A</text>; })()}
+      {b && showImage && (
+        <>
+          <polygon points={poly(b)} fill="var(--green)" fillOpacity="0.16" stroke="var(--green)" strokeWidth="2" strokeLinejoin="round" />
+          {(() => { const c = cen(b); return <text x={X(c[0])} y={Y(c[1])} fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--green)" style={halo}>B</text>; })()}
+        </>
+      )}
+      {centre && (
+        <g>
+          <line x1={X(centre[0]) - 5} y1={Y(centre[1]) - 5} x2={X(centre[0]) + 5} y2={Y(centre[1]) + 5} stroke="var(--ink)" strokeWidth="1.8" />
+          <line x1={X(centre[0]) - 5} y1={Y(centre[1]) + 5} x2={X(centre[0]) + 5} y2={Y(centre[1]) - 5} stroke="var(--ink)" strokeWidth="1.8" />
+        </g>
+      )}
+      {tapPoly && <polygon points={poly(tapPoly)} fill="var(--blue)" fillOpacity="0.14" stroke="var(--blue)" strokeWidth="2" strokeDasharray="4 3" strokeLinejoin="round" />}
+      {dots}
+      {(tapPts || []).map(([px, py], i) => (
+        <circle key={`m${i}`} cx={X(px)} cy={Y(py)} r="4" fill="var(--blue)" stroke="var(--card)" strokeWidth="1.4" style={{ pointerEvents: "none" }} />
+      ))}
+    </svg>
+  );
+}
+
 // A piecewise motion graph (distance–time or speed–time) with axis
 // labels, one highlighted segment, and optional shaded area beneath it.
 function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo }) {
@@ -2168,9 +2244,250 @@ const TOPICS = [
     } },
   { id: "transformations", name: "Transformations", icon: "🔄", prereqs: ["coordgeo"],
     generate() {
-      const x = randInt(-8, 8), y = randInt(-8, 8), vx = randInt(-6, 6), vy = randInt(-6, 6);
-      return { prompt: `Point (${x}, ${y}) is translated by vector (${vx}, ${vy}). Find the new x-coordinate`, answer: `${x + vx}`, hint: "Enter a number.",
-        steps: [`A translation adds the vector to the coordinates`, `New x = ${x} + ${vx} = ${x + vx}`] };
+      const pick = (arr) => arr[randInt(0, arr.length - 1)];
+      const inGrid = (p) => Math.abs(p[0]) <= 7 && Math.abs(p[1]) <= 7; // 1-unit margin inside the ±8 grid
+      const key = (p) => `${p[0]},${p[1]}`;
+      const area2 = (t) => Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]));
+      const scalene = (t) => {
+        const d = (i, j) => (t[i][0] - t[j][0]) ** 2 + (t[i][1] - t[j][1]) ** 2;
+        const s = [d(0, 1), d(1, 2), d(0, 2)];
+        return s[0] !== s[1] && s[1] !== s[2] && s[0] !== s[2] && s.every((v) => v >= 2);
+      };
+      const chunky = (t) => {
+        const bw = Math.max(...t.map((p) => p[0])) - Math.min(...t.map((p) => p[0]));
+        const bh = Math.max(...t.map((p) => p[1])) - Math.min(...t.map((p) => p[1]));
+        const longest = Math.max(
+          (t[0][0] - t[1][0]) ** 2 + (t[0][1] - t[1][1]) ** 2,
+          (t[1][0] - t[2][0]) ** 2 + (t[1][1] - t[2][1]) ** 2,
+          (t[0][0] - t[2][0]) ** 2 + (t[0][1] - t[2][1]) ** 2,
+        );
+        // area² ≥ 10 and the shortest altitude (2·area / longest side) ≥ ~1.4
+        return bw >= 3 && bh >= 3 && area2(t) >= 10 && area2(t) ** 2 >= 2 * longest;
+      };
+      const randTri = (lo, hi) => {
+        for (let i = 0; i < 300; i++) {
+          const t = [0, 1, 2].map(() => [randInt(lo, hi), randInt(lo, hi)]);
+          if (area2(t) <= 30 && scalene(t) && chunky(t)) return t;
+        }
+        return [[0, 0], [3, 0], [1, 4]];
+      };
+      const isSlide = (a, b) => {
+        const o = [b[0][0] - a[0][0], b[0][1] - a[0][1]];
+        return a.every((p, i) => b[i][0] - p[0] === o[0] && b[i][1] - p[1] === o[1]);
+      };
+      const T = {
+        translate: (t, [a, b]) => t.map(([x, y]) => [x + a, y + b]),
+        reflect: (t, m) => t.map(([x, y]) => {
+          if (m.kind === "x") return [2 * m.k - x, y];
+          if (m.kind === "y") return [x, 2 * m.k - y];
+          if (m.kind === "yx") return [y, x];
+          return [-y, -x]; // y = -x
+        }),
+        rotate: (t, c, deg) => t.map(([x, y]) => {
+          const dx = x - c[0], dy = y - c[1];
+          if (deg === 90) return [c[0] + dy, c[1] - dx];    // clockwise
+          if (deg === -90) return [c[0] - dy, c[1] + dx];   // anticlockwise
+          return [c[0] - dx, c[1] - dy];                    // 180°
+        }),
+        enlarge: (t, c, k) => t.map(([x, y]) => [c[0] + k * (x - c[0]), c[1] + k * (y - c[1])]),
+      };
+      const distinct = (b) => new Set(b.map(key)).size === 3;
+      const roll = Math.random();
+
+      // ---------- 1. identify the transformation type ----------
+      if (roll < 0.24) {
+        for (let tries = 0; tries < 140; tries++) {
+          const kind = pick(["translation", "rotation", "reflection", "enlargement"]);
+          const a = randTri(-5, 3);
+          let b, why;
+          if (kind === "translation") {
+            b = T.translate(a, [pick([-6, -5, -4, -3, 3, 4, 5, 6]), pick([-5, -4, -3, 3, 4, 5])]);
+            why = "is the same size and the same way round — it has just slid across";
+          } else if (kind === "rotation") {
+            b = T.rotate(a, [randInt(-2, 2), randInt(-2, 2)], pick([90, -90, 180]));
+            why = "is the same size and the same way round, but turned";
+          } else if (kind === "reflection") {
+            b = T.reflect(a, pick([{ kind: "x", k: randInt(-2, 2) }, { kind: "y", k: randInt(-2, 2) }, { kind: "yx" }, { kind: "y-x" }]));
+            why = "is the same size but flipped — a mirror image";
+          } else {
+            b = T.enlarge(a, [randInt(-3, 3), randInt(-3, 3)], pick([2, 3, -2]));
+            why = "has changed size";
+          }
+          if (!b.every(inGrid) || !distinct(b)) continue;
+          if (kind !== "translation" && isSlide(a, b)) continue;
+          const answer = kind[0].toUpperCase() + kind.slice(1);
+          return {
+            prompt: `Triangle A is mapped onto triangle B. Which single transformation is this?`,
+            transform: { a, b },
+            choices: ["Translation", "Rotation", "Enlargement", "Reflection"], answer,
+            hint: "pick one",
+            steps: [
+              `Check: is B the same size as A? Is it flipped, turned, or just moved?`,
+              `Triangle B ${why}.`,
+              `So it is a ${answer.toLowerCase()}.`,
+            ],
+          };
+        }
+      }
+
+      // ---------- 2. translation → find the vector ----------
+      if (roll < 0.40) {
+        for (let tries = 0; tries < 140; tries++) {
+          const a = randTri(-5, 4);
+          const v = [pick([-6, -5, -4, -3, -2, 2, 3, 4, 5, 6]), pick([-5, -4, -3, -2, 2, 3, 4, 5])];
+          const b = T.translate(a, v);
+          if (!b.every(inGrid)) continue;
+          return {
+            prompt: `Triangle A is translated to triangle B. Write down the translation vector as (x, y)`,
+            transform: { a, b },
+            check: (inp) => { const p = parseVec(inp); return !!p && p[0] === v[0] && p[1] === v[1]; },
+            answer: `(${v[0]}, ${v[1]})`, hint: "e.g. (3, -2)",
+            steps: [
+              `Pick a vertex of A and the matching vertex of B.`,
+              `Across: ${v[0] >= 0 ? `${v[0]} right` : `${-v[0]} left`}.   Up/down: ${v[1] >= 0 ? `${v[1]} up` : `${-v[1]} down`}.`,
+              `Translation vector = (${v[0]}, ${v[1]}).`,
+            ],
+          };
+        }
+      }
+
+      // ---------- 3. reflection → find the mirror line ----------
+      if (roll < 0.56) {
+        for (let tries = 0; tries < 200; tries++) {
+          const a = randTri(-5, 5);
+          const m = pick([
+            { kind: "x", k: pick([-3, -2, -1, 0, 1, 2, 3]) },
+            { kind: "y", k: pick([-3, -2, -1, 0, 1, 2, 3]) },
+            { kind: "yx" }, { kind: "y-x" },
+          ]);
+          const b = T.reflect(a, m);
+          if (!b.every(inGrid) || !distinct(b)) continue;
+          const eqn = m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x";
+          const norm = (s) => String(s).toLowerCase().replace(/\s+/g, "");
+          const accept = new Set([norm(eqn)]);
+          if (m.kind === "yx") { accept.add("y=x"); accept.add("x=y"); }
+          if (m.kind === "y-x") { accept.add("y=-x"); accept.add("x=-y"); }
+          return {
+            prompt: `Triangle A is reflected onto triangle B. Write down the equation of the mirror line`,
+            transform: { a, b, answerMirror: m },
+            check: (inp) => accept.has(norm(inp)),
+            answer: eqn, hint: "e.g. x = 2   or   y = -x",
+            steps: [
+              `Join each vertex of A to its image on B. The mirror line cuts every join in half, at right angles.`,
+              `Matching points are equal distances from the mirror, on opposite sides.`,
+              `Mirror line:  ${eqn}.`,
+            ],
+          };
+        }
+      }
+
+      // ---------- 4. enlargement → scale factor (centre given) or centre (SF given) ----------
+      if (roll < 0.72) {
+        for (let tries = 0; tries < 200; tries++) {
+          const a = randTri(-2, 2);
+          const c = [randInt(-4, 4), randInt(-4, 4)];
+          const k = pick([2, 3, -2, 2]);
+          const b = T.enlarge(a, c, k);
+          if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b)) continue;
+          if (area2(b) === area2(a)) continue;
+          if (Math.random() < 0.55) return {
+            prompt: `Triangle A is enlarged onto triangle B, centre (${c[0]}, ${c[1]}). Find the scale factor`,
+            transform: { a, b, centre: c },
+            check: (inp) => { try { return Math.abs(evalString(String(inp), 0) - k) < 1e-6; } catch (e) { return false; } },
+            answer: `${k}`, hint: "a number — negative if B is on the far side of the centre",
+            steps: [
+              `Scale factor = image length ÷ object length for a pair of matching sides.`,
+              `A side of B is ${Math.abs(k)} times the matching side of A${k < 0 ? ", and on the opposite side of the centre" : ""}.`,
+              `Scale factor = ${k}.`,
+            ],
+          };
+          return {
+            prompt: `Triangle A is enlarged onto triangle B with scale factor ${k}. Find the centre of enlargement as (x, y)`,
+            transform: { a, b, answerCentre: c },
+            check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
+            answer: `(${c[0]}, ${c[1]})`, hint: "e.g. (1, -2)",
+            steps: [
+              `Draw a straight line through each vertex of A and its matching vertex of B.`,
+              `All three lines meet at one point — the centre of enlargement.`,
+              `Centre = (${c[0]}, ${c[1]}).`,
+            ],
+          };
+        }
+      }
+
+      // ---------- 5. rotation → centre, or describe the rotation ----------
+      if (roll < 0.86) {
+        for (let tries = 0; tries < 200; tries++) {
+          const a = randTri(-5, 3);
+          const c = [randInt(-2, 2), randInt(-2, 2)];
+          const spec = pick([{ deg: 90, t: "90° clockwise" }, { deg: -90, t: "90° anticlockwise" }, { deg: 180, t: "180°" }]);
+          const b = T.rotate(a, c, spec.deg);
+          if (!b.every(inGrid) || !distinct(b) || isSlide(a, b)) continue;
+          if (Math.random() < 0.5) return {
+            prompt: `Triangle A is rotated ${spec.t} onto triangle B. Find the centre of rotation as (x, y)`,
+            transform: { a, b, answerCentre: c },
+            check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
+            answer: `(${c[0]}, ${c[1]})`, hint: "e.g. (0, 1)",
+            steps: [
+              `The centre is the same distance from a vertex of A as from its image on B.`,
+              spec.deg === 180 ? `For a 180° turn it is the midpoint of the join from a vertex to its image.` : `Draw the perpendicular bisector of two "vertex → image" joins; they cross at the centre.`,
+              `Centre of rotation = (${c[0]}, ${c[1]}).`,
+            ],
+          };
+          return {
+            prompt: `Triangle A is rotated about (${c[0]}, ${c[1]}) onto triangle B. Describe the rotation`,
+            transform: { a, b, centre: c },
+            choices: ["90° clockwise", "90° anticlockwise", "180°"], answer: spec.t,
+            hint: "pick one",
+            steps: [
+              `Follow one vertex of A round to its image on B, turning about the marked centre.`,
+              `A quarter turn is 90°, a half turn is 180°. Check the direction.`,
+              `This is a rotation of ${spec.t}.`,
+            ],
+          };
+        }
+      }
+
+      // ---------- 6. draw the image (tap 3 vertices) ----------
+      for (let tries = 0; tries < 240; tries++) {
+        const a = randTri(-4, 4);
+        const kind = pick(["translation", "reflection", "rotation", "enlargement"]);
+        let b, desc;
+        if (kind === "translation") {
+          const v = [pick([-5, -4, -3, -2, 2, 3, 4, 5]), pick([-4, -3, -2, 2, 3, 4])];
+          b = T.translate(a, v); desc = `Translate triangle A by the vector (${v[0]}, ${v[1]}).`;
+        } else if (kind === "reflection") {
+          const m = pick([{ kind: "x", k: pick([-2, -1, 0, 1, 2]) }, { kind: "y", k: pick([-2, -1, 0, 1, 2]) }, { kind: "yx" }, { kind: "y-x" }]);
+          b = T.reflect(a, m);
+          desc = `Reflect triangle A in the line ${m.kind === "x" ? `x = ${m.k}` : m.kind === "y" ? `y = ${m.k}` : m.kind === "yx" ? "y = x" : "y = -x"}.`;
+        } else if (kind === "rotation") {
+          const c = [randInt(-2, 2), randInt(-2, 2)], s = pick([{ d: 90, t: "90° clockwise" }, { d: -90, t: "90° anticlockwise" }, { d: 180, t: "180°" }]);
+          b = T.rotate(a, c, s.d); desc = `Rotate triangle A ${s.t} about (${c[0]}, ${c[1]}).`;
+        } else {
+          const c = [randInt(-3, 3), randInt(-3, 3)], k = pick([2, -2, 2]);
+          b = T.enlarge(a, c, k); desc = `Enlarge triangle A by scale factor ${k}, centre (${c[0]}, ${c[1]}).`;
+        }
+        if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b)) continue;
+        return {
+          prompt: `${desc}\nTap the three vertices of the image triangle.`,
+          transform: { a, draw: true, image: b },
+          drawTransform: { image: b },
+          answer: b.map((p) => `(${p[0]}, ${p[1]})`).join(", "),
+          hint: "tap three points — a fourth tap replaces the oldest",
+          steps: [
+            `Work one vertex of A at a time.`,
+            desc,
+            `Image vertices: ${b.map((p) => `(${p[0]}, ${p[1]})`).join(", ")}.`,
+          ],
+        };
+      }
+      const fa = [[0, 0], [3, 0], [0, 4]], fb = T.translate(fa, [2, 1]);
+      return {
+        prompt: `Translate triangle A by the vector (2, 1).\nTap the three vertices of the image triangle.`,
+        transform: { a: fa, draw: true, image: fb }, drawTransform: { image: fb },
+        answer: `(2, 1), (5, 1), (2, 5)`, hint: "tap three points",
+        steps: [`Add (2, 1) to each vertex.`, `Image vertices: (2, 1), (5, 1), (2, 5).`],
+      };
     } },
   { id: "kinematics", name: "Kinematics", icon: "🚗", prereqs: ["algebra", "coordgeo", "time"],
     generate() {
@@ -3504,6 +3821,8 @@ export default function MathsUnlockedBN() {
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
   const [vennPressed, setVennPressed] = useState([]); // region keys shaded on a Venn diagram question
+  const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
+  const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -3743,6 +4062,8 @@ export default function MathsUnlockedBN() {
     setDrawPts([]);
     setRegionPick(null);
     setVennPressed([]);
+    setMcPick(null);
+    setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -3894,6 +4215,8 @@ export default function MathsUnlockedBN() {
     setDrawPts([]);
     setRegionPick(null);
     setVennPressed([]);
+    setMcPick(null);
+    setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -3908,6 +4231,8 @@ export default function MathsUnlockedBN() {
     setDrawPts([]);
     setRegionPick(null);
     setVennPressed([]);
+    setMcPick(null);
+    setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
     setFeedback(null);
@@ -3937,6 +4262,18 @@ export default function MathsUnlockedBN() {
     setVennPressed((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]));
   }
 
+  // "Draw the image" transformation questions: tap 3 lattice points for the
+  // image triangle; a 4th tap drops the oldest vertex (rolling buffer of 3).
+  function toggleTriPoint(pt) {
+    if (feedback) return;
+    setDrawTri((cur) => {
+      const i = cur.findIndex(([x, y]) => x === pt[0] && y === pt[1]);
+      if (i >= 0) return cur.filter((_, k) => k !== i); // tap again to remove
+      if (cur.length < 3) return [...cur, pt];
+      return [cur[1], cur[2], pt];
+    });
+  }
+
   function submitAnswer() {
     if (feedback) return;
     let correct;
@@ -3947,6 +4284,13 @@ export default function MathsUnlockedBN() {
     } else if (question.region) {
       if (!regionPick) return;
       correct = regionSideCorrect(question.region, regionPick[0], regionPick[1]);
+    } else if (question.choices) {
+      if (!mcPick) return;
+      correct = mcPick === question.answer;
+    } else if (question.drawTransform) {
+      if (drawTri.length !== 3) return;
+      const tgt = question.drawTransform.image;
+      correct = tgt.every((v) => drawTri.some((p) => p[0] === v[0] && p[1] === v[1]));
     } else if (question.drawSolve) {
       if (drawPts.length < 2) return;
       if (question.fields.some((f) => !(multiInput[f.key] || "").trim())) return;
@@ -4908,7 +5252,46 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {(question.drawGraph || question.region || question.venn) ? null : question.fields ? (
+              {question.transform && (
+                <div style={{ marginBottom: 12 }}>
+                  <TransformFigure
+                    a={question.transform.a}
+                    b={question.transform.draw ? (feedback ? question.transform.image : null) : question.transform.b}
+                    centre={question.transform.centre || (feedback ? question.transform.answerCentre : null)}
+                    mirror={feedback ? question.transform.answerMirror : null}
+                    tapPts={question.transform.draw ? drawTri : null}
+                    onTap={question.transform.draw && !feedback ? toggleTriPoint : null}
+                  />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
+                    {question.transform.draw
+                      ? (feedback
+                        ? (feedback.correct ? "Image placed correctly" : "Green shows the correct image")
+                        : drawTri.length === 0 ? "Tap the first vertex of the image"
+                          : drawTri.length < 3 ? `${3 - drawTri.length} more to tap`
+                            : "Tap a different point to adjust a vertex")
+                      : "Triangle A (blue) is mapped onto triangle B (green)"}
+                  </div>
+                </div>
+              )}
+
+              {question.choices && (
+                feedback ? (
+                  <div style={{ fontSize: 13, marginBottom: 12 }}>You chose: <strong>{mcPick || "—"}</strong></div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    {question.choices.map((opt) => (
+                      <button key={opt} type="button" onClick={() => setMcPick(opt)} style={{
+                        padding: "10px 14px", textAlign: "left", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                        borderRadius: 8, border: `1.5px solid ${mcPick === opt ? "var(--blue)" : "var(--grid)"}`,
+                        background: mcPick === opt ? "var(--blue)" : "var(--paper)",
+                        color: mcPick === opt ? "var(--on-accent)" : "var(--ink)",
+                      }}>{opt}</button>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {(question.drawGraph || question.region || question.venn || question.choices || question.drawTransform) ? null : question.fields ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   {question.fields.map((f, i) => (
                     <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -4963,6 +5346,8 @@ export default function MathsUnlockedBN() {
                 const notReady = (question.drawGraph && drawPts.length < 2)
                   || (question.region && !regionPick)
                   || (question.venn && vennPressed.length === 0)
+                  || (question.choices && !mcPick)
+                  || (question.drawTransform && drawTri.length !== 3)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
