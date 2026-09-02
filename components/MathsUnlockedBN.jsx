@@ -3651,18 +3651,23 @@ function rankDisplay(highestRankIdx) {
 }
 
 /* ---------------------------------------------------------
-   Levelling (Mastery Challenge). XP comes from two sources:
-   grade ratchet-ups (ungraded→F … S→S+) and claimed daily
-   tasks (profile.bonusExp). Level 20 costs 8,500 XP — about
-   what 15 topics at A + 15 at S is worth (8,550) — so full
-   S+ mastery (13,500) is now well past the cap and lives on
-   as the "Mathematics Unlocked" achievement + prestige fuel.
+   Levelling (Mastery Challenge). XP comes from three sources:
+   grade ratchet-ups (ungraded→F … S→S+), +2 for every correct
+   answer, and claimed daily tasks / milestones (pooled in
+   profile.bonusExp). Level 20 costs 8,500 XP: 15 topics at A
+   + 15 at S is 7,350 from ranks, and the ~550–750 correct
+   answers it takes to get there add roughly the rest, landing
+   on the cap. Full S+ mastery (11,700 from ranks) sits past
+   the cap as the "Mathematics Unlocked" achievement + prestige
+   fuel. XP keeps accruing past Level 20 — invisibly on the bar,
+   but it still feeds the weekly school leaderboard.
 --------------------------------------------------------- */
 const LEVEL_CAP = 20;
-// XP for entering each rank: F, E, D, C, B, A, A*, S, S+  (arithmetic, +10)
-const RANK_STEP_EXP = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+const CORRECT_XP = 2;                 // XP for every correct answer
+// XP for entering each rank: F, E, D, C, B, A, A*, S, S+
+const RANK_STEP_EXP = [10, 20, 25, 35, 40, 50, 60, 70, 80];
 // RANK_CUM_EXP[k] = XP a topic is worth at rank index k
-//   → [10, 30, 60, 100, 150, 210, 280, 360, 450]  (A = 210, S = 360, S+ = 450)
+//   → [10, 30, 55, 90, 130, 180, 240, 310, 390]
 const RANK_CUM_EXP = RANK_STEP_EXP.reduce((acc, v) => [...acc, (acc[acc.length - 1] || 0) + v], []);
 // LEVEL_CUM_EXP[i] = total XP required to be level (i + 1). Per-level cost
 // climbs 10, 60, 110, 160, 200, 250 … 880 — all multiples of 10, summing to 8,500.
@@ -4013,6 +4018,23 @@ const MILESTONE_XP = 50;
 function todayKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+// The Monday that starts this week, as a YYYY-MM-DD string — the weekly
+// school leaderboard bucket. Local time (≈ Brunei time for our students).
+function weekKey(d = new Date()) {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); // back up to Monday
+  return todayKey(m);
+}
+// Roll the weekly XP bucket over on a new week (stashing last week's total
+// for the "champions" banner), then add this session's gain.
+function bumpWeek(profile, gain) {
+  const wk = weekKey();
+  if (!profile.week || profile.week.of !== wk) {
+    if (profile.week && profile.week.xp > 0) profile.lastWeek = { of: profile.week.of, xp: profile.week.xp };
+    profile.week = { of: wk, xp: 0 };
+  }
+  if (gain > 0) profile.week.xp += gain;
+}
 function weakestTopicId(profile) {
   const topics = profile.topics || {};
   const pool = TOPICS.filter((t) => isUnlocked(t, profile));
@@ -4087,7 +4109,7 @@ const emptyProfile = () => ({
   streak: 0, bestStreak: 0, fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0,
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
-  bonusExp: 0, daily: null, milestones: {},
+  bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 // A student is identified by name + 4-digit PIN, so two students who share
@@ -4170,7 +4192,8 @@ export default function MathsUnlockedBN() {
   const [showParentLink, setShowParentLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
-  const [board, setBoard] = useState(null);           // { loading, schools: [...] }
+  const [board, setBoard] = useState(null);           // { loading, schools, weekly, ... }
+  const [boardTab, setBoardTab] = useState("week");   // "week" | "alltime"
   const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
   const [rosterProfile, setRosterProfile] = useState(null); // a leaderboard student whose full profile is shown in a modal
   const [friendQuery, setFriendQuery] = useState("");
@@ -4250,15 +4273,19 @@ export default function MathsUnlockedBN() {
     }
   }, [teacherMode, screen, profile.name]);
 
-  // Roll over the daily tasks at (local) midnight / on a new day.
+  // Roll over the daily tasks at (local) midnight / on a new day, and the
+  // weekly-XP bucket on a new week.
   useEffect(() => {
     if (!ready || !profile.name) return;
-    if (!profile.daily || profile.daily.date !== todayKey()) {
+    const newDay = !profile.daily || profile.daily.date !== todayKey();
+    const newWeek = !profile.week || profile.week.of !== weekKey();
+    if (newDay || newWeek) {
       const n = JSON.parse(JSON.stringify(profile));
-      n.daily = freshDay(n);
+      if (newDay) n.daily = freshDay(n);
+      if (newWeek) bumpWeek(n, 0);
       saveProfile(n);
     }
-  }, [ready, profile.name, profile.daily && profile.daily.date]);
+  }, [ready, profile.name, profile.daily && profile.daily.date, profile.week && profile.week.of]);
 
   function flash(msg) {
     setToast(msg);
@@ -4275,6 +4302,7 @@ export default function MathsUnlockedBN() {
     d.claimed[taskId] = true;
     n.bonusExp = (n.bonusExp || 0) + (taskId === "showup" ? DAILY_XP.showup : DAILY_XP.task);
     const gain = totalExp(n) - before;
+    bumpWeek(n, gain);
     const lv = creditLevelUps(n, before);
     saveProfile(n);
     if (lv) playJingle(true);
@@ -4291,6 +4319,7 @@ export default function MathsUnlockedBN() {
     const before = totalExp(n);
     n.milestones[id] = "claimed";
     n.bonusExp = (n.bonusExp || 0) + MILESTONE_XP;
+    bumpWeek(n, totalExp(n) - before);
     const lv = creditLevelUps(n, before);
     saveProfile(n);
     if (lv) playJingle(true);
@@ -4687,6 +4716,7 @@ export default function MathsUnlockedBN() {
       d.streakToday = (d.streakToday || 0) + 1;
       d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
       if (scoredId === d.weakTopicId) d.weakCorrect = (d.weakCorrect || 0) + 1;
+      next.bonusExp = (next.bonusExp || 0) + CORRECT_XP; // small XP for every correct answer
     } else {
       next.streak = 0;
       next.consecWrong = (next.consecWrong || 0) + 1;
@@ -4694,6 +4724,7 @@ export default function MathsUnlockedBN() {
     }
     const expAfter = totalExp(next);
     const expGain = expAfter - expBefore;
+    bumpWeek(next, expGain); // feed the weekly school leaderboard
     const leveledTo = creditLevelUps(next, expBefore);
     const keysWon = (next.keys || 0) - (profile.keys || 0);
 
@@ -4829,11 +4860,11 @@ export default function MathsUnlockedBN() {
     } catch (e) { /* clipboard unavailable — the link is shown for manual copy */ }
   }
 
-  // Client-side aggregation: read every student record, group by school,
-  // rank by the sum of the school's top-10 leaderboard scores. Ties go to
-  // whichever school assembled that top-10 earliest.
+  // Client-side aggregation: read every student record once, then build
+  // two boards — all-time (top-10 leaderboard scores) and this week (sum
+  // of every student's XP earned since Monday).
   async function loadBoard() {
-    setBoard({ loading: true, schools: [] });
+    setBoard({ loading: true, schools: [], weekly: [] });
     let all = [];
     try {
       const listRes = await storage.list("student_", true);
@@ -4877,7 +4908,29 @@ export default function MathsUnlockedBN() {
       };
     });
     schools.sort((a, b) => b.score - a.score || a.assembledAt - b.assembledAt || a.name.localeCompare(b.name));
-    setBoard({ loading: false, schools });
+
+    // ---- this week ----
+    const wk = weekKey();
+    const wkXp = (m) => (m.week && m.week.of === wk ? m.week.xp || 0 : 0);
+    const lastXp = (m) => (m.lastWeek && m.lastWeek.xp ? m.lastWeek.xp : 0);
+    const weekly = Object.entries(bySchool).map(([name, members]) => {
+      const contributors = members
+        .map((m) => ({ name: m.name, xp: wkXp(m), level: levelFromExp(totalExp(m)), prestige: m.prestige || 0, full: m }))
+        .filter((c) => c.xp > 0)
+        .sort((a, b) => b.xp - a.xp);
+      return {
+        name,
+        members: members.length,
+        xp: contributors.reduce((s, c) => s + c.xp, 0),
+        active: contributors.length,
+        lastXp: members.reduce((s, m) => s + lastXp(m), 0),
+        contributors: contributors.slice(0, 20),
+      };
+    }).filter((s) => s.xp > 0 || s.lastXp > 0);
+    weekly.sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name));
+    const lastChampion = [...weekly].filter((s) => s.lastXp > 0).sort((a, b) => b.lastXp - a.lastXp)[0] || null;
+
+    setBoard({ loading: false, schools, weekly, weekOf: wk, lastChampion });
   }
 
   function openQuestionBank() {
@@ -5888,9 +5941,71 @@ export default function MathsUnlockedBN() {
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
-            <div style={{ marginBottom: 16 }} />
+            <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
+              {[["week", "This week"], ["alltime", "All-time"]].map(([id, label]) => (
+                <button key={id} onClick={() => { setBoardTab(id); setOpenSchool(null); }} style={{
+                  flex: 1, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", borderRadius: 8,
+                  border: `1.5px solid ${boardTab === id ? "var(--blue)" : "var(--grid)"}`,
+                  background: boardTab === id ? "var(--blue)" : "var(--paper)",
+                  color: boardTab === id ? "var(--on-accent)" : "var(--muted)",
+                }}>{label}</button>
+              ))}
+            </div>
+
             {!board || board.loading ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+            ) : boardTab === "week" ? (
+              <div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+                  Total XP every school earned since Monday — rank-ups and correct answers. Resets each Monday.
+                </div>
+                {board.lastChampion && (
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--amber)", background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+                    🏆 Last week: {board.lastChampion.name} · {board.lastChampion.lastXp.toLocaleString()} XP
+                  </div>
+                )}
+                {(board.weekly || []).length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>No XP earned yet this week — be the first to put your school on the board.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {board.weekly.map((s, i) => {
+                      const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
+                      const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
+                      const expanded = openSchool === s.name;
+                      return (
+                        <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden" }}>
+                          <button onClick={() => setOpenSchool(expanded ? null : s.name)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}>
+                            <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
+                              <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.active} active this week · tap to {expanded ? "hide" : "see"} who</div>
+                            </div>
+                            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.xp.toLocaleString()}</div>
+                            <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+                          </button>
+                          {expanded && (
+                            <div style={{ borderTop: "1px solid var(--grid)" }}>
+                              {s.contributors.map((c, j) => (
+                                <button key={j} onClick={() => { if (c.full) { setRosterProfile(c.full); markMilestone("friendview"); } }}
+                                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                    <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{c.name}</span>
+                                    {c.prestige > 0 && <PrestigeBadge prestige={c.prestige} size={13} />}
+                                    <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--muted)" }}>Level {c.level}</span>
+                                  </div>
+                                  <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{c.xp.toLocaleString()}</div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : board.schools.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>No schools ranked yet — students choose a school when they register.</div>
             ) : (
