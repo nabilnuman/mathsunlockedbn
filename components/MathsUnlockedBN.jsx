@@ -848,11 +848,13 @@ function MensurationFigure({ shape, dims = {} }) {
 }
 
 // A labelled vector diagram for the Vectors topic — a 3/4-sided figure
-// with named vertices, optional diagonals (dashed) and marked points, and
-// one or more directed vector arrows labelled a / b. All coords are raw
-// [x,y] (y-up); the whole scene is scaled to fit the viewBox.
+// with named vertices, marked points and directed vectors labelled a / b.
+// Every segment is drawn solid black and shares its endpoints with the
+// named vertices (the figure is closed, lines touch); a vector's direction
+// is shown by a small arrowhead at the midpoint of the segment, the usual
+// exam convention. All coords are raw [x,y] (y-up), scaled to the viewBox.
 function VectorFigure({ labels = [], marks = [], edges = [], dashed = [], arrows = [] }) {
-  const W = 250, H = 200, m = 24;
+  const W = 250, H = 200, m = 26;
   const all = [
     ...labels.map((l) => l.p), ...marks.map((l) => l.p),
     ...edges.flat(), ...dashed.flat(),
@@ -868,38 +870,43 @@ function VectorFigure({ labels = [], marks = [], edges = [], dashed = [], arrows
   const cen = T([(minX + maxX) / 2, (minY + maxY) / 2]);
   const nrm = (v) => { const L = Math.hypot(v[0], v[1]) || 1; return [v[0] / L, v[1] / L]; };
   const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.4, strokeLinejoin: "round" };
-  const seg = (a, b, extra) => { const p = T(a), q = T(b); return <line x1={F(p[0])} y1={F(p[1])} x2={F(q[0])} y2={F(q[1])} {...extra} />; };
-  const lbl = (p, t, fill) => {
+  const line = (a, b, key) => {
+    const p = T(a), q = T(b);
+    return <line key={key} x1={F(p[0])} y1={F(p[1])} x2={F(q[0])} y2={F(q[1])} stroke="var(--ink)" strokeWidth="1.9" strokeLinecap="round" />;
+  };
+  const lbl = (p, t) => {
     const sp = T(p), d = nrm([sp[0] - cen[0], sp[1] - cen[1]]);
-    return <text x={F(sp[0] + d[0] * 13)} y={F(sp[1] + d[1] * 13)} fontSize="11.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill={fill} style={halo}>{t}</text>;
+    return <text x={F(sp[0] + d[0] * 13)} y={F(sp[1] + d[1] * 13)} fontSize="11.5" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)" style={halo}>{t}</text>;
   };
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="vector diagram"
       style={{ maxWidth: 300, display: "block", margin: "0 auto 10px" }}>
-      <defs>
-        <marker id="vf-head" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L6.5,3 L0,6 Z" fill="var(--blue)" />
-        </marker>
-      </defs>
-      {edges.map((e, i) => <g key={`e${i}`}>{seg(e[0], e[1], { stroke: "var(--ink)", strokeWidth: 1.7, strokeLinecap: "round" })}</g>)}
-      {dashed.map((e, i) => <g key={`d${i}`}>{seg(e[0], e[1], { stroke: "var(--muted)", strokeWidth: 1.3, strokeDasharray: "4 3" })}</g>)}
+      {edges.map((e, i) => line(e[0], e[1], `e${i}`))}
+      {dashed.map((e, i) => line(e[0], e[1], `d${i}`))}
       {arrows.map((ar, i) => {
         const p = T(ar.a), q = T(ar.b);
         const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1;
-        const end = [p[0] + dx * 0.82, p[1] + dy * 0.82];
-        const n = [-dy / L, dx / L];
-        const mid = [(p[0] + q[0]) / 2 + n[0] * 12, (p[1] + q[1]) / 2 + n[1] * 12];
+        const ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
+        const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+        const hl = 5.6, hw = 4.2;                       // arrowhead centred on the midpoint
+        const tip = [mx + ux * hl, my + uy * hl];
+        const b1 = [mx - ux * hl + nx * hw, my - uy * hl + ny * hw];
+        const b2 = [mx - ux * hl - nx * hw, my - uy * hl - ny * hw];
+        let sgn = 1;
+        if ((mx + nx - cen[0]) ** 2 + (my + ny - cen[1]) ** 2 < (mx - nx - cen[0]) ** 2 + (my - ny - cen[1]) ** 2) sgn = -1;
+        const lp = [mx + nx * 13 * sgn, my + ny * 13 * sgn];
         return (
           <g key={`a${i}`}>
-            <line x1={F(p[0])} y1={F(p[1])} x2={F(end[0])} y2={F(end[1])} stroke="var(--blue)" strokeWidth="2.3" markerEnd="url(#vf-head)" />
-            <text x={F(mid[0])} y={F(mid[1])} fontSize="12.5" fontWeight="800" fontStyle="italic" textAnchor="middle" dominantBaseline="middle" fill="var(--blue)" style={halo}>{ar.t}</text>
+            {line(ar.a, ar.b)}
+            <polygon points={`${F(tip[0])},${F(tip[1])} ${F(b1[0])},${F(b1[1])} ${F(b2[0])},${F(b2[1])}`} fill="var(--ink)" />
+            <text x={F(lp[0])} y={F(lp[1])} fontSize="12.5" fontWeight="800" fontStyle="italic" textAnchor="middle" dominantBaseline="middle" fill="var(--ink)" style={halo}>{ar.t}</text>
           </g>
         );
       })}
-      {marks.map((mk, i) => { const p = T(mk.p); return <circle key={`mc${i}`} cx={F(p[0])} cy={F(p[1])} r="2.8" fill="var(--red)" />; })}
+      {marks.map((mk, i) => { const p = T(mk.p); return <circle key={`mc${i}`} cx={F(p[0])} cy={F(p[1])} r="2.8" fill="var(--ink)" />; })}
       {labels.map((l, i) => { const p = T(l.p); return <circle key={`lc${i}`} cx={F(p[0])} cy={F(p[1])} r="2.4" fill="var(--ink)" />; })}
-      {labels.map((l, i) => <g key={`ll${i}`}>{lbl(l.p, l.t, "var(--ink)")}</g>)}
-      {marks.map((mk, i) => <g key={`ml${i}`}>{lbl(mk.p, mk.t, "var(--red)")}</g>)}
+      {labels.map((l, i) => <g key={`ll${i}`}>{lbl(l.p, l.t)}</g>)}
+      {marks.map((mk, i) => <g key={`ml${i}`}>{lbl(mk.p, mk.t)}</g>)}
     </svg>
   );
 }
