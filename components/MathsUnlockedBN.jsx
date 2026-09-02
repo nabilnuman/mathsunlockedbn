@@ -1378,14 +1378,16 @@ function SketchOverlay({ active, strokes, setStrokes }) {
     if (Array.isArray(done) && done.length) setStrokes((s) => [...s, done]);
   };
 
-  // A constant-size scratch pad that sits in the card flow (so it never
-  // covers the question and the card just grows). Toggled with the pencil.
+  // A constant-height scratch sheet laid over the top of the quiz card, so
+  // the question stays visible through it while you work; the card carries a
+  // minHeight so the pad still has room when the question is short.
+  const H = 320;
   return (
     <div style={{
-      position: "relative", width: "100%", height: active ? 320 : 0,
-      overflow: "hidden", marginTop: active ? 12 : 0,
-      border: active ? "1.5px dashed #c9d2da" : "none", borderRadius: 10,
-      background: "#fff",
+      position: "absolute", top: 0, left: 0, right: 0, height: H, zIndex: 5,
+      overflow: "hidden", borderRadius: 8, border: "1.5px dashed #c9d2da",
+      background: "rgba(255,255,255,0.76)",
+      opacity: active ? 1 : 0, pointerEvents: active ? "auto" : "none", transition: "opacity 0.12s",
     }}>
       <div style={{ position: "absolute", top: 6, left: 10, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "#8a97a3", pointerEvents: "none" }}>rough working</div>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: "crosshair" }}
@@ -5524,12 +5526,13 @@ export default function MathsUnlockedBN() {
     cur.prestige = (cur.prestige || 0) + 1;
     cur.prestigeAt = [...(cur.prestigeAt || []), Date.now()];
     cur.topics = {};            // grades wiped
+    cur.bonusExp = 0;           // level resets to 1 — the invisible XP pool goes too
     cur.streak = 0;
     cur.consecWrong = 0;
     cur.levelReachedAt = {};
     // kept: achievements, achievedAt, lifetime counters, keys, keyedTopics,
-    //       name, school, and the daily tasks / bonus XP (prestige doesn't
-    //       touch the engagement loop)
+    //       name, school, and the daily tasks (prestige doesn't touch the
+    //       engagement loop)
     setConfirmPrestige(false);
     setActiveTopic(null);
     setScreen("dashboard");
@@ -6395,6 +6398,7 @@ export default function MathsUnlockedBN() {
               maxWidth: 520, margin: "0 auto", background: "var(--card)", border: "1px solid var(--grid)",
               borderLeft: "4px solid var(--red)", borderRadius: 10, padding: "18px 16px 18px 18px",
               transform: "rotate(-0.4deg)", boxShadow: "0 6px 24px var(--shadow-soft)", position: "relative", overflow: "hidden",
+              minHeight: sketchOn ? 356 : undefined, // room for the rough-working pad when the question is short
             }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
                 <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>
@@ -6897,7 +6901,7 @@ export default function MathsUnlockedBN() {
               </button>
             </div>
             <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
-              {[["alltime", "Schools"], ["players", "Top players"], ["week", "This week"]].map(([id, label]) => (
+              {[["alltime", "Schools"], ["week", "This week"], ["players", "Top players"]].map(([id, label]) => (
                 <button key={id} onClick={() => { setBoardTab(id); setOpenSchool(null); }} style={{
                   flex: 1, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", borderRadius: 8,
                   border: `1.5px solid ${boardTab === id ? "var(--blue)" : "var(--grid)"}`,
@@ -6911,9 +6915,6 @@ export default function MathsUnlockedBN() {
               <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
             ) : boardTab === "week" ? (
               <div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
-                  Total XP every school earned since Monday — rank-ups and correct answers. Resets each Monday.
-                </div>
                 {board.lastChampion && (
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--amber)", background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
                     🏆 Last week: {board.lastChampion.name} · {board.lastChampion.lastXp.toLocaleString()} XP
@@ -6966,9 +6967,6 @@ export default function MathsUnlockedBN() {
                 <div style={{ fontSize: 13, color: "var(--muted)" }}>No players ranked yet.</div>
               ) : (
                 <div>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
-                    Every player, ranked by lifetime score (Prestige × 20 + Level). Tap a name to see their profile.
-                  </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {board.players.map((m, i) => {
                       const mine = m.full && profile.name === m.name && (profile.pin === m.full.pin);
