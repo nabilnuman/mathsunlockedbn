@@ -1735,10 +1735,11 @@ const TOPICS = [
           const ans = oc * inner + od;
           if (ans === 0) return null;
           return {
-            prompt: `f(x) = ${a}x ${spaced(b)}\ng(x) = ${c}x ${spaced(d)}\nFind ${outer}(${innerName}(${k}))`,
+            prompt: `f(x) = ${a}x ${spaced(b)}\ng(x) = ${c}x ${spaced(d)}\nFind ${outer}${innerName}(${k})`,
             answer: `${ans}`,
-            hint: "work from the inside out",
+            hint: "apply the right-hand function first",
             steps: [
+              `${outer}${innerName}(${k}) means: work out ${innerName}(${k}) first, then apply ${outer}.`,
               `${innerName}(${k}) = ${ic}×${k} ${spaced(id)} = ${inner}`,
               `${outer}(${inner}) = ${oc}×${inner} ${spaced(od)} = ${ans}`,
             ],
