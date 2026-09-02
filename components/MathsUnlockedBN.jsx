@@ -1920,7 +1920,7 @@ const TOPICS = [
         const lineText = (m, c) => (m === 0 ? `${c}` : `${mt(m)}${c > 0 ? ` + ${c}` : c < 0 ? ` - ${-c}` : ""}`);
 
         // parab / nparab / recip all reduce to  x² - Sx + P = 0  with roots p, q
-        const finish = ({ label, curve, curveExpr, M, C, S, P, cy, p, q }) => {
+        const finish = ({ label, curve, curveExpr, M, C, S, P, cy, p, q, rearrange }) => {
           if (Math.abs(C) > 6) return null;
           let latt = 0;
           for (let x = -6; x <= 6; x++) if (Math.abs(M * x + C) <= 6) latt++;
@@ -1952,7 +1952,7 @@ const TOPICS = [
             },
             steps: [
               `The curve drawn is ${label}.`,
-              `Rewrite ${eqShown} so one side matches the curve:  ${curveExpr} = ${lRHS}`,
+              rearrange || `Rewrite ${eqShown} so one side matches the curve:  ${curveExpr} = ${lRHS}`,
               `Draw the line y = ${lRHS}, then read the x-values where it meets the curve.`,
               tangent ? `The line just touches the curve — one solution, x = ${p}` : `x = ${lo}  and  x = ${hi}`,
             ],
@@ -2022,14 +2022,16 @@ const TOPICS = [
             return finish({ label: `y = ${ex}`, curve: { kind: "nparab", a }, curveExpr: ex,
               M: -S, C: a + P, S, P, cy, p, q });
           }
-          // recip: y = k/x
-          const slope = pick([-3, -2, -1, 1, 2, 3]);
-          if (Math.abs(slope * p) > 6 || Math.abs(slope * q) > 6) return null;
+          // recip: y = k/x — slope kept at ±1 so it's a clean "multiply by x"
+          // rearrangement (k = ∓ product of the roots)
+          const slope = pick([-1, 1]);
           const k = -slope * P;
-          if (k === 0 || Math.abs(k) > 12) return null;
+          if (k === 0) return null;   // 0 can't be a root of k/x
           const cy = (x) => k / x;
+          const lr = lineText(slope, -slope * S);
           return finish({ label: `y = ${k}/x`, curve: { kind: "recip", k }, curveExpr: `${k}/x`,
-            M: slope, C: -slope * S, S, P, cy, p, q });
+            M: slope, C: -slope * S, S, P, cy, p, q,
+            rearrange: `Divide x²${S === 0 ? "" : ` ${S < 0 ? "+" : "-"} ${Math.abs(S) === 1 ? "" : Math.abs(S)}x`}${P > 0 ? ` + ${P}` : ` - ${-P}`} = 0 by x, then rearrange:  ${k}/x = ${lr}` });
         };
 
         let qq;
