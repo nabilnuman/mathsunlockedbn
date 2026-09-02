@@ -1389,7 +1389,6 @@ function SketchOverlay({ active, strokes, setStrokes }) {
       background: "rgba(255,255,255,0.76)",
       opacity: active ? 1 : 0, pointerEvents: active ? "auto" : "none", transition: "opacity 0.12s",
     }}>
-      <div style={{ position: "absolute", top: 6, left: 10, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "#8a97a3", pointerEvents: "none" }}>rough working</div>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: "crosshair" }}
         onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
       {strokes.length > 0 && (
@@ -4532,14 +4531,48 @@ function RadarChart({ profile }) {
   );
 }
 
+/* Preset profile icons and icon borders for the profile card. Emoji keeps
+   it theme-safe and screenshot-clean; ids are stored on the profile. */
+const AVATARS = {
+  grad: "🎓", owl: "🦉", fox: "🦊", cat: "🐱", panda: "🐼", tiger: "🐯",
+  dragon: "🐉", robot: "🤖", wizard: "🧙", alien: "👽", ninja: "🥷", rocket: "🚀",
+  star: "⭐", brain: "🧠", crown: "👑", bolt: "⚡", flower: "🌸", ghost: "👻",
+};
+const AVATAR_IDS = Object.keys(AVATARS);
+const FRAMES = {
+  plain: { border: "2px solid var(--grid)" },
+  blue: { border: "3px solid var(--blue)" },
+  green: { border: "3px solid var(--green)" },
+  gold: { border: "3px solid #C99A1E" },
+  violet: { border: "3px solid #7C5CFF" },
+  rose: { border: "3px solid #E0567A" },
+  dashed: { border: "3px dashed var(--blue)" },
+  double: { border: "4px double var(--ink)" },
+  glow: { border: "3px solid #E8A82D", boxShadow: "0 0 0 4px rgba(232,168,45,0.25)" },
+};
+const FRAME_IDS = Object.keys(FRAMES);
+const BANNER_MAX = 6;
+const avatarChar = (p) => AVATARS[(p && p.avatar)] || AVATARS.grad;
+const frameStyle = (p) => FRAMES[(p && p.avatarFrame)] || FRAMES.plain;
+// the pinned badges that are actually earned and still exist
+function bannerBadges(profile) {
+  const earned = profile.achievements || [];
+  return (profile.banner || [])
+    .filter((id) => earned.includes(id))
+    .map((id) => ACHIEVEMENTS.find((a) => a.id === id))
+    .filter(Boolean)
+    .slice(0, BANNER_MAX);
+}
+
 /* Shareable summary of a student's progress. Pure display — takes a
    profile object, so the same card backs the Parent Link and friend
    search pages. Sized to screenshot cleanly. */
 function ProfileCard({ profile }) {
-  const exp = totalExp(profile);
-  const { level, into, need, pct, capped } = levelProgress(exp);
+  const level = levelFromExp(totalExp(profile));
   const title = titleForLevel(level);
+  const prestige = profile.prestige || 0;
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
+  const badges = bannerBadges(profile);
   const stat = (label, value) => (
     <div style={{ textAlign: "center" }}>
       <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
@@ -4553,35 +4586,35 @@ function ProfileCard({ profile }) {
         <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "16px 0 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "22px 0 16px" }}>
         <div style={{ position: "relative", flexShrink: 0 }}>
-          <div style={{ width: 58, height: 58, borderRadius: "50%", border: "2px solid var(--blue)", color: "var(--blue)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontSize: 8, letterSpacing: 0.5 }}>LEVEL</span>
-            <span className="mub-display" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{level}</span>
+          <div style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, ...frameStyle(profile) }}>
+            {avatarChar(profile)}
           </div>
-          {(profile.prestige || 0) > 0 && (
+          {prestige > 0 && (
             <div style={{ position: "absolute", right: -6, bottom: -4 }}>
-              <PrestigeBadge prestige={profile.prestige} size={22} />
+              <PrestigeBadge prestige={prestige} size={22} />
             </div>
           )}
         </div>
         <div style={{ minWidth: 0 }}>
           <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
-          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600 }}>
-            {title}{(profile.prestige || 0) > 0 ? ` · Prestige ${profile.prestige}` : ""}
+          <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600, marginTop: 2 }}>
+            {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
           </div>
           {profile.school && profile.school !== SOLO_SCHOOL && (
-            <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 1, wordBreak: "break-word" }}>{profile.school}</div>
+            <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, wordBreak: "break-word" }}>{profile.school}</div>
           )}
         </div>
       </div>
 
-      <div style={{ height: 8, background: "var(--locked)", borderRadius: 999, overflow: "hidden", marginBottom: 4 }}>
-        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: capped ? "var(--amber)" : "var(--blue)" }} />
-      </div>
-      <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, marginBottom: 16 }}>
-        {capped ? "MAX · Level 20" : `${into} / ${need} XP to next level`}
-      </div>
+      {badges.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 12px", marginBottom: 14 }}>
+          {badges.map((a) => (
+            <span key={a.id} title={a.name} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${TIER_COLOR[a.tier]}`, fontSize: 16, lineHeight: 1 }}>{a.icon}</span>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-around", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "12px 8px", marginBottom: 14 }}>
         {stat("Best streak", profile.bestStreak || 0)}
@@ -4593,6 +4626,59 @@ function ProfileCard({ profile }) {
         Mastery
       </div>
       <RadarChart profile={profile} />
+    </div>
+  );
+}
+
+/* Picker shown under the user's own card: choose the profile icon, its
+   border, and which earned badges appear in the card banner. */
+function ProfileCustomizer({ profile, onChange }) {
+  const earned = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
+  const banner = (profile.banner || []).filter((id) => earned.some((a) => a.id === id));
+  const toggle = (id) => onChange((p) => {
+    const b = (p.banner || []).filter((x) => earned.some((a) => a.id === x));
+    if (b.includes(id)) return { banner: b.filter((x) => x !== id) };
+    return b.length < BANNER_MAX ? { banner: [...b, id] } : {};
+  });
+  const Head = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>{children}</div>
+  );
+  const cell = (on) => ({
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: 38, height: 38, borderRadius: 10, cursor: "pointer", fontSize: 20, lineHeight: 1,
+    background: on ? "var(--blue)" : "var(--paper)",
+    border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+    color: on ? "var(--on-accent)" : "var(--ink)",
+  });
+  return (
+    <div className="mub-grid" style={{ width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 16, padding: 16, color: "var(--ink)" }}>
+      <Head>Profile icon</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
+        {AVATAR_IDS.map((id) => (
+          <button key={id} type="button" onClick={() => onChange(() => ({ avatar: id }))} style={cell((profile.avatar || "grad") === id)}>{AVATARS[id]}</button>
+        ))}
+      </div>
+
+      <Head>Icon border</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+        {FRAME_IDS.map((id) => (
+          <button key={id} type="button" onClick={() => onChange(() => ({ avatarFrame: id }))}
+            style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--paper)", cursor: "pointer",
+              ...FRAMES[id],
+              outline: (profile.avatarFrame || "plain") === id ? "2px solid var(--blue)" : "none", outlineOffset: 2 }} />
+        ))}
+      </div>
+
+      <Head>Banner — pin your best badges ({banner.length}/{BANNER_MAX})</Head>
+      {earned.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>Earn badges to pin them here.</div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {earned.map((a) => (
+            <button key={a.id} type="button" title={a.name} onClick={() => toggle(a.id)} style={cell(banner.includes(a.id))}>{a.icon}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -4755,6 +4841,7 @@ const emptyProfile = () => ({
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0,
+  avatar: "grad", avatarFrame: "plain", banner: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 // A student is identified by name + 4-digit PIN, so two students who share
@@ -5181,9 +5268,7 @@ export default function MathsUnlockedBN() {
     return () => clearInterval(iv);
   }, [blitzPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function saveProfile(next) {
-    if (next.name && !next.parentToken) next.parentToken = genToken();
-    setProfile(next);
+  async function persistProfile(next) {
     try { await storage.set("profile", JSON.stringify(next)); } catch (e) { /* ignore */ }
     if (next.name && next.pin) {
       try { await storage.set(studentKey(next.name, next.pin), JSON.stringify(next), true); } catch (e) { /* ignore */ }
@@ -5191,6 +5276,23 @@ export default function MathsUnlockedBN() {
         try { await storage.set(`parent_${next.parentToken}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
       }
     }
+  }
+  async function saveProfile(next) {
+    if (next.name && !next.parentToken) next.parentToken = genToken();
+    setProfile(next);
+    await persistProfile(next);
+  }
+
+  // Merge a small patch into the profile against its freshest value — safe
+  // when several taps land before a re-render (profile-card customiser).
+  function patchProfile(fn) {
+    setProfile((prev) => {
+      const next = { ...prev, ...fn(prev) };
+      if (next.name && !next.parentToken) next.parentToken = genToken();
+      profileRef.current = next;
+      persistProfile(next);
+      return next;
+    });
   }
 
   // Login by name + 4-digit PIN. An existing name+PIN resumes that
@@ -7065,11 +7167,12 @@ export default function MathsUnlockedBN() {
       {showCard && (
         <div
           onClick={() => setShowCard(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px", zIndex: 50, overflowY: "auto" }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <ProfileCard profile={profile} />
             <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Screenshot this to share · tap outside to close</div>
+            <ProfileCustomizer profile={profile} onChange={patchProfile} />
           </div>
         </div>
       )}
