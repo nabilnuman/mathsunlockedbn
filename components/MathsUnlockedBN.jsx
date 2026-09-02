@@ -309,11 +309,22 @@ function LineGraph({ data }) {
   );
 }
 
+// The pre-drawn curve for "by drawing a suitable line, solve …" questions.
+// kind: "parab" y = x² + a · "nparab" y = a − x² · "cubic" y = x³ + b·x
+// · "recip" y = k/x (undefined at x = 0).
+function curveFn(c) {
+  if (!c) return null;
+  if (c.kind === "nparab") return (x) => c.a - x * x;
+  if (c.kind === "cubic") return (x) => x * x * x + (c.b || 0) * x;
+  if (c.kind === "recip") return (x) => (Math.abs(x) < 1e-6 ? null : c.k / x);
+  return (x) => x * x + (c.a || 0); // parab (default)
+}
+
 // Interactive grid for "draw the graph of y = …". The student taps
 // lattice points; the last two define a line. `solution` (when set)
 // overlays the correct line in green after the answer is checked.
-// `curve` ({a}) pre-draws the parabola y = x² + a; `solvePoints`
-// marks the intersection points in green once the answer is checked.
+// `curve` pre-draws a curve (see curveFn); `solvePoints` marks the
+// intersection points in green once the answer is checked.
 function DrawGraph({ points, solution, curve, solvePoints, onToggle }) {
   const R = 6, U = 19, O = 128;
   const X = (x) => O + x * U;
@@ -356,9 +367,16 @@ function DrawGraph({ points, solution, curve, solvePoints, onToggle }) {
       ))}
       <clipPath id="dg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
       {curve && (() => {
-        const pl = [];
-        for (let px = -R; px <= R; px += 0.15) pl.push(`${X(px)},${Y(px * px + curve.a)}`);
-        return <polyline points={pl.join(" ")} fill="none" stroke="var(--ink)" strokeWidth="2" clipPath="url(#dg-clip)" />;
+        const f = curveFn(curve);
+        const segs = [];
+        let cur = [];
+        for (let px = -R; px <= R + 1e-9; px += 0.1) {
+          const y = f(px);
+          if (y == null || !isFinite(y) || Math.abs(y) > R + 1.5) { if (cur.length > 1) segs.push(cur); cur = []; continue; }
+          cur.push(`${X(px)},${Y(y)}`);
+        }
+        if (cur.length > 1) segs.push(cur);
+        return segs.map((s, i) => <polyline key={`cv${i}`} points={s.join(" ")} fill="none" stroke="var(--ink)" strokeWidth="2" clipPath="url(#dg-clip)" />);
       })()}
       {solution && lineFor(solution, "var(--green)", 3)}
       {lineFor(points, "var(--blue)", 2.4)}
@@ -1893,61 +1911,129 @@ const TOPICS = [
       }
 
       if (roll < 0.65) {
-        // "By drawing a suitable line, solve …" — a parabola y = x² + a is
-        // already on the grid; the student draws the line and reads off x.
-        const build = () => {
-          const a = randInt(-3, 1);
-          const kind = Math.random();
-          let p, q;
-          if (kind < 0.2) { p = q = randInt(-2, 2); }
-          else if (kind < 0.55) { p = randInt(1, 2); q = -p; }
-          else { p = randInt(-2, 2); q = randInt(-2, 2); if (p === q || p + q === 0) return null; }
-          const M = p + q, K = p * q, C = a - K;
-          if (p * p + a > 6 || q * q + a > 6) return null;
+        // "By drawing a suitable line, solve …" — a curve is already on the
+        // grid (parabola, negative parabola, cubic or reciprocal); the
+        // student draws the straight line and reads off where they meet.
+        const pick = (arr) => arr[randInt(0, arr.length - 1)];
+        const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+        const mt = (m) => (m === 1 ? "x" : m === -1 ? "-x" : `${m}x`);
+        const lineText = (m, c) => (m === 0 ? `${c}` : `${mt(m)}${c > 0 ? ` + ${c}` : c < 0 ? ` - ${-c}` : ""}`);
+
+        // parab / nparab / recip all reduce to  x² - Sx + P = 0  with roots p, q
+        const finish = ({ label, curve, curveExpr, M, C, S, P, cy, p, q }) => {
           if (Math.abs(C) > 6) return null;
           let latt = 0;
           for (let x = -6; x <= 6; x++) if (Math.abs(M * x + C) <= 6) latt++;
           if (latt < 2) return null;
-
-          const plusA = a === 0 ? "" : a > 0 ? ` + ${a}` : ` - ${-a}`;
-          const midT = M === 0 ? "" : ` ${M < 0 ? "+" : "-"} ${Math.abs(M) === 1 ? "" : Math.abs(M)}x`;
-          const conT = K === 0 ? "" : ` ${K > 0 ? "+" : "-"} ${Math.abs(K)}`;
+          const midT = S === 0 ? "" : ` ${S < 0 ? "+" : "-"} ${Math.abs(S) === 1 ? "" : Math.abs(S)}x`;
+          const conT = P === 0 ? "" : ` ${P > 0 ? "+" : "-"} ${Math.abs(P)}`;
           const eqShown = `x²${midT}${conT} = 0`;
-          const mt = M === 1 ? "x" : M === -1 ? "-x" : `${M}x`;
-          const ct = C === 0 ? "" : C > 0 ? ` + ${C}` : ` - ${-C}`;
-          const lineRHS = M === 0 ? `${C}` : `${mt}${ct}`;
+          const lRHS = lineText(M, C);
           const tangent = p === q;
           const lo = Math.min(p, q), hi = Math.max(p, q);
-
+          const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
           return {
-            prompt: `y = x²${plusA} is drawn. By drawing a suitable line, solve:   ${eqShown}`,
-            curve: { a }, solveLine: { m: M, c: C },
-            solvePoints: tangent ? [[p, p * p + a]] : [[p, p * p + a], [q, q * q + a]],
+            prompt: `${label} is drawn. By drawing a suitable line, solve:   ${eqShown}`,
+            curve, solveLine: { m: M, c: C },
+            solvePoints: tangent ? [[p, cy(p)]] : [[p, cy(p)], [q, cy(q)]],
             fields: tangent
               ? [{ key: "x", label: "x =" }, { key: "y", label: "y =" }]
               : [{ key: "s1", label: "x =" }, { key: "s2", label: "x =" }],
-            answer: tangent ? `x = ${p},  y = ${p * p + a}` : `x = ${lo},  x = ${hi}`,
-            hint: tangent ? "draw the line, then type the point" : "draw the line, then the two x-values",
+            answer: tangent ? `x = ${p},  y = ${cy(p)}` : `x = ${lo},  x = ${hi}`,
+            hint: tangent ? "draw the line, then type where it touches" : "draw the line, then the two x-values",
             drawSolve: (pts, inp) => {
               const [[X1, Y1], [X2, Y2]] = pts;
               if (X1 === X2) return false;
               const gm = (Y2 - Y1) / (X2 - X1), gc = Y1 - gm * X1;
               if (Math.abs(gm - M) > 1e-9 || Math.abs(gc - C) > 1e-9) return false;
-              const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
-              if (tangent) return Math.abs(num(inp.x) - p) < 1e-6 && Math.abs(num(inp.y) - (p * p + a)) < 1e-6;
+              if (tangent) return Math.abs(num(inp.x) - p) < 1e-6 && Math.abs(num(inp.y) - cy(p)) < 1e-6;
               const g = [num(inp.s1), num(inp.s2)].sort((u, v) => u - v);
               return Math.abs(g[0] - lo) < 1e-6 && Math.abs(g[1] - hi) < 1e-6;
             },
             steps: [
-              `The parabola drawn is y = x²${plusA}.`,
-              `Rearrange ${eqShown}  →  x²${plusA} = ${lineRHS}`,
-              `Draw the line y = ${lineRHS}, then read the x-values where it meets the curve.`,
-              tangent ? `The line is a tangent — one solution at (${p}, ${p * p + a})` : `x = ${lo}  and  x = ${hi}`,
+              `The curve drawn is ${label}.`,
+              `Rewrite ${eqShown} so one side matches the curve:  ${curveExpr} = ${lRHS}`,
+              `Draw the line y = ${lRHS}, then read the x-values where it meets the curve.`,
+              tangent ? `The line just touches the curve — one solution, x = ${p}` : `x = ${lo}  and  x = ${hi}`,
             ],
           };
         };
+
+        const buildCubic = () => {
+          const cfg = pick([
+            { b: -4, M: -3, C: 0, roots: [-1, 0, 1], solve: "x³ - x = 0", rr: "x³ - x = 0  →  x³ - 4x = -3x", line: "-3x" },
+            { b: -1, M: 3, C: 0, roots: [-2, 0, 2], solve: "x³ - 4x = 0", rr: "x³ - 4x = 0  →  x³ - x = 3x", line: "3x" },
+            { b: -4, M: 0, C: 0, roots: [-2, 0, 2], solve: "x³ - 4x = 0", rr: "the solutions are where y = x³ - 4x meets the x-axis", line: "0 (the x-axis)" },
+            { b: -1, M: 0, C: 0, roots: [-1, 0, 1], solve: "x³ - x = 0", rr: "the solutions are where y = x³ - x meets the x-axis", line: "0 (the x-axis)" },
+          ]);
+          const f = (x) => x * x * x + cfg.b * x;
+          const label = `y = x³ ${cfg.b < 0 ? "-" : "+"} ${Math.abs(cfg.b) === 1 ? "" : `${Math.abs(cfg.b)}`}x`.replace("  ", " ");
+          const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
+          return {
+            prompt: `${label} is drawn. By drawing a suitable line, solve:   ${cfg.solve}`,
+            curve: { kind: "cubic", b: cfg.b }, solveLine: { m: cfg.M, c: cfg.C },
+            solvePoints: cfg.roots.map((r) => [r, f(r)]),
+            fields: cfg.roots.map((_, i) => ({ key: `r${i}`, label: "x =" })),
+            answer: cfg.roots.map((r) => `x = ${r}`).join(",  "),
+            hint: "draw the line, then the three solutions for x",
+            drawSolve: (pts, inp) => {
+              const [[X1, Y1], [X2, Y2]] = pts;
+              if (X1 === X2) return false;
+              const gm = (Y2 - Y1) / (X2 - X1), gc = Y1 - gm * X1;
+              if (Math.abs(gm - cfg.M) > 1e-9 || Math.abs(gc - cfg.C) > 1e-9) return false;
+              const g = cfg.roots.map((_, i) => num(inp[`r${i}`])).sort((u, v) => u - v);
+              return cfg.roots.every((r, i) => Math.abs(g[i] - r) < 1e-6);
+            },
+            steps: [
+              `The curve drawn is ${label}.`,
+              `Rearrange: ${cfg.rr}`,
+              cfg.M === 0 ? `Read off where the curve crosses the x-axis.` : `Draw the line y = ${cfg.line} and read the three intersection x-values.`,
+              `x = ${cfg.roots.join(",  x = ")}`,
+            ],
+          };
+        };
+
+        const build = () => {
+          const fam = pick(["parab", "parab", "nparab", "nparab", "recip", "recip", "cubic"]);
+          if (fam === "cubic") return buildCubic();
+
+          let p, q;
+          const t = Math.random();
+          if (t < 0.16 && fam !== "recip") { p = q = nz(-2, 2); }
+          else if (t < 0.55) { p = randInt(1, 3); q = -randInt(1, 3); }
+          else { p = randInt(-3, 3); q = randInt(-3, 3); }
+          if (p === q && fam === "recip") return null;
+          if (p === q && t >= 0.16) return null;
+          const S = p + q, P = p * q;
+
+          if (fam === "parab") {
+            const a = randInt(-3, 1);
+            const cy = (x) => x * x + a;
+            if (cy(p) > 6 || cy(q) > 6) return null;
+            const plusA = a === 0 ? "" : a > 0 ? ` + ${a}` : ` - ${-a}`;
+            return finish({ label: `y = x²${plusA}`, curve: { kind: "parab", a }, curveExpr: `x²${plusA}`,
+              M: S, C: a - P, S, P, cy, p, q });
+          }
+          if (fam === "nparab") {
+            const a = randInt(0, 3);
+            const cy = (x) => a - x * x;
+            if (cy(p) < -6 || cy(q) < -6) return null;
+            const ex = a === 0 ? "-x²" : `${a} - x²`;
+            return finish({ label: `y = ${ex}`, curve: { kind: "nparab", a }, curveExpr: ex,
+              M: -S, C: a + P, S, P, cy, p, q });
+          }
+          // recip: y = k/x
+          const slope = pick([-3, -2, -1, 1, 2, 3]);
+          if (Math.abs(slope * p) > 6 || Math.abs(slope * q) > 6) return null;
+          const k = -slope * P;
+          if (k === 0 || Math.abs(k) > 12) return null;
+          const cy = (x) => k / x;
+          return finish({ label: `y = ${k}/x`, curve: { kind: "recip", k }, curveExpr: `${k}/x`,
+            M: slope, C: -slope * S, S, P, cy, p, q });
+        };
+
         let qq;
-        for (let i = 0; i < 40; i++) { qq = build(); if (qq) break; }
+        for (let i = 0; i < 80; i++) { qq = build(); if (qq) break; }
         if (qq) return qq;
       }
 
