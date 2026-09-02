@@ -3554,6 +3554,107 @@ const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
 const MIXED_TOPIC = { id: "__mixed__", name: "Mixed Review", icon: "🎲" };
 const MIXED_UNLOCK_LEVEL = 3;
 
+// Blitz — a level-7 speed round: BLITZ_SECONDS to answer as many
+// tap-only questions as possible. Correct answers earn the usual +2 XP;
+// there's no topic scoring, just a personal best.
+const BLITZ_UNLOCK_LEVEL = 7;
+const BLITZ_SECONDS = 30;
+function blitzQuestion() {
+  const pick = (a) => a[randInt(0, a.length - 1)];
+  const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = randInt(0, i); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+  const onGrid = (b) => b.every((p) => Math.abs(p[0]) <= 7 && Math.abs(p[1]) <= 7);
+  const distinct = (b) => new Set(b.map((p) => p.join(","))).size === 3;
+  const randTri = () => {
+    for (let i = 0; i < 120; i++) {
+      const t = [0, 1, 2].map(() => [randInt(-4, 4), randInt(-4, 4)]);
+      const ar = Math.abs((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]));
+      const bw = Math.max(...t.map((p) => p[0])) - Math.min(...t.map((p) => p[0]));
+      const bh = Math.max(...t.map((p) => p[1])) - Math.min(...t.map((p) => p[1]));
+      const longest = Math.max(
+        (t[0][0] - t[1][0]) ** 2 + (t[0][1] - t[1][1]) ** 2,
+        (t[1][0] - t[2][0]) ** 2 + (t[1][1] - t[2][1]) ** 2,
+        (t[0][0] - t[2][0]) ** 2 + (t[0][1] - t[2][1]) ** 2,
+      );
+      if (ar >= 12 && bw >= 3 && bh >= 3 && ar * ar >= 2 * longest) return t;
+    }
+    return [[0, 0], [3, 0], [1, 4]];
+  };
+  const opts4 = (ans, deltas) => {
+    const s = new Set([ans]);
+    let i = 0;
+    while (s.size < 4 && i < 60) { const v = ans + pick(deltas); if (v > 0 && !s.has(v)) s.add(v); i++; }
+    let g = 1;
+    while (s.size < 4) { if (!s.has(ans + g)) s.add(ans + g); g++; }
+    return shuffle([...s]).map(String);
+  };
+  const isPrime = (n) => { if (n < 2) return false; for (let d = 2; d * d <= n; d++) if (n % d === 0) return false; return true; };
+
+  const build = () => {
+    const kind = pick(["trans", "trans", "rot", "sym", "sym", "venn", "num", "num", "num"]);
+
+    if (kind === "trans") {
+      const A = randTri();
+      const ap = (f) => A.map(f);
+      const ansKind = pick(["Translation", "Rotation", "Reflection", "Enlargement"]);
+      let B;
+      if (ansKind === "Translation") B = ap(([x, y]) => [x + pick([-4, -3, 3, 4]), y + pick([-3, 3])]);
+      else if (ansKind === "Rotation") { const c = [randInt(-1, 1), randInt(-1, 1)], d = pick([90, -90, 180]); B = ap(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return d === 90 ? [c[0] + dy, c[1] - dx] : d === -90 ? [c[0] - dy, c[1] + dx] : [c[0] - dx, c[1] - dy]; }); }
+      else if (ansKind === "Reflection") { const m = pick(["x", "y", "yx", "ymx"]); B = ap(([x, y]) => m === "x" ? [-x, y] : m === "y" ? [x, -y] : m === "yx" ? [y, x] : [-y, -x]); }
+      else { const c = [randInt(-2, 2), randInt(-2, 2)]; B = ap(([x, y]) => [c[0] - 2 * (x - c[0]), c[1] - 2 * (y - c[1])]); }
+      if (!onGrid(B) || !distinct(B)) return null;
+      // reject accidental pure-translations for non-translation answers
+      if (ansKind !== "Translation") { const o = [B[0][0] - A[0][0], B[0][1] - A[0][1]]; if (A.every((p, i) => B[i][0] - p[0] === o[0] && B[i][1] - p[1] === o[1])) return null; }
+      return { prompt: "Which transformation maps A onto B?", transform: { a: A, b: B }, choices: ["Translation", "Rotation", "Enlargement", "Reflection"], answer: ansKind };
+    }
+
+    if (kind === "rot") {
+      const A = randTri(), c = [randInt(-2, 2), randInt(-2, 2)];
+      const spec = pick([{ d: 90, t: "90° clockwise" }, { d: -90, t: "90° anticlockwise" }, { d: 180, t: "180°" }]);
+      const B = A.map(([x, y]) => { const dx = x - c[0], dy = y - c[1]; return spec.d === 90 ? [c[0] + dy, c[1] - dx] : spec.d === -90 ? [c[0] - dy, c[1] + dx] : [c[0] - dx, c[1] - dy]; });
+      if (!onGrid(B) || !distinct(B)) return null;
+      const ca = A.reduce((s, p) => [s[0] + p[0] / 3, s[1] + p[1] / 3], [0, 0]);
+      const cb = B.reduce((s, p) => [s[0] + p[0] / 3, s[1] + p[1] / 3], [0, 0]);
+      if (Math.hypot(ca[0] - cb[0], ca[1] - cb[1]) < 3) return null; // keep A and B apart so the turn is legible
+      return { prompt: "Describe the rotation that maps A onto B", transform: { a: A, b: B, centre: c }, choices: ["90° clockwise", "90° anticlockwise", "180°"], answer: spec.t };
+    }
+
+    if (kind === "sym") {
+      const keys = Object.keys(SHAPES), k = pick(keys), s = SHAPES[k];
+      const askLines = Math.random() < 0.5;
+      const correct = askLines ? s.lines : s.rot;
+      const floor = askLines ? 0 : 1;   // rotational-symmetry order is always ≥ 1
+      const set = new Set([correct]);
+      while (set.size < 4) { const v = correct + pick([-2, -1, 1, 2, 3]); if (v >= floor) set.add(v); }
+      return {
+        prompt: askLines ? "How many lines of symmetry does this shape have?" : "What is the order of rotational symmetry?",
+        figure: { shape: k }, choices: shuffle([...set]).map(String), answer: String(correct),
+      };
+    }
+
+    if (kind === "venn") {
+      const two = Math.random() < 0.7;
+      const q = two
+        ? pick([{ e: "A ∩ B", t: "ab" }, { e: "A only", t: "a" }, { e: "B only", t: "b" }, { e: "outside A and B", t: "out" }])
+        : pick([{ e: "A ∩ B ∩ C", t: "abc" }, { e: "outside all three sets", t: "out" }]);
+      return { prompt: `Tap the region:  ${q.e}`, venn: { sets: two ? 2 : 3, target: [q.t] }, answer: q.e };
+    }
+
+    // num
+    const t = pick(["mult", "prime", "sqrt", "round"]);
+    if (t === "mult") { const a = randInt(3, 12), b = randInt(3, 12); return { prompt: `${a} × ${b}`, choices: opts4(a * b, [-12, -10, -8, -6, 6, 8, 10, 12]), answer: `${a * b}` }; }
+    if (t === "sqrt") { const n = randInt(3, 13); return { prompt: `√${n * n}`, choices: opts4(n, [-3, -2, -1, 1, 2, 3]), answer: `${n}` }; }
+    if (t === "round") { const x = randInt(11, 289); const r = Math.round(x / 10) * 10; return { prompt: `Round ${x} to the nearest 10`, choices: opts4(r, [-20, -10, 10, 20]), answer: `${r}` }; }
+    // prime
+    const p = pick([2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37]);
+    const comps = shuffle([4, 6, 8, 9, 10, 12, 14, 15, 16, 18, 21, 25, 27, 33, 35, 39].filter((v) => Math.abs(v - p) < 14 || Math.random() < 0.5)).slice(0, 3);
+    while (comps.length < 3) comps.push(pick([9, 15, 21, 25]));
+    return { prompt: "Which of these is a prime number?", choices: shuffle([p, ...comps]).map(String), answer: `${p}` };
+  };
+
+  for (let i = 0; i < 40; i++) { const q = build(); if (q) return q; }
+  return { prompt: "7 × 8", choices: ["54", "56", "63", "48"], answer: "56" };
+}
+
 /* Achievements are grouped into four tiers. Each achievement's check(p)
    runs against the whole profile after every answer; ids are permanent
    (renaming/retiering an achievement keeps anyone who already earned it).
@@ -3585,6 +3686,10 @@ const ACHIEVEMENTS = [
     check: (p) => !!p.got67 },
   { id: "completionist", tier: "Bronze", name: "Completionist", icon: "📚", desc: "Get at least one question right in every topic",
     check: (p) => TOPICS.every((t) => topicHasCorrect(p, t.id)) },
+  { id: "jackofall", tier: "Bronze", name: "Jack of All Trades", icon: "🎭", desc: "10 correct in a row in Mixed Review",
+    check: (p) => (p.bestMixedStreak || 0) >= 10 },
+  { id: "thunderclap", tier: "Bronze", name: "Thunderclap", icon: "💥", desc: "Answer 15 correctly in one Blitz",
+    check: (p) => (p.blitzBest || 0) >= 15 },
 
   /* ---------------- Silver ---------------- */
   { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
@@ -4110,6 +4215,7 @@ const emptyProfile = () => ({
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
+  blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 // A student is identified by name + 4-digit PIN, so two students who share
@@ -4181,6 +4287,16 @@ export default function MathsUnlockedBN() {
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
+  const [blitzPhase, setBlitzPhase] = useState("idle"); // idle | intro | playing | over
+  const [blitzScore, setBlitzScore] = useState(0);
+  const [blitzLeft, setBlitzLeft] = useState(BLITZ_SECONDS);
+  const [blitzQ, setBlitzQ] = useState(null);
+  const [blitzPick, setBlitzPick] = useState(null);     // { value, correct } while the pick flashes
+  const [blitzResult, setBlitzResult] = useState(null); // { score, best, newBest, unlocked }
+  const blitzDeadline = useRef(0);
+  const blitzCorrect = useRef(0);
+  const blitzAdvance = useRef(null);
+  const blitzDone = useRef(false);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [customQuestions, setCustomQuestions] = useState({});
@@ -4208,6 +4324,8 @@ export default function MathsUnlockedBN() {
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
+  const profileRef = useRef(profile);
+  useEffect(() => { profileRef.current = profile; });
 
   // Insert a symbol at the caret in the answer box (for keys not on a
   // phone keyboard).
@@ -4432,6 +4550,83 @@ export default function MathsUnlockedBN() {
     startTimeRef.current = Date.now();
     setScreen("quiz");
   }
+
+  // ---- Blitz ----
+  function startBlitz() {
+    if (levelFromExp(totalExp(profile)) < BLITZ_UNLOCK_LEVEL) return;
+    setBlitzPhase("intro");
+    setBlitzResult(null);
+    setScreen("blitz");
+  }
+  function beginBlitzRun() {
+    blitzCorrect.current = 0;
+    blitzDone.current = false;
+    blitzDeadline.current = Date.now() + BLITZ_SECONDS * 1000;
+    setBlitzScore(0);
+    setBlitzLeft(BLITZ_SECONDS);
+    setBlitzPick(null);
+    setBlitzQ(blitzQuestion());
+    setBlitzPhase("playing");
+  }
+  function nextBlitzQ() {
+    clearTimeout(blitzAdvance.current);
+    setBlitzPick(null);
+    setBlitzQ(blitzQuestion());
+  }
+  function scoreBlitz(isCorrect) {
+    if (isCorrect) { blitzCorrect.current += 1; setBlitzScore((s) => s + 1); }
+    blitzAdvance.current = setTimeout(() => { if (Date.now() < blitzDeadline.current) nextBlitzQ(); }, 340);
+  }
+  function answerBlitz(value) {
+    if (blitzPick || blitzPhase !== "playing" || !blitzQ) return;
+    const ok = value === blitzQ.answer;
+    setBlitzPick({ value, correct: ok });
+    scoreBlitz(ok);
+  }
+  function answerBlitzVenn(key) {
+    if (blitzPick || blitzPhase !== "playing" || !blitzQ || !blitzQ.venn) return;
+    const ok = key === blitzQ.venn.target[0];
+    setBlitzPick({ value: key, correct: ok });
+    scoreBlitz(ok);
+  }
+  function finishBlitz() {
+    clearTimeout(blitzAdvance.current);
+    if (blitzDone.current) return;
+    blitzDone.current = true;
+    setBlitzPhase("over");
+    const n = JSON.parse(JSON.stringify(profileRef.current));
+    const sc = blitzCorrect.current;
+    const newBest = sc > (n.blitzBest || 0);
+    if (newBest) n.blitzBest = sc;
+    const before = totalExp(n);
+    if (sc > 0) { n.bonusExp = (n.bonusExp || 0) + sc * CORRECT_XP; bumpWeek(n, sc * CORRECT_XP); }
+    creditLevelUps(n, before);
+    const unlocked = [];
+    n.achievedAt = n.achievedAt || {};
+    ACHIEVEMENTS.forEach((a) => {
+      if (!n.achievements.includes(a.id) && a.check(n)) { n.achievements.push(a.id); n.achievedAt[a.id] = Date.now(); unlocked.push(a); }
+    });
+    setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked });
+    if (unlocked.length) playJingle(true);
+    saveProfile(n);
+  }
+  function leaveBlitz() {
+    if (!blitzDone.current && blitzPhase === "playing") finishBlitz();
+    clearTimeout(blitzAdvance.current);
+    setBlitzPhase("idle");
+    setScreen("dashboard");
+  }
+
+  // Blitz countdown — one interval while a run is live.
+  useEffect(() => {
+    if (blitzPhase !== "playing") return;
+    const iv = setInterval(() => {
+      const rem = blitzDeadline.current - Date.now();
+      if (rem <= 0) { clearInterval(iv); finishBlitz(); }
+      else setBlitzLeft(Math.ceil(rem / 1000));
+    }, 200);
+    return () => clearInterval(iv);
+  }, [blitzPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveProfile(next) {
     if (next.name && !next.parentToken) next.parentToken = genToken();
@@ -4700,7 +4895,11 @@ export default function MathsUnlockedBN() {
     // Daily-task progress
     const d = ensureDay(next);
     if (!(d.topics || []).includes(scoredId)) d.topics = [...(d.topics || []), scoredId];
-    if (activeTopic.id === MIXED_TOPIC.id) d.mixedRounds = Math.max(d.mixedRounds || 0, 1);
+    if (activeTopic.id === MIXED_TOPIC.id) {
+      d.mixedRounds = Math.max(d.mixedRounds || 0, 1);
+      next.mixedStreak = correct ? (next.mixedStreak || 0) + 1 : 0;      // "Jack of All Trades"
+      next.bestMixedStreak = Math.max(next.bestMixedStreak || 0, next.mixedStreak);
+    }
 
     if (correct) {
       next.streak = (next.streak || 0) + 1;
@@ -5038,7 +5237,7 @@ export default function MathsUnlockedBN() {
             )}
             {screen !== "login" && screen !== "parent" && (
               <button onClick={switchStudent} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                <RotateCcw size={13} /> switch student
+                <RotateCcw size={13} /> Logout
               </button>
             )}
             <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -5246,30 +5445,48 @@ export default function MathsUnlockedBN() {
             {(() => {
               const lvl = levelFromExp(totalExp(profile));
               const mixedOpen = lvl >= MIXED_UNLOCK_LEVEL;
+              const blitzOpen = lvl >= BLITZ_UNLOCK_LEVEL;
+              const modeBtn = (open) => ({
+                width: "100%", textAlign: "left", cursor: open ? "pointer" : "not-allowed",
+                display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14,
+                border: `1px solid ${open ? "var(--blue)" : "var(--grid)"}`,
+                background: open ? "var(--card)" : "var(--locked)", opacity: open ? 1 : 0.6,
+              });
               return (
-                <button
-                  onClick={startMixed}
-                  disabled={!mixedOpen}
-                  className={mixedOpen ? "mub-card" : ""}
-                  style={{
-                    width: "100%", textAlign: "left", marginBottom: 20, cursor: mixedOpen ? "pointer" : "not-allowed",
-                    display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14,
-                    border: `1px solid ${mixedOpen ? "var(--blue)" : "var(--grid)"}`,
-                    background: mixedOpen ? "var(--card)" : "var(--locked)", opacity: mixedOpen ? 1 : 0.6,
-                  }}
-                >
-                  <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                      Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                  <button onClick={startMixed} disabled={!mixedOpen} className={mixedOpen ? "mub-card" : ""} style={modeBtn(mixedOpen)}>
+                    <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                        Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}
+                      </span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                        {mixedOpen
+                          ? "Random questions from every topic you've unlocked — answers still count toward each topic."
+                          : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
+                      </span>
                     </span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {mixedOpen
-                        ? "Random questions from every topic you've unlocked — answers still count toward each topic."
-                        : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
+                  </button>
+                  <button onClick={startBlitz} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
+                    <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                        Blitz {blitzOpen ? "" : `🔒 Level ${BLITZ_UNLOCK_LEVEL}`}
+                      </span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                        {blitzOpen
+                          ? `${BLITZ_SECONDS} seconds, tap-only questions — answer as many as you can.`
+                          : `Unlocks at Level ${BLITZ_UNLOCK_LEVEL}.`}
+                      </span>
                     </span>
-                  </span>
-                </button>
+                    {blitzOpen && (
+                      <span style={{ flexShrink: 0, textAlign: "center" }}>
+                        <span style={{ display: "block", fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Best</span>
+                        <span className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--blue)" }}>{profile.blitzBest || 0}</span>
+                      </span>
+                    )}
+                  </button>
+                </div>
               );
             })()}
 
@@ -5929,6 +6146,97 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
+        {/* BLITZ */}
+        {screen === "blitz" && (
+          <div>
+            <button onClick={leaveBlitz} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+              <ArrowLeft size={14} /> {blitzPhase === "playing" ? "end run" : "back"}
+            </button>
+
+            {blitzPhase === "intro" && (
+              <div style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: "28px 22px" }}>
+                <div style={{ fontSize: 44 }}>⚡</div>
+                <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 10px" }}>Blitz</div>
+                <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 6 }}>
+                  {BLITZ_SECONDS} seconds. Questions from any topic, all answered with one tap. Your answer locks in and jumps straight to the next.
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
+                  Every correct answer is still worth +{CORRECT_XP} XP. Your best score: <b style={{ color: "var(--ink)" }}>{profile.blitzBest || 0}</b>
+                </div>
+                <button onClick={beginBlitzRun} style={{ padding: "12px 28px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+                  Start
+                </button>
+              </div>
+            )}
+
+            {blitzPhase === "playing" && blitzQ && (
+              <div style={{ maxWidth: 480, margin: "0 auto" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                  <div style={{ flex: 1, height: 10, background: "var(--locked)", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ width: `${(blitzLeft / BLITZ_SECONDS) * 100}%`, height: "100%", background: blitzLeft <= 6 ? "var(--red)" : "var(--blue)", borderRadius: 999, transition: "width 0.2s linear" }} />
+                  </div>
+                  <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: blitzLeft <= 6 ? "var(--red)" : "var(--ink)", minWidth: 26, textAlign: "right" }}>{blitzLeft}s</div>
+                  <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--green)", minWidth: 54, textAlign: "right" }}>★ {blitzScore}</div>
+                </div>
+
+                <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderLeft: "4px solid var(--blue)", borderRadius: 10, padding: "16px 16px 18px" }}>
+                  <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}><MathText text={blitzQ.prompt} /></div>
+
+                  {blitzQ.transform && <TransformFigure a={blitzQ.transform.a} b={blitzQ.transform.b} centre={blitzQ.transform.centre} />}
+                  {blitzQ.figure && <ShapeFigure shape={blitzQ.figure.shape} />}
+                  {blitzQ.venn && (
+                    <div style={{ marginBottom: 8 }}>
+                      <VennShade venn={blitzQ.venn} pressed={blitzPick && !blitzPick.correct ? [blitzPick.value] : []} showAnswer={!!blitzPick}
+                        onToggle={blitzPick ? null : answerBlitzVenn} />
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>tap the matching region</div>
+                    </div>
+                  )}
+
+                  {blitzQ.choices && (
+                    <div style={{ display: "grid", gridTemplateColumns: blitzQ.choices.some((c) => c.length > 6) ? "1fr" : "1fr 1fr", gap: 8 }}>
+                      {blitzQ.choices.map((opt) => {
+                        const picked = blitzPick && blitzPick.value === opt;
+                        const isAns = blitzPick && opt === blitzQ.answer;
+                        const bg = picked ? (blitzPick.correct ? "var(--green)" : "var(--red)") : isAns ? "var(--green)" : "var(--paper)";
+                        const fg = picked || isAns ? "var(--on-accent)" : "var(--ink)";
+                        return (
+                          <button key={opt} type="button" disabled={!!blitzPick} onClick={() => answerBlitz(opt)}
+                            style={{ padding: "13px 12px", fontSize: 15, fontWeight: 700, cursor: blitzPick ? "default" : "pointer", borderRadius: 10, border: `1.5px solid ${bg === "var(--paper)" ? "var(--grid)" : bg}`, background: bg, color: fg, transition: "background 0.1s" }}>
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {blitzPhase === "over" && blitzResult && (
+              <div style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: "28px 22px" }}>
+                <div style={{ fontSize: 40 }}>⏱️</div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, margin: "4px 0 14px" }}>Time&rsquo;s up!</div>
+                <div className="mub-display" style={{ fontSize: 48, fontWeight: 800, color: "var(--blue)", lineHeight: 1 }}>{blitzResult.score}</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>correct in {BLITZ_SECONDS}s</div>
+                {blitzResult.newBest ? (
+                  <div className="mub-stamp" style={{ fontSize: 14, fontWeight: 800, color: "var(--green)", margin: "12px 0" }}>🎉 New best!</div>
+                ) : (
+                  <div style={{ fontSize: 13, color: "var(--muted)", margin: "12px 0" }}>Your best: <b style={{ color: "var(--ink)" }}>{blitzResult.best}</b></div>
+                )}
+                {blitzResult.unlocked.length > 0 && (
+                  <div style={{ fontSize: 12.5, color: "var(--amber)", fontWeight: 700, marginBottom: 12 }}>
+                    🏆 {blitzResult.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 8 }}>
+                  <button onClick={beginBlitzRun} style={{ padding: "10px 22px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Play again</button>
+                  <button onClick={leaveBlitz} style={{ padding: "10px 22px", background: "none", border: "1px solid var(--grid)", borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>Back</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* SCHOOL LEADERBOARD */}
         {screen === "leaderboard" && (
           <div>
@@ -5942,7 +6250,7 @@ export default function MathsUnlockedBN() {
               </button>
             </div>
             <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
-              {[["week", "This week"], ["alltime", "All-time"]].map(([id, label]) => (
+              {[["alltime", "All-time"], ["week", "This week"]].map(([id, label]) => (
                 <button key={id} onClick={() => { setBoardTab(id); setOpenSchool(null); }} style={{
                   flex: 1, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", borderRadius: 8,
                   border: `1.5px solid ${boardTab === id ? "var(--blue)" : "var(--grid)"}`,
