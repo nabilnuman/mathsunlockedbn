@@ -598,6 +598,71 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo,
   );
 }
 
+// A cumulative-frequency curve (ogive). The student can tap the x- or
+// y-axis strip to drop a dashed guide line that runs to the curve and
+// then across to the other axis — an aid for reading off medians and
+// quartiles. The guide never prints the value it lands on. `picks` holds
+// up to two guides ({ axis, v }).
+function CumFreqGraph({ points, xLabel, n, picks = [], onPick }) {
+  const W = 300, Hh = 244, ml = 42, mr = 14, mt = 12, mb = 36;
+  const pw = W - ml - mr, ph = Hh - mt - mb;
+  const xMin = points[0][0], xMax = points[points.length - 1][0];
+  const X = (x) => ml + ((x - xMin) / (xMax - xMin)) * pw;
+  const Y = (y) => mt + ph - (y / n) * ph;
+  const f = (x) => {
+    for (let i = 0; i < points.length - 1; i++) {
+      const [x0, y0] = points[i], [x1, y1] = points[i + 1];
+      if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0 || 1);
+    }
+    return x < xMin ? 0 : n;
+  };
+  const invF = (y) => {
+    for (let i = 0; i < points.length - 1; i++) {
+      const [x0, y0] = points[i], [x1, y1] = points[i + 1];
+      if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+    }
+    return y <= 0 ? xMin : xMax;
+  };
+  const xStep = points[1][0] - points[0][0];
+  const yStep = n % 5 === 0 ? n / 5 : n / 4;
+  const guides = picks.map((p) => {
+    if (p.axis === "x") { const yv = f(p.v); return [[[p.v, 0], [p.v, yv]], [[p.v, yv], [xMin, yv]]]; }
+    const xv = invF(p.v); return [[[xMin, p.v], [xv, p.v]], [[xv, p.v], [xv, 0]]];
+  });
+  const gl = (a, b) => <line x1={X(a[0])} y1={Y(a[1])} x2={X(b[0])} y2={Y(b[1])} stroke="var(--red)" strokeWidth="1.4" strokeDasharray="4 3" />;
+  return (
+    <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label="cumulative frequency graph"
+      style={{ maxWidth: 340, display: "block", margin: "0 auto 8px", touchAction: "manipulation" }}>
+      <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
+      {Array.from({ length: Math.round((xMax - xMin) / xStep) + 1 }, (_, i) => xMin + i * xStep).map((x) => (
+        <g key={`x${x}`}>
+          <line x1={X(x)} y1={mt} x2={X(x)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
+          <text x={X(x)} y={mt + ph + 12} fontSize="8" textAnchor="middle" fill="var(--muted)">{x}</text>
+        </g>
+      ))}
+      {Array.from({ length: Math.round(n / yStep) + 1 }, (_, i) => i * yStep).map((y) => (
+        <g key={`y${y}`}>
+          <line x1={ml} y1={Y(y)} x2={ml + pw} y2={Y(y)} stroke="var(--grid)" strokeWidth="0.5" />
+          <text x={ml - 5} y={Y(y) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{y}</text>
+        </g>
+      ))}
+      {guides.map((g, i) => <g key={`g${i}`}>{gl(...g[0])}{gl(...g[1])}</g>)}
+      <polyline points={points.map((p) => `${X(p[0])},${Y(p[1])}`).join(" ")} fill="none" stroke="var(--blue)" strokeWidth="2.4" strokeLinejoin="round" />
+      {points.map((p, i) => <circle key={`p${i}`} cx={X(p[0])} cy={Y(p[1])} r="2.2" fill="var(--blue)" />)}
+      <text x={ml + pw / 2} y={Hh - 4} fontSize="8.5" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
+      <text x={11} y={mt + ph / 2} fontSize="8.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 11 ${mt + ph / 2})`}>cumulative frequency</text>
+      {onPick && (
+        <>
+          <rect x={ml} y={mt + ph} width={pw} height={mb} fill="transparent" style={{ cursor: "pointer" }}
+            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vx = (e.clientX - b.left) / b.width * pw; const raw = xMin + (vx / pw) * (xMax - xMin); onPick({ axis: "x", v: Math.round(raw / (xStep / 2)) * (xStep / 2) }); }} />
+          <rect x={0} y={mt} width={ml} height={ph} fill="transparent" style={{ cursor: "pointer" }}
+            onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); const vy = (e.clientY - b.top) / b.height * ph; const raw = (1 - vy / ph) * n; onPick({ axis: "y", v: Math.max(0, Math.min(n, Math.round(raw / (yStep / 4)) * (yStep / 4))) }); }} />
+        </>
+      )}
+    </svg>
+  );
+}
+
 // Shapes and letters with their symmetry properties, for the Symmetry topic.
 function regPoly(n, startDeg = -90, r = 1) {
   return Array.from({ length: n }, (_, i) => {
@@ -3543,9 +3608,118 @@ const TOPICS = [
     } },
   { id: "statistics", name: "Statistics", icon: "📊", prereqs: ["probability"],
     generate() {
-      const n = randInt(4, 6), nums = Array.from({ length: n }, () => randInt(1, 20)), sum = nums.reduce((s, v) => s + v, 0);
-      return { prompt: `Find the mean of:   ${nums.join(", ")}`, answer: `${sum}/${n}`, hint: "Decimal is fine.",
-        steps: [`Mean = sum of values ÷ number of values`, `= (${nums.join(" + ")}) ÷ ${n} = ${sum} ÷ ${n}`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = randInt(0, i); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+      const num = (val, tol) => (inp) => { try { const x = evalString(String(inp), 0); return Number.isFinite(x) && Math.abs(x - val) <= tol; } catch (e) { return false; } };
+      const r = Math.random();
+
+      // ---------- list of numbers: mean / median / mode / range ----------
+      if (r < 0.60) {
+        const kind = pick(["mean", "mean", "median", "median", "mode", "range", "range"]);
+
+        if (kind === "mean") {
+          const mean = randInt(6, 14), n = pick([4, 5, 6]);
+          let nums;
+          for (let i = 0; i < 60; i++) {
+            nums = Array.from({ length: n - 1 }, () => randInt(1, 22));
+            const last = mean * n - nums.reduce((s, v) => s + v, 0);
+            if (last >= 1 && last <= 22) { nums.push(last); break; }
+            nums = null;
+          }
+          if (!nums) nums = Array(n).fill(mean);
+          nums = shuffle(nums);
+          return {
+            prompt: `Find the mean of:   ${nums.join(", ")}`,
+            answer: `${mean}`, hint: "Enter a number.",
+            steps: [`Mean = sum of the values ÷ how many there are`, `= (${nums.join(" + ")}) ÷ ${n} = ${mean * n} ÷ ${n} = ${mean}`],
+          };
+        }
+
+        if (kind === "mode") {
+          const modeVal = randInt(1, 12), times = randInt(2, 3), n = pick([6, 7, 8]);
+          const nums = Array(times).fill(modeVal);
+          const counts = {};
+          while (nums.length < n) {
+            const v = randInt(1, 15);
+            if (v === modeVal) continue;
+            counts[v] = (counts[v] || 0) + 1;
+            if (counts[v] < times) nums.push(v);
+          }
+          return {
+            prompt: `Find the mode of:   ${shuffle(nums).join(", ")}`,
+            answer: `${modeVal}`, hint: "Enter a number.",
+            steps: [`The mode is the value that occurs most often.`, `${modeVal} occurs ${times} times — more than any other value.`],
+          };
+        }
+
+        const n = kind === "median" ? pick([5, 7, 9]) : pick([5, 6, 7, 8]);
+        const nums = Array.from({ length: n }, () => randInt(2, 28));
+        const sorted = [...nums].sort((a, b) => a - b);
+        if (kind === "range") {
+          return {
+            prompt: `Find the range of:   ${nums.join(", ")}`,
+            answer: `${sorted[n - 1] - sorted[0]}`, hint: "Enter a number.",
+            steps: [`Range = largest value − smallest value`, `= ${sorted[n - 1]} − ${sorted[0]} = ${sorted[n - 1] - sorted[0]}`],
+          };
+        }
+        const med = sorted[(n - 1) / 2];
+        return {
+          prompt: `Find the median of:   ${nums.join(", ")}`,
+          answer: `${med}`, hint: "Enter a number.",
+          steps: [`Put the values in order:  ${sorted.join(", ")}`, `The middle value is ${med}.`],
+        };
+      }
+
+      // ---------- cumulative frequency graph ----------
+      const n = pick([40, 50, 60, 80]);
+      const bounds = pick([[0, 10, 20, 30, 40, 50, 60], [0, 10, 20, 30, 40, 50], [10, 20, 30, 40, 50, 60, 70], [0, 20, 40, 60, 80, 100]]);
+      const k = bounds.length;
+      const mids = [];
+      while (mids.length < k - 2) { const v = randInt(3, n - 3); if (!mids.includes(v)) mids.push(v); }
+      mids.sort((a, b) => a - b);
+      const cf = [0, ...mids, n];
+      const pts = bounds.map((b, i) => [b, cf[i]]);
+      const f = (x) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return x < bounds[0] ? 0 : n; };
+      const invF = (y) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0); } return bounds[0]; };
+      const xStep = bounds[1] - bounds[0];
+      const cfg = { points: pts, xLabel: pick(["mark", "score", "time (s)", "mass (kg)"]), n };
+      const r2 = Math.random();
+
+      if (r2 < 0.34) {
+        const medX = invF(n / 2);
+        return {
+          prompt: `The cumulative frequency graph shows the results of ${n} people. Use it to estimate the median.`,
+          cumfreq: cfg, answer: `${Math.round(medX)}`, hint: "read it off the graph (within a small margin is fine)",
+          check: num(medX, Math.max(3, xStep / 3)),
+          steps: [`Half of ${n} is ${n / 2}.`, `Read across from ${n / 2} on the cumulative frequency axis to the curve, then down to the ${cfg.xLabel} axis.`, `Median ≈ ${Math.round(medX)}.`],
+        };
+      }
+      if (r2 < 0.6) {
+        const q1 = invF(n / 4), q3 = invF(3 * n / 4), iqr = q3 - q1;
+        return {
+          prompt: `The cumulative frequency graph shows the results of ${n} people. Estimate the interquartile range.`,
+          cumfreq: cfg, answer: `${Math.round(iqr)}`, hint: "IQR = upper quartile − lower quartile",
+          check: num(iqr, Math.max(4, xStep / 2)),
+          steps: [
+            `Lower quartile: read across from ${n / 4}  →  Q₁ ≈ ${Math.round(q1)}.`,
+            `Upper quartile: read across from ${3 * n / 4}  →  Q₃ ≈ ${Math.round(q3)}.`,
+            `IQR = Q₃ − Q₁ ≈ ${Math.round(q3)} − ${Math.round(q1)} = ${Math.round(iqr)}.`,
+          ],
+        };
+      }
+      // less than / more than a boundary value
+      const xv = pick(bounds.slice(1, -1));
+      const below = Math.round(f(xv));
+      const less = Math.random() < 0.55;
+      return {
+        prompt: `The cumulative frequency graph shows the results of ${n} people. How many scored ${less ? "less" : "more"} than ${xv}?`,
+        cumfreq: cfg, answer: `${less ? below : n - below}`, hint: "read the curve at that value",
+        check: num(less ? below : n - below, 1.5),
+        steps: [
+          `Go up from ${xv} on the ${cfg.xLabel} axis to the curve, then across:  ${below} people scored less than ${xv}.`,
+          less ? `Answer: ${below}.` : `More than ${xv}:  ${n} − ${below} = ${n - below}.`,
+        ],
+      };
     } },
   { id: "sets", name: "Sets", icon: "∩", prereqs: ["probability"],
     generate() {
@@ -4533,6 +4707,7 @@ export default function MathsUnlockedBN() {
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
+  const [cfPick, setCfPick] = useState([]);           // up to 2 guide lines on a cumulative-frequency graph
   const [vennPressed, setVennPressed] = useState([]); // region keys shaded on a Venn diagram question
   const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
   const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
@@ -4793,6 +4968,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setCfPick([]);
     setVennPressed([]);
     setMcPick(null);
     setDrawTri([]);
@@ -5023,6 +5199,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setCfPick([]);
     setVennPressed([]);
     setMcPick(null);
     setDrawTri([]);
@@ -5039,6 +5216,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
+    setCfPick([]);
     setVennPressed([]);
     setMcPick(null);
     setDrawTri([]);
@@ -5064,6 +5242,16 @@ export default function MathsUnlockedBN() {
     if (feedback || !question.region) return;
     if (regionDist(question.region, x, y) < 0.35) { flash("Tap clearly on one side of the line."); return; }
     setRegionPick([x, y]);
+  }
+
+  // Drop a reading-guide on the cumulative-frequency graph; keep the last two.
+  function pickCf(g) {
+    if (feedback) return;
+    setCfPick((cur) => {
+      const i = cur.findIndex((p) => p.axis === g.axis && Math.abs(p.v - g.v) < 1e-9);
+      if (i >= 0) return cur.filter((_, k) => k !== i);
+      return [...cur, g].slice(-2);
+    });
   }
 
   function toggleVenn(key) {
@@ -6073,6 +6261,14 @@ export default function MathsUnlockedBN() {
               {question.circle && <CircleFigure {...question.circle} />}
               {question.solid && <MensurationFigure {...question.solid} />}
               {question.vec && <VectorFigure {...question.vec} />}
+              {question.cumfreq && (
+                <div style={{ marginBottom: 8 }}>
+                  <CumFreqGraph {...question.cumfreq} picks={cfPick} onPick={feedback ? null : pickCf} />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
+                    Tap the x-axis or y-axis to drop a guide line to the curve
+                  </div>
+                </div>
+              )}
 
               {(question.drawGraph || question.drawSolve) && (() => {
                 const sl = question.solveLine || question.drawGraph; // { m, c }
@@ -6297,7 +6493,7 @@ export default function MathsUnlockedBN() {
                   )}
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4 }}>+{feedback.expGain} XP</div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>+{feedback.expGain} XP</div>
                       <LevelBar profile={profile} />
                     </div>
                   )}
