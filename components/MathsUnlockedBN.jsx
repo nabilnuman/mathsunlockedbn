@@ -548,10 +548,12 @@ function TransformFigure({ a, b, mirror, centre, rays, tapPts, onTap, lineMode, 
   );
 }
 
-// A piecewise motion graph (distance–time or speed–time) with axis
-// labels, one highlighted segment, and optional shaded area beneath it.
+// A piecewise motion graph (distance–time or speed–time). A fine grid,
+// plus dashed guide lines and axis readings at every corner of the graph
+// so the student can read exact values. One segment can be highlighted
+// and an area beneath it shaded.
 function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo }) {
-  const W = 288, Hh = 216, ml = 40, mr = 12, mt = 10, mb = 30;
+  const W = 300, Hh = 232, ml = 46, mr = 14, mt = 12, mb = 34;
   const pw = W - ml - mr, ph = Hh - mt - mb;
   const niceMax = (v) => {
     const p = Math.pow(10, Math.floor(Math.log10(v || 1)));
@@ -559,25 +561,55 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo 
     const m = n <= 1 ? 1 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 3 ? 3 : n <= 4 ? 4 : n <= 5 ? 5 : n <= 6 ? 6 : n <= 8 ? 8 : 10;
     return m * p;
   };
-  const xMax = niceMax(Math.max(...pts.map((p) => p[0])));
-  const yMax = niceMax(Math.max(...pts.map((p) => p[1]), 1));
+  // smallest "nice" spacing that keeps the grid to <= `target` divisions
+  const niceStep = (range) => {
+    for (const s of [0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 500, 1000]) if (range / s <= 15) return s;
+    return Math.ceil(range / 15);
+  };
+  const rawYMax = Math.max(...pts.map((p) => p[1]), 1);
+  const yStep = niceStep(niceMax(rawYMax));
+  const yMax = Math.ceil((rawYMax * 1.05) / yStep) * yStep;
+  const xMax = Math.max(...pts.map((p) => p[0]));
+  const xStep = niceStep(xMax);
   const X = (x) => ml + (x / xMax) * pw;
   const Y = (y) => mt + ph - (y / yMax) * ph;
-  const ticks = (mx) => { for (const k of [5, 4, 6, 3]) if (Math.round((mx / k) * 100) % 100 === 0) return Array.from({ length: k }, (_, i) => (i + 1) * (mx / k)); return Array.from({ length: 4 }, (_, i) => Math.round((i + 1) * (mx / 4))); };
+  const range = (max, step) => { const out = []; for (let v = step; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100); return out; };
+  const xGrid = range(xMax, xStep), yGrid = range(yMax, yStep);
+  const xLabelEvery = xGrid.length > 9 ? 2 : 1;
+  const yLabelEvery = yGrid.length > 9 ? 2 : 1;
+  // distinct corner readings — the values the student needs
+  const cornerY = [...new Set(pts.map((p) => p[1]).filter((v) => v > 0))];
+  const cornerX = [...new Set(pts.map((p) => p[0]).filter((v) => v > 0))];
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label={`${yLabel} against time graph`}
-      style={{ maxWidth: 330, display: "block", margin: "0 auto 10px" }}>
+      style={{ maxWidth: 340, display: "block", margin: "0 auto 10px" }}>
       <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
-      {ticks(xMax).map((t) => (
+      {xGrid.map((t) => (
         <g key={`x${t}`}>
           <line x1={X(t)} y1={mt} x2={X(t)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
-          <text x={X(t)} y={mt + ph + 12} fontSize="8" textAnchor="middle" fill="var(--muted)">{t}</text>
+          {Math.round(t / xStep) % xLabelEvery === 0 && !cornerX.some((c) => Math.abs(c - t) < xStep * 0.75)
+            && <text x={X(t)} y={mt + ph + 12} fontSize="7.5" textAnchor="middle" fill="var(--muted)">{t}</text>}
         </g>
       ))}
-      {ticks(yMax).map((t) => (
+      {yGrid.map((t) => (
         <g key={`y${t}`}>
           <line x1={ml} y1={Y(t)} x2={ml + pw} y2={Y(t)} stroke="var(--grid)" strokeWidth="0.5" />
-          <text x={ml - 5} y={Y(t) + 3} fontSize="8" textAnchor="end" fill="var(--muted)">{t}</text>
+          {Math.round(t / yStep) % yLabelEvery === 0 && !cornerY.some((c) => Math.abs(c - t) < yStep * 0.75)
+            && <text x={ml - 5} y={Y(t) + 3} fontSize="7.5" textAnchor="end" fill="var(--muted)">{t}</text>}
+        </g>
+      ))}
+      {cornerY.map((v) => (
+        <g key={`gy${v}`}>
+          <line x1={ml} y1={Y(v)} x2={X(xMax)} y2={Y(v)} stroke="var(--ink)" strokeWidth="0.8" strokeDasharray="3 2" opacity="0.55" />
+          <text x={ml - 5} y={Y(v) + 3} fontSize="8.5" fontWeight="700" textAnchor="end" fill="var(--ink)"
+            style={{ paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.5 }}>{v}</text>
+        </g>
+      ))}
+      {cornerX.map((v) => (
+        <g key={`gx${v}`}>
+          <line x1={X(v)} y1={mt} x2={X(v)} y2={mt + ph} stroke="var(--ink)" strokeWidth="0.8" strokeDasharray="3 2" opacity="0.55" />
+          <text x={X(v)} y={mt + ph + 12} fontSize="8.5" fontWeight="700" textAnchor="middle" fill="var(--ink)"
+            style={{ paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.5 }}>{v}</text>
         </g>
       ))}
       {shadeFrom != null && (() => {
