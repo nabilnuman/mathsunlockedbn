@@ -5206,9 +5206,9 @@ export default function MathsUnlockedBN() {
             setProfile(JSON.parse(res.value));
             setScreen("dashboard");
           }
+          await loadCustomQuestions(); // shared reads need a session
         }
       } catch (e) { /* not signed in, or no saved profile yet */ }
-      await loadCustomQuestions();
       setReady(true);
     })();
   }, []);
@@ -5554,6 +5554,7 @@ export default function MathsUnlockedBN() {
         prof.createdAt = Date.now();
       }
       await saveProfile(prof);
+      loadCustomQuestions(); // shared reads need a session
       setScreen("dashboard");
     } catch (e) {
       setStartError(e && e.message ? e.message : "Could not sign in. Try again.");

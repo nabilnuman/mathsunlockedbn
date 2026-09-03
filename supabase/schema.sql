@@ -49,9 +49,9 @@ drop policy if exists kv_own_delete on kv_store;
 create policy kv_own_delete on kv_store for delete to authenticated
   using (scope = auth.uid()::text);
 
--- --- shared question banks: everyone reads, only teachers write ---
+-- --- shared question banks: any signed-in user reads, only teachers write ---
 drop policy if exists kv_shared_read on kv_store;
-create policy kv_shared_read on kv_store for select to anon, authenticated
+create policy kv_shared_read on kv_store for select to authenticated
   using (scope = 'shared');
 
 drop policy if exists kv_shared_write on kv_store;
@@ -83,6 +83,7 @@ as $$
     and coalesce((value::jsonb) ->> 'name', '') <> ''
 $$;
 revoke all on function public.get_leaderboard() from public;
+revoke all on function public.get_leaderboard() from anon;
 grant execute on function public.get_leaderboard() to authenticated;
 
 -- ============================================================
@@ -123,4 +124,37 @@ grant execute on function public.get_parent_view(text) to anon, authenticated;
 --     Authentication -> Email provider: just leave it enabled.
 --     Confirm-email can stay on or off — the function marks each
 --     account confirmed regardless.
+-- ============================================================
+
+
+-- ============================================================
+--  7. CLEAN UP PROTOTYPE DATA   *** DELETES ROWS — READ FIRST ***
+--
+--  The pre-auth prototype scoped data two ways this build no
+--  longer uses, and both are now readable by people they
+--  shouldn't be:
+--    * scope = 'private:<random-browser-id>'  — orphaned; nobody
+--      can ever sign into these, but their key='profile' rows
+--      still show as ghosts on the leaderboard.
+--    * scope = 'shared', key 'student_*' / 'parent_*' — full
+--      profile copies INCLUDING the PIN, world-readable.
+--
+--  Preview what would go (safe, read-only):
+--
+--    select scope, key, length(value) from kv_store
+--    where scope like 'private:%'
+--       or (scope = 'shared' and (key like 'student\_%' escape '\'
+--                              or key like 'parent\_%'  escape '\'));
+--
+--  Then delete it (only run once you're happy with the preview —
+--  you said the accounts are all test data):
+--
+--    delete from kv_store where scope like 'private:%';
+--
+--    delete from kv_store
+--    where scope = 'shared'
+--      and (key like 'student\_%' escape '\' or key like 'parent\_%' escape '\');
+--
+--  This keeps: every new scope = '<auth-uid>' row, and the
+--  question banks (scope = 'shared', key 'questions_*').
 -- ============================================================
