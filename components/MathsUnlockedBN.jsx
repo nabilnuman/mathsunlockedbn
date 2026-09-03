@@ -5256,10 +5256,11 @@ export default function MathsUnlockedBN() {
     });
   }
 
-  // Short synthesised arpeggio (C–E–G–C) played when an achievement unlocks.
-  // Built lazily off the click/keydown that triggered the answer, so the
-  // AudioContext is allowed to start.
-  function playJingle(big) {
+  // ---- synthesised sound effects ---------------------------------------
+  // All built lazily off the click/keydown that triggered them so the
+  // AudioContext is allowed to start. `notes` are [freqHz, ...]; `opts`
+  // tunes the feel. gain/volume kept low.
+  function playSeq(notes, opts = {}) {
     if (!soundOn) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -5268,24 +5269,40 @@ export default function MathsUnlockedBN() {
       if (!ctx) { ctx = new AC(); audioCtxRef.current = ctx; }
       if (ctx.state === "suspended") ctx.resume();
       const now = ctx.currentTime;
+      const { vol = 0.13, wave = "triangle", step = 0.1, dur = 0.36, attack = 0.02, detune = 0 } = opts;
       const master = ctx.createGain();
-      master.gain.value = 0.13;
+      master.gain.value = vol;
       master.connect(ctx.destination);
-      const seq = big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5];
-      seq.forEach((freq, i) => {
-        const t = now + i * 0.1;
+      notes.forEach((freq, i) => {
+        const t = now + i * step;
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = "triangle";
+        osc.type = wave;
         osc.frequency.setValueAtTime(freq, t);
+        if (detune) osc.detune.setValueAtTime(i === notes.length - 1 ? detune : 0, t);
         g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(1, t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+        g.gain.linearRampToValueAtTime(1, t + attack);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
         osc.connect(g); g.connect(master);
-        osc.start(t); osc.stop(t + 0.42);
+        osc.start(t); osc.stop(t + dur + 0.06);
       });
     } catch (e) { /* audio unavailable — no problem */ }
   }
+
+  // Achievement (short) / level-up (long) arpeggios.
+  function playJingle(big) {
+    playSeq(big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5], { step: 0.1, dur: 0.36 });
+  }
+
+  // Per-answer feedback. Correct = a bright rising C-major arpeggio;
+  // wrong = the same shape mirrored downward an octave lower, softer and
+  // a touch flat on the last note — a matched "not quite" pair.
+  //   TODO: swap CORRECT_NOTES for the melody from the reference clip once
+  //   confirmed (https://youtu.be/oOONL4lR8_U, ~3–6s).
+  const CORRECT_NOTES = [659.25, 783.99, 1046.5, 1318.5]; // E5 G5 C6 E6
+  const WRONG_NOTES = [391.995, 329.63, 261.63];          // G4 E4 C4
+  function playCorrect() { playSeq(CORRECT_NOTES, { step: 0.075, dur: 0.22, attack: 0.008, vol: 0.12 }); }
+  function playWrong() { playSeq(WRONG_NOTES, { step: 0.1, dur: 0.34, attack: 0.015, vol: 0.1, detune: -18 }); }
 
   async function loadCustomQuestions() {
     try {
@@ -5371,7 +5388,8 @@ export default function MathsUnlockedBN() {
     setBlitzQ(blitzQuestion());
   }
   function scoreBlitz(isCorrect) {
-    if (isCorrect) { blitzCorrect.current += 1; setBlitzScore((s) => s + 1); }
+    if (isCorrect) { blitzCorrect.current += 1; setBlitzScore((s) => s + 1); playCorrect(); }
+    else playWrong();
     blitzAdvance.current = setTimeout(() => { if (Date.now() < blitzDeadline.current) nextBlitzQ(); }, 340);
   }
   function answerBlitz(value) {
@@ -5784,7 +5802,10 @@ export default function MathsUnlockedBN() {
         unlocked.push(a);
       }
     });
-    if (unlocked.length > 0 || leveledTo) playJingle(!!leveledTo);
+    const bonusSound = unlocked.length > 0 || leveledTo;
+    if (bonusSound) playJingle(!!leveledTo);
+    else if (correct) playCorrect();
+    if (!correct) playWrong();
     setFeedback({ correct, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp });
     saveProfile(next);
   }
@@ -6268,6 +6289,8 @@ export default function MathsUnlockedBN() {
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
                           <button onClick={() => playJingle(false)} style={b}>▶ Jingle (achievement)</button>
                           <button onClick={() => { playJingle(true); }} style={b}>▶ Jingle (level-up)</button>
+                          <button onClick={playCorrect} style={b}>▶ Correct</button>
+                          <button onClick={playWrong} style={b}>▶ Wrong</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
