@@ -110,6 +110,30 @@ revoke all on function public.get_parent_view(text) from public;
 grant execute on function public.get_parent_view(text) to anon, authenticated;
 
 -- ============================================================
+--  5b. NAME+PIN LOGIN AFTER A RECOVERY EMAIL IS ADDED
+--     When a student attaches a recovery email, the account's
+--     email changes away from the synthetic one, so name+PIN can
+--     no longer guess it. We stash a hash of "<slug>.<pin>::mub"
+--     in user_metadata; this maps it back to the current email.
+--     Input is a hash of something the caller already knows (the
+--     name + PIN), so it reveals nothing new.
+-- ============================================================
+create or replace function public.resolve_pin_login(h text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select email
+  from auth.users
+  where raw_user_meta_data ->> 'pin_login_hash' = h
+  limit 1
+$$;
+revoke all on function public.resolve_pin_login(text) from public;
+grant execute on function public.resolve_pin_login(text) to anon, authenticated;
+
+-- ============================================================
 --  6. ACCOUNT CREATION  (not SQL)
 --     Hosted Supabase blocks signUp() for our synthetic
 --     name.pin@students.mathsunlockedbn.app addresses (MX check +

@@ -4,8 +4,7 @@ import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
-  signInWithEmail, sendPasswordReset, updatePassword, onPasswordRecovery,
-  linkRecoveryEmail, isSyntheticEmail,
+  addRecoveryEmail, sendPinReset, completePinReset, onPasswordRecovery,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -5099,15 +5098,14 @@ export default function MathsUnlockedBN() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
   const [authUid, setAuthUid] = useState(null); // the signed-in user's real auth.uid()
-  const [loginMode, setLoginMode] = useState("pin"); // "pin" | "email" (recovery login)
-  const [emailInput, setEmailInput] = useState("");
-  const [emailPw, setEmailPw] = useState("");
+  const [forgotOpen, setForgotOpen] = useState(false); // "forgot your PIN?" panel on the login screen
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotMsg, setForgotMsg] = useState(null); // { ok, text }
   const [recoveryOpen, setRecoveryOpen] = useState(false); // "add a recovery email" modal
   const [recEmail, setRecEmail] = useState("");
-  const [recPw, setRecPw] = useState("");
   const [recBusy, setRecBusy] = useState(false);
   const [recMsg, setRecMsg] = useState(null); // { ok, text }
-  const [resetPw, setResetPw] = useState("");
+  const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
@@ -5232,7 +5230,7 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     const off = onPasswordRecovery(() => {
       setScreen("reset");
-      setResetPw("");
+      setResetPin("");
       setReady(true);
     });
     return off;
@@ -5587,87 +5585,61 @@ export default function MathsUnlockedBN() {
     setStarting(false);
   }
 
-  // Recovery login: a student who has attached a real email signs in with
-  // that email + password instead of name + PIN.
-  async function startEmailSession() {
-    if (starting) return;
-    const em = emailInput.trim();
-    if (!em || !emailPw) { setStartError("Enter your email and password."); return; }
-    setStartError("");
-    setStarting(true);
+  // "Forgot your PIN?" — email a reset link to the student's recovery
+  // address. They don't have to be right about which account; Supabase
+  // only sends if the address is on file.
+  async function submitForgotPin() {
+    const em = forgotEmail.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setForgotMsg({ ok: false, text: "Enter the email you added for recovery." }); return; }
+    setForgotMsg({ ok: null, text: "Sending…" });
     try {
-      const user = await signInWithEmail(em, emailPw);
-      setAuthUid(user.id);
-      let prof = null;
-      try {
-        const r = await storage.get("profile");
-        if (r && r.value) prof = JSON.parse(r.value);
-      } catch (e) { /* no saved profile */ }
-      if (!prof) {
-        prof = emptyProfile();
-        prof.name = (user.user_metadata && user.user_metadata.display_name) || em.split("@")[0];
-        prof.school = schoolInput;
-        prof.createdAt = Date.now();
-      }
-      await saveProfile(prof);
-      loadCustomQuestions();
-      setScreen("dashboard");
+      await sendPinReset(em);
+      setForgotMsg({ ok: true, text: `If ${em} is on a MathsUnlocked account, a reset link is on its way. Open it on this device.` });
     } catch (e) {
-      setStartError(e && e.message ? e.message : "Could not sign in.");
-    }
-    setStarting(false);
-  }
-
-  async function doForgotPassword() {
-    const em = emailInput.trim();
-    if (!em) { setStartError("Enter your email first, then tap “Forgot password”."); return; }
-    setStartError("");
-    try {
-      await sendPasswordReset(em);
-      flash(`Sent a reset link to ${em}. Check your email.`);
-    } catch (e) {
-      setStartError(e && e.message ? e.message : "Couldn't send the email.");
+      setForgotMsg({ ok: false, text: e && e.message ? e.message : "Couldn't send the email." });
     }
   }
 
-  async function doSetNewPassword() {
+  // Reset screen: the student arrived via the link (they have a recovery
+  // session) and picks a new 6-digit PIN.
+  async function submitNewPin() {
     if (resetBusy) return;
-    if (!/^.{6,}$/.test(resetPw)) { flash("Password must be at least 6 characters."); return; }
+    if (!/^\d{6}$/.test(resetPin)) { flash("Enter a new 6-digit PIN."); return; }
     setResetBusy(true);
     try {
-      await updatePassword(resetPw);
       const user = await currentUser();
+      const nm = (user && user.user_metadata && user.user_metadata.display_name) || profile.name || nameInput.trim();
+      if (!nm) throw new Error("Couldn't tell which account this is — sign in with your name + old PIN once, then try recovery again.");
+      await completePinReset(nm, resetPin);
       if (user) {
         setAuthUid(user.id);
         try {
           const r = await storage.get("profile");
-          if (r && r.value) setProfile(JSON.parse(r.value));
+          if (r && r.value) { const p = JSON.parse(r.value); p.pin = resetPin; setProfile(p); }
         } catch (e) { /* ignore */ }
         await loadCustomQuestions();
       }
-      flash("Password updated — you're signed in.");
+      flash("New PIN set — you're signed in.");
       setScreen("dashboard");
     } catch (e) {
-      flash(e && e.message ? e.message : "Couldn't update the password.");
+      flash(e && e.message ? e.message : "Couldn't set the new PIN.");
     }
     setResetBusy(false);
   }
 
-  // Attach a real email + password to this account so a forgotten PIN is
-  // recoverable. updateUser emails a confirmation link; name+PIN keeps
-  // working until it's clicked, then this email becomes the login.
+  // "Add PIN recovery" — attach an email (only). Password is untouched, so
+  // name + PIN keeps working. Supabase emails a confirmation link.
   async function submitRecoveryEmail() {
     if (recBusy) return;
     const em = recEmail.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setRecMsg({ ok: false, text: "That doesn't look like an email address." }); return; }
-    if (!/^.{6,}$/.test(recPw)) { setRecMsg({ ok: false, text: "Choose a password of at least 6 characters." }); return; }
     setRecBusy(true);
     setRecMsg(null);
     try {
-      await linkRecoveryEmail(em, recPw);
-      setRecMsg({ ok: true, text: `Check ${em} for a confirmation link. Click it, then from now on log in with your email and this password.` });
-      saveProfile({ ...profile, recoveryEmailPending: em });
-      setRecEmail(""); setRecPw("");
+      await addRecoveryEmail(profile.name, profile.pin, em);
+      setRecMsg({ ok: true, text: `Check ${em} and click the link to confirm it. Your name + PIN keeps working — this is only used if you forget your PIN.` });
+      saveProfile({ ...profile, recoveryEmail: em });
+      setRecEmail("");
     } catch (e) {
       setRecMsg({ ok: false, text: e && e.message ? e.message : "Couldn't save that." });
     }
@@ -6254,9 +6226,8 @@ export default function MathsUnlockedBN() {
         {/* LOGIN */}
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
-            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{loginMode === "pin" ? "Start practising" : "Log in with your email"}</div>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
 
-            {loginMode === "pin" ? (<>
             <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name and PIN next time to pick up where you left off.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
             <input
@@ -6308,53 +6279,40 @@ export default function MathsUnlockedBN() {
                 })()}
               </div>
             )}
-            </>) : (<>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>Use the email and password you added for PIN recovery. Your progress is the same account either way.</div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email</label>
-            <input
-              value={emailInput} onChange={(e) => setEmailInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") startEmailSession(); }}
-              type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
-              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-            />
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Password</label>
-            <input
-              value={emailPw} onChange={(e) => setEmailPw(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") startEmailSession(); }}
-              type="password" autoComplete="current-password"
-              style={{ width: "100%", marginTop: 6, marginBottom: 6, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-            />
-            <button onClick={doForgotPassword} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 14 }}>Forgot password?</button>
-            </>)}
-
             {startError && (
               <div style={{ fontSize: 12, color: "var(--red)", fontWeight: 600, marginBottom: 8 }}>{startError}</div>
             )}
-            {loginMode === "pin" ? (
-              <button
-                onClick={startSession}
-                disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
-                style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
-              >
-                {starting ? "Loading…" : "Start / continue"}
-              </button>
-            ) : (
-              <button
-                onClick={startEmailSession}
-                disabled={!emailInput.trim() || !emailPw || starting}
-                style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !emailInput.trim() || !emailPw || starting ? 0.6 : 1 }}
-              >
-                {starting ? "Loading…" : "Log in"}
-              </button>
-            )}
+            <button
+              onClick={startSession}
+              disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
+            >
+              {starting ? "Loading…" : "Start / continue"}
+            </button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
-              <button
-                onClick={() => { setLoginMode((m) => (m === "pin" ? "email" : "pin")); setStartError(""); }}
-                style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
-              >
-                {loginMode === "pin" ? "Have a recovery email? Log in with that" : "← Back to name + PIN"}
+              <button onClick={() => { setForgotOpen((o) => !o); setForgotMsg(null); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                Forgot your PIN?
               </button>
             </div>
+            {forgotOpen && (
+              <div style={{ marginTop: 10, padding: 12, border: "1px solid var(--grid)", borderRadius: 10, background: "var(--paper)" }}>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}>
+                  Added a recovery email? Enter it and we&rsquo;ll send a reset link — open it on this device and choose a new PIN. No recovery email? Ask your teacher.
+                </div>
+                <input
+                  value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") submitForgotPin(); }}
+                  type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+                  style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                />
+                {forgotMsg && (
+                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: forgotMsg.ok === false ? "var(--red)" : forgotMsg.ok ? "var(--green)" : "var(--muted)" }}>{forgotMsg.text}</div>
+                )}
+                <button onClick={submitForgotPin} disabled={!!forgotMsg && forgotMsg.ok === null} style={{ marginTop: 8, width: "100%", padding: "9px 12px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Send reset link
+                </button>
+              </div>
+            )}
             {teacherMode && (
               <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
                 <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
@@ -6368,22 +6326,23 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
-        {/* SET A NEW PASSWORD (arrived via a reset link) */}
+        {/* CHOOSE A NEW PIN (arrived via a recovery link) */}
         {screen === "reset" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
-            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Set a new password</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>Pick a new password for your account. You'll use it with your email to log in.</div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>New password <span style={{ fontWeight: 400 }}>(at least 6 characters)</span></label>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Choose a new PIN</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>Pick a new 6-digit PIN. From now on you log in with your name and this PIN, same as before.</div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>New 6-digit PIN</label>
             <input
-              value={resetPw} onChange={(e) => setResetPw(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") doSetNewPassword(); }}
-              type="password" autoComplete="new-password"
-              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+              value={resetPin}
+              onChange={(e) => setResetPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(e) => { if (e.key === "Enter") submitNewPin(); }}
+              inputMode="numeric" placeholder="e.g. 728461"
+              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
             />
             <button
-              onClick={doSetNewPassword}
-              disabled={resetPw.length < 6 || resetBusy}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: resetPw.length < 6 || resetBusy ? 0.6 : 1 }}
+              onClick={submitNewPin}
+              disabled={!/^\d{6}$/.test(resetPin) || resetBusy}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !/^\d{6}$/.test(resetPin) || resetBusy ? 0.6 : 1 }}
             >
               {resetBusy ? "Saving…" : "Save & continue"}
             </button>
@@ -6406,8 +6365,8 @@ export default function MathsUnlockedBN() {
                     <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                       🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
                     </button>
-                    <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecPw(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      🔑 {profile.recoveryEmailPending ? "Recovery email — confirm the link" : "Add PIN recovery"}
+                    <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
                     </button>
                   </div>
                 </div>
@@ -7613,20 +7572,14 @@ export default function MathsUnlockedBN() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
             <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Add PIN recovery</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
-              Add an email and password so you can get back in if you forget your PIN.
-              We'll email you a link to confirm it. Your name + PIN keeps working until
-              you click that link — after that, you log in with this email and password instead.
+              Add an email so you can get back in if you ever forget your PIN.
+              We&rsquo;ll send a link to confirm it. Your name + PIN keeps working exactly
+              as now — this email is <b>only</b> used to send you a reset link.
             </div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email</label>
             <input
               value={recEmail} onChange={(e) => setRecEmail(e.target.value)}
               type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
-              style={{ width: "100%", marginTop: 6, marginBottom: 12, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-            />
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Password <span style={{ fontWeight: 400 }}>(at least 6 characters)</span></label>
-            <input
-              value={recPw} onChange={(e) => setRecPw(e.target.value)}
-              type="password" autoComplete="new-password"
               style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
             {recMsg && (
