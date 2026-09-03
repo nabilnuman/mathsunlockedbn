@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-react";
 import { storage } from "../lib/storage";
+import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
 /* ---------------------------------------------------------
    Tiny expression engine — lets a student type an answer in
@@ -1400,6 +1401,102 @@ function SketchOverlay({ active, strokes, setStrokes }) {
           background: "#fff", border: "1px solid #c9d2da", borderRadius: 8, cursor: "pointer", color: "#1b2733",
         }}>Clear all</button>
       )}
+    </div>
+  );
+}
+
+/* Handwriting input for the answer box. The student scribbles, an on-device
+   model reads it, and the guess is dropped into the box for them to check
+   or fix before pressing Check answer. */
+function WritePad({ onInsert, onClose, mode }) {
+  const canvasRef = useRef(null);
+  const cur = useRef(null);
+  const strokesRef = useRef([]);
+  const recTimer = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [guess, setGuess] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(true); // becomes false → true around the first (model-loading) recognise
+  const everRan = useRef(false);
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const measure = () => setSize({ w: cv.clientWidth, h: cv.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(cv);
+    return () => { clearTimeout(recTimer.current); ro.disconnect(); };
+  }, []);
+
+  const redraw = () => {
+    const cv = canvasRef.current;
+    if (!cv || !size.w) return;
+    if (cv.width !== size.w) cv.width = size.w;
+    if (cv.height !== size.h) cv.height = size.h;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, size.w, size.h);
+    ctx.strokeStyle = "#1b2733";
+    ctx.lineWidth = Math.max(3.5, size.w / 80);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const st of [...strokesRef.current, cur.current].filter(Boolean)) {
+      if (!st.length) continue;
+      ctx.beginPath();
+      ctx.moveTo(st[0][0] * size.w, st[0][1] * size.h);
+      for (let i = 1; i < st.length; i++) ctx.lineTo(st[i][0] * size.w, st[i][1] * size.h);
+      if (st.length === 1) ctx.lineTo(st[0][0] * size.w + 0.1, st[0][1] * size.h + 0.1);
+      ctx.stroke();
+    }
+  };
+  useEffect(redraw, [size]);
+
+  const at = (e) => { const r = canvasRef.current.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  const start = (e) => { try { canvasRef.current.setPointerCapture(e.pointerId); } catch (err) { /* synthetic / no pointer */ } cur.current = [at(e)]; redraw(); };
+  const move = (e) => { if (!cur.current) return; cur.current.push(at(e)); redraw(); };
+  const end = () => {
+    if (cur.current && cur.current.length) strokesRef.current.push(cur.current);
+    cur.current = null;
+    clearTimeout(recTimer.current);
+    recTimer.current = setTimeout(runRec, 500);
+  };
+
+  async function runRec() {
+    if (!hasInk(strokesRef.current)) { setGuess(""); return; }
+    const cv = canvasRef.current;
+    setBusy(true); setReady(false);
+    const txt = await recognizeHandwriting({ strokes: strokesRef.current, width: cv.clientWidth, height: cv.clientHeight, mode });
+    everRan.current = true;
+    setBusy(false); setReady(true); setGuess(txt);
+  }
+  const clearAll = () => { strokesRef.current = []; cur.current = null; setGuess(""); redraw(); };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 80 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 400, maxWidth: "100%", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 16, color: "var(--ink)", fontFamily: "Inter, sans-serif" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div className="mub-display" style={{ fontWeight: 700, fontSize: 15 }}>Write your answer</div>
+          <button onClick={onClose} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Cancel</button>
+        </div>
+        <canvas ref={canvasRef} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+          style={{ width: "100%", height: 200, display: "block", background: "#fff", border: "1.5px dashed #c9d2da", borderRadius: 10, touchAction: "none", cursor: "crosshair" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", minHeight: 24 }}>
+          <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Reads as</span>
+          <span className="mub-mono" style={{ fontSize: 19, fontWeight: 700, color: "var(--ink)" }}>
+            {busy ? (everRan.current ? "…" : <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>loading the recogniser…</span>) : (guess || "—")}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={clearAll} style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Clear</button>
+          <button onClick={() => { if (guess && ready) { onInsert(guess); onClose(); } }} disabled={!guess || !ready}
+            style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: guess && ready ? "pointer" : "default", opacity: guess && ready ? 1 : 0.5 }}>
+            Insert into answer
+          </button>
+        </div>
+        <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.4 }}>
+          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading, then Insert. You can still edit before pressing Check answer.
+        </div>
+      </div>
     </div>
   );
 }
@@ -4972,6 +5069,7 @@ export default function MathsUnlockedBN() {
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
+  const [writePad, setWritePad] = useState(false);   // handwriting pad for the answer box
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
@@ -5235,7 +5333,7 @@ export default function MathsUnlockedBN() {
     if (levelFromExp(totalExp(profile)) < MIXED_UNLOCK_LEVEL) return;
     setActiveTopic(MIXED_TOPIC);
     setQuestion(pickMixed());
-    setAnswerInput("");
+    setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
@@ -5498,7 +5596,7 @@ export default function MathsUnlockedBN() {
     if (!isUnlocked(topic, profile)) return;
     setActiveTopic(topic);
     setQuestion(pickQuestion(topic));
-    setAnswerInput("");
+    setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
@@ -5515,7 +5613,7 @@ export default function MathsUnlockedBN() {
 
   function nextQuestion() {
     setQuestion(activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
-    setAnswerInput("");
+    setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
     setRegionPick(null);
@@ -6766,16 +6864,24 @@ export default function MathsUnlockedBN() {
                   ))}
                 </div>
               ) : (
-                <input
-                  ref={answerRef}
-                  autoFocus className="mub-mono" value={answerInput}
-                  autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                  onChange={(e) => setAnswerInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
-                  placeholder={question.hint}
-                  disabled={!!feedback}
-                  style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", marginBottom: 10 }}
-                />
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <input
+                    ref={answerRef}
+                    autoFocus className="mub-mono" value={answerInput}
+                    autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                    onChange={(e) => setAnswerInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
+                    placeholder={question.hint}
+                    disabled={!!feedback}
+                    style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
+                  />
+                  {!feedback && (
+                    <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
+                      style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
+                      <Pencil size={13} /> Write
+                    </button>
+                  )}
+                </div>
               )}
 
               {!feedback && (() => {
@@ -7250,6 +7356,13 @@ export default function MathsUnlockedBN() {
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
+      {writePad && question && (
+        <WritePad
+          mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
+          onInsert={(t) => { setAnswerInput(t); setTimeout(() => answerRef.current && answerRef.current.focus(), 0); }}
+          onClose={() => setWritePad(false)}
+        />
+      )}
 
       {rosterProfile && (
         <div onClick={() => setRosterProfile(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", zIndex: 60, overflowY: "auto" }}>
