@@ -1184,9 +1184,12 @@ function CircleFigure({ type = "line", ...S }) {
     rr = Math.min(rr, 25);
     const a1 = [v[0] + d1[0] * rr, v[1] + d1[1] * rr], a2 = [v[0] + d2[0] * rr, v[1] + d2[1] * rr];
     const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
+    // wide angles have plenty of room near the vertex — sit the label close
+    // in (and clear of both arms); narrow angles need it pushed out
+    const labGap = deg >= 110 ? 5 : deg >= 80 ? 8 : deg >= 50 ? 11 : 14;
     return {
       path: `M ${F(a1[0])} ${F(a1[1])} A ${F(rr)} ${F(rr)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
-      lab: [v[0] + bis[0] * (rr + 12), v[1] + bis[1] * (rr + 12)],
+      lab: [v[0] + bis[0] * (rr + labGap), v[1] + bis[1] * (rr + labGap)],
     };
   };
   const rtMark = (V, A, B) => {
@@ -4551,9 +4554,19 @@ const FRAMES = {
   glow: { border: "3px solid #E8A82D", boxShadow: "0 0 0 4px rgba(232,168,45,0.25)" },
 };
 const FRAME_IDS = Object.keys(FRAMES);
-const BANNER_MAX = 6;
+const BANNER_MAX = 3;
 const avatarChar = (p) => AVATARS[(p && p.avatar)] || AVATARS.grad;
 const frameStyle = (p) => FRAMES[(p && p.avatarFrame)] || FRAMES.plain;
+// small avatar for leaderboard rows
+function MiniAvatar({ profile, size = 32 }) {
+  return (
+    <span style={{
+      width: size, height: size, borderRadius: "50%", background: "var(--card)", flexShrink: 0,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      fontSize: Math.round(size * 0.56), lineHeight: 1, ...frameStyle(profile),
+    }}>{avatarChar(profile)}</span>
+  );
+}
 // the pinned badges that are actually earned and still exist
 function bannerBadges(profile) {
   const earned = profile.achievements || [];
@@ -4565,7 +4578,7 @@ function bannerBadges(profile) {
 }
 
 // one badge chip with a tier-coloured border (bronze/silver/gold/platinum)
-function BadgeChip({ a, size = 32, on = true }) {
+function BadgeChip({ a, size = 40, on = true }) {
   const col = TIER_COLOR[a.tier];
   return (
     <span title={a.name} style={{
@@ -4632,9 +4645,6 @@ function ProfileCard({ profile, onEditIcon, onEditBanner }) {
           >
             {avatarChar(profile)}
           </div>
-          {onEditIcon && (
-            <div style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%", background: "var(--blue)", color: "var(--on-accent)", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</div>
-          )}
           {prestige > 0 && (
             <div style={{ position: "absolute", right: -6, bottom: -4 }}>
               <PrestigeBadge prestige={prestige} size={22} />
@@ -7113,6 +7123,7 @@ export default function MathsUnlockedBN() {
                                     {c.prestige > 0 && <PrestigeBadge prestige={c.prestige} size={13} />}
                                     <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--muted)" }}>Level {c.level}</span>
                                   </div>
+                                  {c.full && <MiniAvatar profile={c.full} size={30} />}
                                   <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{c.xp.toLocaleString()}</div>
                                 </button>
                               ))}
@@ -7147,9 +7158,10 @@ export default function MathsUnlockedBN() {
                               {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                             </div>
                             <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                              {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""} · {m.correct} correct
+                              {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
                             </div>
                           </div>
+                          {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
                         </button>
                       );
@@ -7205,9 +7217,10 @@ export default function MathsUnlockedBN() {
                                     {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                                   </div>
                                   <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                                    {m.title} · Level {m.level} · {m.correct} correct · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
+                                    {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
                                   </div>
                                 </div>
+                                {m.full && <MiniAvatar profile={m.full} size={30} />}
                                 <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
                               </button>
                             );
