@@ -6,13 +6,20 @@ html,
 body {
   margin: 0;
   padding: 0;
+  min-height: 100%;
+  /* Pre-JS fallback. The inline script in layout.jsx sets the real
+     theme colour before first paint, and the app keeps it in sync. */
   background: #f7f9fb;
   font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  min-height: 100dvh;
 }
 
 main {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding: 0 12px;
   overflow-x: hidden;
 }

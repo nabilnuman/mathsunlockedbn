@@ -1449,7 +1449,7 @@ function SketchOverlay({ active, strokes, setStrokes }) {
 
 /* Handwriting input for the answer box. The student scribbles, an on-device
    model reads it, and the guess is dropped into the box for them to check
-   or fix before pressing Check answer. */
+   or fix before submitting. */
 function WritePad({ onInsert, onConfirm, onClose, mode }) {
   const canvasRef = useRef(null);
   const cur = useRef(null);
@@ -1536,11 +1536,11 @@ function WritePad({ onInsert, onConfirm, onClose, mode }) {
           </button>
           <button onClick={() => { if (guess && ready) { onConfirm(guess); onClose(); } }} disabled={!guess || !ready}
             style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "11px 14px", cursor: guess && ready ? "pointer" : "default", opacity: guess && ready ? 1 : 0.5 }}>
-            Check answer
+            Submit
           </button>
         </div>
         <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.4 }}>
-          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading first. <b>Check answer</b> uses it straight away; <b>Insert to text box</b> lets you edit it before checking.
+          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading first. <b>Submit</b> uses it straight away; <b>Insert to text box</b> lets you edit it before checking.
         </div>
       </div>
     </div>
@@ -5257,7 +5257,9 @@ export default function MathsUnlockedBN() {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.style.background = THEMES[theme]["--page-bg"];
+    const bg = THEMES[theme]["--page-bg"];
+    document.documentElement.style.background = bg;
+    document.body.style.background = bg;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
@@ -6216,10 +6218,10 @@ export default function MathsUnlockedBN() {
     missionTasks.filter((t) => taskDone(t, missionDay) && !missionDay.claimed[t.id]).length +
     missionMs.filter((m) => (profile.milestones || {})[m.id] === "ready").length;
 
-  if (!ready) return <div style={{ ...vars, minHeight: 400 }} />;
+  if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
   return (
-    <div style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", minHeight: 560, position: "relative" }}>
+    <div style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", background: "var(--page-bg)", minHeight: "100dvh", display: "flex", flexDirection: "column", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         .mub-display { font-family: 'Fraunces', serif; }
@@ -6246,7 +6248,7 @@ export default function MathsUnlockedBN() {
         svg [role], svg rect, svg circle, svg polygon { outline: none; }
       `}</style>
 
-      <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", minHeight: 560 }}>
+      <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", flex: 1 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
@@ -7134,7 +7136,7 @@ export default function MathsUnlockedBN() {
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
-                    Check answer
+                    Submit
                   </button>
                 );
               })()}
