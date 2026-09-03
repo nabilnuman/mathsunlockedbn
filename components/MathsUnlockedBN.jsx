@@ -5,6 +5,7 @@ import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
   addRecoveryEmail, sendPinReset, completePinReset, onPasswordRecovery,
+  teacherResetPin,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -5138,6 +5139,10 @@ export default function MathsUnlockedBN() {
   const blitzDone = useRef(false);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [pinResetFor, setPinResetFor] = useState(null); // student uid whose PIN reset panel is open
+  const [pinResetVal, setPinResetVal] = useState("");
+  const [pinResetBusy, setPinResetBusy] = useState(false);
+  const [pinResetMsg, setPinResetMsg] = useState(null); // { uid, ok, text }
   const [customQuestions, setCustomQuestions] = useState({});
   const [qbTopicId, setQbTopicId] = useState(TOPICS[0].id);
   const [qbForm, setQbForm] = useState({ prompt: "", answer: "", hint: "", steps: "" });
@@ -5971,6 +5976,22 @@ export default function MathsUnlockedBN() {
     loadStudents();
   }
 
+  async function doPinReset(uid) {
+    if (pinResetBusy) return;
+    if (!/^\d{6}$/.test(pinResetVal)) { setPinResetMsg({ uid, ok: false, text: "Enter a 6-digit PIN." }); return; }
+    setPinResetBusy(true);
+    setPinResetMsg(null);
+    try {
+      const res = await teacherResetPin(uid, pinResetVal);
+      setPinResetMsg({ uid, ok: true, text: `Done. ${res.name || "This student"} now logs in with PIN ${res.newPin || pinResetVal}. Tell them in person.` });
+      setPinResetVal("");
+      setPinResetFor(null);
+    } catch (e) {
+      setPinResetMsg({ uid, ok: false, text: e && e.message ? e.message : "Couldn't reset the PIN." });
+    }
+    setPinResetBusy(false);
+  }
+
   function openLeaderboard() {
     setScreen("leaderboard");
     setOpenSchool(null);
@@ -6718,6 +6739,32 @@ export default function MathsUnlockedBN() {
                           ))}
                       </div>
                     )}
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--grid)" }}>
+                      {pinResetFor === s.uid ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <input
+                            value={pinResetVal}
+                            onChange={(e) => setPinResetVal(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            onKeyDown={(e) => { if (e.key === "Enter") doPinReset(s.uid); }}
+                            inputMode="numeric" placeholder="new 6-digit PIN" autoFocus
+                            style={{ width: 150, padding: "7px 10px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, letterSpacing: 3, boxSizing: "border-box" }}
+                          />
+                          <button onClick={() => doPinReset(s.uid)} disabled={pinResetBusy || !/^\d{6}$/.test(pinResetVal)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", opacity: pinResetBusy || !/^\d{6}$/.test(pinResetVal) ? 0.6 : 1 }}>
+                            {pinResetBusy ? "Setting…" : "Set PIN"}
+                          </button>
+                          <button onClick={() => { setPinResetFor(null); setPinResetVal(""); setPinResetMsg(null); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setPinResetFor(s.uid); setPinResetVal(""); setPinResetMsg(null); }} disabled={!s.uid} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", opacity: s.uid ? 1 : 0.5 }}>
+                          Reset PIN
+                        </button>
+                      )}
+                      {pinResetMsg && pinResetMsg.uid === s.uid && (
+                        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, color: pinResetMsg.ok ? "var(--green)" : "var(--red)" }}>{pinResetMsg.text}</div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
