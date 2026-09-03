@@ -7117,8 +7117,8 @@ export default function MathsUnlockedBN() {
                             <div style={{ borderTop: "1px solid var(--grid)" }}>
                               {s.contributors.map((c, j) => (
                                 <button key={j} onClick={() => { if (c.full) { setRosterProfile(c.full); markMilestone("friendview"); } }}
-                                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                  style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
                                   {c.full && <MiniAvatar profile={c.full} size={30} />}
                                   <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                     <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{c.name}</span>
@@ -7148,9 +7148,9 @@ export default function MathsUnlockedBN() {
                       const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                       return (
                         <button key={i} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                          style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer",
+                          style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer",
                             color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
-                          <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, minWidth: 26, flexShrink: 0 }}>#{i + 1}</span>
+                          <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, flexShrink: 0 }}>#{i + 1}</span>
                           {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -7209,8 +7209,8 @@ export default function MathsUnlockedBN() {
                             const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                             return (
                               <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
                                 {m.full && <MiniAvatar profile={m.full} size={30} />}
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
