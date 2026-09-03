@@ -1413,13 +1413,12 @@ function SketchOverlay({ active, strokes, setStrokes }) {
     if (Array.isArray(done) && done.length) setStrokes((s) => [...s, done]);
   };
 
-  // A constant-height scratch sheet laid over the top of the quiz card, so
-  // the question stays visible through it while you work; the card carries a
-  // minHeight so the pad still has room when the question is short.
-  const H = 320;
+  // A translucent scratch sheet over the whole quiz card, so the question
+  // stays visible through it while you work. The card carries a minHeight
+  // when this is open so a short question still gets a usable pad.
   return (
     <div style={{
-      position: "absolute", top: 0, left: 0, right: 0, height: H, zIndex: 5,
+      position: "absolute", inset: 0, zIndex: 5,
       overflow: "hidden", borderRadius: 8, border: "1.5px dashed #c9d2da",
       background: "rgba(255,255,255,0.76)",
       opacity: active ? 1 : 0, pointerEvents: active ? "auto" : "none", transition: "opacity 0.12s",
