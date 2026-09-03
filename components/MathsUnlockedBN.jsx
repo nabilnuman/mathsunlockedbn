@@ -5302,7 +5302,8 @@ export default function MathsUnlockedBN() {
     bumpWeek(n, gain);
     const lv = creditLevelUps(n, before);
     saveProfile(n);
-    if (lv) playJingle(true);
+    playCoins();
+    if (lv) setTimeout(() => playJingle(true), 280);
     flash(`+${gain} XP${lv ? ` · Level ${lv}!` : ""}`);
   }
 
@@ -5319,7 +5320,8 @@ export default function MathsUnlockedBN() {
     bumpWeek(n, totalExp(n) - before);
     const lv = creditLevelUps(n, before);
     saveProfile(n);
-    if (lv) playJingle(true);
+    playCoins();
+    if (lv) setTimeout(() => playJingle(true), 280);
     flash(`+${MILESTONE_XP} XP${lv ? ` · Level ${lv}!` : ""}`);
   }
 
@@ -5386,6 +5388,19 @@ export default function MathsUnlockedBN() {
   const WRONG_NOTES = [391.995, 329.63, 261.63];          // G4 E4 C4
   function playCorrect() { playSeq(CORRECT_NOTES, { step: 0.075, dur: 0.22, attack: 0.008, vol: 0.12 }); }
   function playWrong() { playSeq(WRONG_NOTES, { step: 0.1, dur: 0.34, attack: 0.015, vol: 0.1, detune: -18 }); }
+
+  // Action sounds. Skeleton Key = a low "turn" then a bright reveal;
+  // XP Boost = a fast rising sawtooth whoosh; claiming = quick coin blips.
+  function playUnlock() {
+    playSeq([146.83, 130.81], { wave: "square", step: 0.085, dur: 0.13, attack: 0.004, vol: 0.09 });
+    setTimeout(() => playSeq([392, 523.25, 659.25, 880.0], { wave: "triangle", step: 0.07, dur: 0.3, attack: 0.006, vol: 0.11 }), 185);
+  }
+  function playBoost() {
+    playSeq([440, 587.33, 783.99, 1046.5, 1396.91], { wave: "sawtooth", step: 0.045, dur: 0.16, attack: 0.004, vol: 0.085, detune: 14 });
+  }
+  function playCoins() {
+    playSeq([1046.5, 1396.91, 1046.5, 1567.98, 2093.0], { wave: "square", step: 0.055, dur: 0.11, attack: 0.003, vol: 0.08 });
+  }
 
   async function loadCustomQuestions() {
     try {
@@ -5700,9 +5715,9 @@ export default function MathsUnlockedBN() {
     setNameInput("");
     setPinInput("");
     setStartError("");
-    setLoginMode("pin");
-    setEmailInput("");
-    setEmailPw("");
+    setForgotOpen(false);
+    setForgotEmail("");
+    setForgotMsg(null);
     setSchoolInput(SOLO_SCHOOL);
     setSchoolQuery("");
   }
@@ -5755,6 +5770,7 @@ export default function MathsUnlockedBN() {
     if ((profile.boosts || 0) <= 0) return;
     if ((profile.boostUntil || 0) > Date.now()) return; // one at a time
     saveProfile({ ...profile, boosts: profile.boosts - 1, boostUntil: Date.now() + 3600 * 1000 });
+    playBoost();
   }
   function devHardReset() {
     if (typeof window !== "undefined" && !window.confirm("Reset this account to a blank Level 1 / Prestige 0? Progress, prestige, Skeleton Keys and achievements are all wiped. Name, school and PIN are kept.")) return;
@@ -5996,6 +6012,7 @@ export default function MathsUnlockedBN() {
     if (!(cur.milestones || {}).usekey) cur.milestones = { ...(cur.milestones || {}), usekey: "ready" };
     setKeyTarget(null);
     saveProfile(cur);
+    playUnlock();
   }
 
   async function loadStudents() {
@@ -6519,6 +6536,9 @@ export default function MathsUnlockedBN() {
                           <button onClick={() => { playJingle(true); }} style={b}>▶ Jingle (level-up)</button>
                           <button onClick={playCorrect} style={b}>▶ Correct</button>
                           <button onClick={playWrong} style={b}>▶ Wrong</button>
+                          <button onClick={playUnlock} style={b}>▶ Unlock (key)</button>
+                          <button onClick={playBoost} style={b}>▶ Boost</button>
+                          <button onClick={playCoins} style={b}>▶ Coins (claim)</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
