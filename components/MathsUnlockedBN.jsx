@@ -6427,9 +6427,6 @@ export default function MathsUnlockedBN() {
                     <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                       🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
                     </button>
-                    <button onClick={() => { setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      🔒 Change PIN
-                    </button>
                     {EMAIL_RECOVERY && (
                       <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                         🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
