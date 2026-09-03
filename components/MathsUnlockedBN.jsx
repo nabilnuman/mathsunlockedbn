@@ -5125,6 +5125,7 @@ export default function MathsUnlockedBN() {
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [devTopic, setDevTopic] = useState(TOPICS[0].id);
+  const [devJingle, setDevJingle] = useState("achievement"); // dev-tools jingle picker
   const [toast, setToast] = useState(null);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
@@ -6532,13 +6533,24 @@ export default function MathsUnlockedBN() {
                           <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
-                          <button onClick={() => playJingle(false)} style={b}>▶ Jingle (achievement)</button>
-                          <button onClick={() => { playJingle(true); }} style={b}>▶ Jingle (level-up)</button>
-                          <button onClick={playCorrect} style={b}>▶ Correct</button>
-                          <button onClick={playWrong} style={b}>▶ Wrong</button>
-                          <button onClick={playUnlock} style={b}>▶ Unlock (key)</button>
-                          <button onClick={playBoost} style={b}>▶ Boost</button>
-                          <button onClick={playCoins} style={b}>▶ Coins (claim)</button>
+                          <select value={devJingle} onChange={(e) => setDevJingle(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
+                            <option value="achievement">Jingle · achievement</option>
+                            <option value="levelup">Jingle · level-up</option>
+                            <option value="correct">Answer · correct</option>
+                            <option value="wrong">Answer · wrong</option>
+                            <option value="unlock">Skeleton Key · unlock</option>
+                            <option value="boost">XP Boost</option>
+                            <option value="coins">Claim · coins</option>
+                          </select>
+                          <button onClick={() => ({
+                            achievement: () => playJingle(false),
+                            levelup: () => playJingle(true),
+                            correct: playCorrect,
+                            wrong: playWrong,
+                            unlock: playUnlock,
+                            boost: playBoost,
+                            coins: playCoins,
+                          }[devJingle] || (() => {}))()} style={b}>▶ Play jingle</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
