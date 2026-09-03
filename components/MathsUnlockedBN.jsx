@@ -2,7 +2,11 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-react";
 import { storage } from "../lib/storage";
-import { signInOrRegister, signOut, currentUser, getLeaderboard, getParentView } from "../lib/auth";
+import {
+  signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
+  signInWithEmail, sendPasswordReset, updatePassword, onPasswordRecovery,
+  linkRecoveryEmail, isSyntheticEmail,
+} from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
 /* ---------------------------------------------------------
@@ -5095,6 +5099,16 @@ export default function MathsUnlockedBN() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
   const [authUid, setAuthUid] = useState(null); // the signed-in user's real auth.uid()
+  const [loginMode, setLoginMode] = useState("pin"); // "pin" | "email" (recovery login)
+  const [emailInput, setEmailInput] = useState("");
+  const [emailPw, setEmailPw] = useState("");
+  const [recoveryOpen, setRecoveryOpen] = useState(false); // "add a recovery email" modal
+  const [recEmail, setRecEmail] = useState("");
+  const [recPw, setRecPw] = useState("");
+  const [recBusy, setRecBusy] = useState(false);
+  const [recMsg, setRecMsg] = useState(null); // { ok, text }
+  const [resetPw, setResetPw] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [devTopic, setDevTopic] = useState(TOPICS[0].id);
@@ -5211,6 +5225,17 @@ export default function MathsUnlockedBN() {
       } catch (e) { /* not signed in, or no saved profile yet */ }
       setReady(true);
     })();
+  }, []);
+
+  // A student who followed a "forgot password" link lands here with a
+  // recovery session — send them to the set-a-new-password screen.
+  useEffect(() => {
+    const off = onPasswordRecovery(() => {
+      setScreen("reset");
+      setResetPw("");
+      setReady(true);
+    });
+    return off;
   }, []);
 
   useEffect(() => {
@@ -5562,6 +5587,93 @@ export default function MathsUnlockedBN() {
     setStarting(false);
   }
 
+  // Recovery login: a student who has attached a real email signs in with
+  // that email + password instead of name + PIN.
+  async function startEmailSession() {
+    if (starting) return;
+    const em = emailInput.trim();
+    if (!em || !emailPw) { setStartError("Enter your email and password."); return; }
+    setStartError("");
+    setStarting(true);
+    try {
+      const user = await signInWithEmail(em, emailPw);
+      setAuthUid(user.id);
+      let prof = null;
+      try {
+        const r = await storage.get("profile");
+        if (r && r.value) prof = JSON.parse(r.value);
+      } catch (e) { /* no saved profile */ }
+      if (!prof) {
+        prof = emptyProfile();
+        prof.name = (user.user_metadata && user.user_metadata.display_name) || em.split("@")[0];
+        prof.school = schoolInput;
+        prof.createdAt = Date.now();
+      }
+      await saveProfile(prof);
+      loadCustomQuestions();
+      setScreen("dashboard");
+    } catch (e) {
+      setStartError(e && e.message ? e.message : "Could not sign in.");
+    }
+    setStarting(false);
+  }
+
+  async function doForgotPassword() {
+    const em = emailInput.trim();
+    if (!em) { setStartError("Enter your email first, then tap “Forgot password”."); return; }
+    setStartError("");
+    try {
+      await sendPasswordReset(em);
+      flash(`Sent a reset link to ${em}. Check your email.`);
+    } catch (e) {
+      setStartError(e && e.message ? e.message : "Couldn't send the email.");
+    }
+  }
+
+  async function doSetNewPassword() {
+    if (resetBusy) return;
+    if (!/^.{6,}$/.test(resetPw)) { flash("Password must be at least 6 characters."); return; }
+    setResetBusy(true);
+    try {
+      await updatePassword(resetPw);
+      const user = await currentUser();
+      if (user) {
+        setAuthUid(user.id);
+        try {
+          const r = await storage.get("profile");
+          if (r && r.value) setProfile(JSON.parse(r.value));
+        } catch (e) { /* ignore */ }
+        await loadCustomQuestions();
+      }
+      flash("Password updated — you're signed in.");
+      setScreen("dashboard");
+    } catch (e) {
+      flash(e && e.message ? e.message : "Couldn't update the password.");
+    }
+    setResetBusy(false);
+  }
+
+  // Attach a real email + password to this account so a forgotten PIN is
+  // recoverable. updateUser emails a confirmation link; name+PIN keeps
+  // working until it's clicked, then this email becomes the login.
+  async function submitRecoveryEmail() {
+    if (recBusy) return;
+    const em = recEmail.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setRecMsg({ ok: false, text: "That doesn't look like an email address." }); return; }
+    if (!/^.{6,}$/.test(recPw)) { setRecMsg({ ok: false, text: "Choose a password of at least 6 characters." }); return; }
+    setRecBusy(true);
+    setRecMsg(null);
+    try {
+      await linkRecoveryEmail(em, recPw);
+      setRecMsg({ ok: true, text: `Check ${em} for a confirmation link. Click it, then from now on log in with your email and this password.` });
+      saveProfile({ ...profile, recoveryEmailPending: em });
+      setRecEmail(""); setRecPw("");
+    } catch (e) {
+      setRecMsg({ ok: false, text: e && e.message ? e.message : "Couldn't save that." });
+    }
+    setRecBusy(false);
+  }
+
   // Non-destructive: signs out of Supabase so the login screen shows.
   // The student's progress stays saved in their own row and resumes when
   // they sign back in with the same name + PIN.
@@ -5574,6 +5686,9 @@ export default function MathsUnlockedBN() {
     setNameInput("");
     setPinInput("");
     setStartError("");
+    setLoginMode("pin");
+    setEmailInput("");
+    setEmailPw("");
     setSchoolInput(SOLO_SCHOOL);
     setSchoolQuery("");
   }
@@ -6139,7 +6254,9 @@ export default function MathsUnlockedBN() {
         {/* LOGIN */}
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
-            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>{loginMode === "pin" ? "Start practising" : "Log in with your email"}</div>
+
+            {loginMode === "pin" ? (<>
             <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name and PIN next time to pick up where you left off.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
             <input
@@ -6156,7 +6273,7 @@ export default function MathsUnlockedBN() {
               inputMode="numeric" placeholder="e.g. 405126"
               style={{ width: "100%", marginTop: 6, marginBottom: 4, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
             />
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot it? Ask your teacher.</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot it? Ask your teacher — or add a recovery email once you're in.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the leaderboard — optional)</span></label>
             {schoolInput !== SOLO_SCHOOL ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
@@ -6191,16 +6308,53 @@ export default function MathsUnlockedBN() {
                 })()}
               </div>
             )}
+            </>) : (<>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>Use the email and password you added for PIN recovery. Your progress is the same account either way.</div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email</label>
+            <input
+              value={emailInput} onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") startEmailSession(); }}
+              type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Password</label>
+            <input
+              value={emailPw} onChange={(e) => setEmailPw(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") startEmailSession(); }}
+              type="password" autoComplete="current-password"
+              style={{ width: "100%", marginTop: 6, marginBottom: 6, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            />
+            <button onClick={doForgotPassword} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 14 }}>Forgot password?</button>
+            </>)}
+
             {startError && (
               <div style={{ fontSize: 12, color: "var(--red)", fontWeight: 600, marginBottom: 8 }}>{startError}</div>
             )}
-            <button
-              onClick={startSession}
-              disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
-            >
-              {starting ? "Loading…" : "Start / continue"}
-            </button>
+            {loginMode === "pin" ? (
+              <button
+                onClick={startSession}
+                disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
+                style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
+              >
+                {starting ? "Loading…" : "Start / continue"}
+              </button>
+            ) : (
+              <button
+                onClick={startEmailSession}
+                disabled={!emailInput.trim() || !emailPw || starting}
+                style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !emailInput.trim() || !emailPw || starting ? 0.6 : 1 }}
+              >
+                {starting ? "Loading…" : "Log in"}
+              </button>
+            )}
+            <div style={{ textAlign: "center", marginTop: 12 }}>
+              <button
+                onClick={() => { setLoginMode((m) => (m === "pin" ? "email" : "pin")); setStartError(""); }}
+                style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+              >
+                {loginMode === "pin" ? "Have a recovery email? Log in with that" : "← Back to name + PIN"}
+              </button>
+            </div>
             {teacherMode && (
               <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
                 <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
@@ -6211,6 +6365,28 @@ export default function MathsUnlockedBN() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* SET A NEW PASSWORD (arrived via a reset link) */}
+        {screen === "reset" && (
+          <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Set a new password</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>Pick a new password for your account. You'll use it with your email to log in.</div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>New password <span style={{ fontWeight: 400 }}>(at least 6 characters)</span></label>
+            <input
+              value={resetPw} onChange={(e) => setResetPw(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") doSetNewPassword(); }}
+              type="password" autoComplete="new-password"
+              style={{ width: "100%", marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            />
+            <button
+              onClick={doSetNewPassword}
+              disabled={resetPw.length < 6 || resetBusy}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: resetPw.length < 6 || resetBusy ? 0.6 : 1 }}
+            >
+              {resetBusy ? "Saving…" : "Save & continue"}
+            </button>
           </div>
         )}
 
@@ -6226,9 +6402,14 @@ export default function MathsUnlockedBN() {
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
                     <span>· Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</span>
                   </div>
-                  <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 12, textDecoration: "underline" }}>
-                    🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
-                  </button>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0 16px", marginBottom: 12 }}>
+                    <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
+                    </button>
+                    <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecPw(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      🔑 {profile.recoveryEmailPending ? "Recovery email — confirm the link" : "Add PIN recovery"}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
                   <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
@@ -7426,6 +7607,44 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {recoveryOpen && (
+        <div onClick={() => setRecoveryOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Add PIN recovery</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+              Add an email and password so you can get back in if you forget your PIN.
+              We'll email you a link to confirm it. Your name + PIN keeps working until
+              you click that link — after that, you log in with this email and password instead.
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email</label>
+            <input
+              value={recEmail} onChange={(e) => setRecEmail(e.target.value)}
+              type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+              style={{ width: "100%", marginTop: 6, marginBottom: 12, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Password <span style={{ fontWeight: 400 }}>(at least 6 characters)</span></label>
+            <input
+              value={recPw} onChange={(e) => setRecPw(e.target.value)}
+              type="password" autoComplete="new-password"
+              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+            />
+            {recMsg && (
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: recMsg.ok ? "var(--green)" : "var(--red)" }}>{recMsg.text}</div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setRecoveryOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>
+                {recMsg && recMsg.ok ? "Done" : "Cancel"}
+              </button>
+              {!(recMsg && recMsg.ok) && (
+                <button onClick={submitRecoveryEmail} disabled={recBusy} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: recBusy ? 0.6 : 1 }}>
+                  {recBusy ? "Saving…" : "Send confirmation link"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showParentLink && (() => {
         const url = typeof window !== "undefined" && profile.parentToken ? `${window.location.origin}/?p=${profile.parentToken}` : "";
