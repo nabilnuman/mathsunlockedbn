@@ -6266,6 +6266,8 @@ export default function MathsUnlockedBN() {
                           <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
+                          <button onClick={() => playJingle(false)} style={b}>▶ Jingle (achievement)</button>
+                          <button onClick={() => { playJingle(true); }} style={b}>▶ Jingle (level-up)</button>
                           <select value={devTopic} onChange={(e) => setDevTopic(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
