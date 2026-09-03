@@ -100,7 +100,10 @@ function evalNode(node, xVal) {
   }
 }
 function evalString(str, xVal) {
-  str = String(str).replace(/²/g, "^2").replace(/³/g, "^3");
+  str = String(str)
+    .replace(/[×∙·]/g, "*").replace(/[÷⁄]/g, "/")
+    .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (c) => "₀₁₂₃₄₅₆₇₈₉".indexOf(c))
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ˣ]+/g, (m) => "^(" + m.replace(/./g, (c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c) >= 0 ? "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c) : c === "⁻" ? "-" : c === "ˣ" ? "x" : c) + ")");
   const ast = parseExpr(insertImplicitMult(tokenize(str)));
   return evalNode(ast, xVal);
 }
@@ -129,7 +132,13 @@ function checkEquivalent(studentStr, correctStr) {
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const spaced = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
 const tight = (n) => (n >= 0 ? `+${n}` : `-${Math.abs(n)}`);
-const pw = (p) => (p === 1 ? "" : `^${p}`); // x^1 → x, but x^-1 / x^3 keep the index
+// Unicode super/subscripts for index notation (no "^" or "÷" shown).
+const SUP = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "-": "⁻", x: "ˣ" };
+const SUB = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉" };
+const sup = (v) => String(v).replace(/[-0-9x]/g, (c) => SUP[c] || c);
+const sub = (v) => String(v).replace(/[0-9]/g, (c) => SUB[c] || c);
+const supFrac = (m, n) => (n == null ? sup(m) : `${sup(m)}⁄${sub(n)}`); // e.g. 27²ᐟ³
+const pw = (p) => (p === 1 ? "" : sup(p)); // x¹ → x, else a superscript index
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; }
 function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
 function roundToSF(num, sf) {
@@ -1607,7 +1616,7 @@ const TOPICS = [
       // bases, quotients, and solving a^x = k.
       const alg = "e.g. 12x^5";
       const num = "Enter a number.";
-      const frac = "Fraction or decimal.";
+      const fracHint = "Fraction or decimal.";
       const forms = [
         () => { // a^m × a^n = a^(m+n)
           const a = randInt(2, 6), b = randInt(2, 6), m = randInt(1, 4), n = randInt(1, 4);
@@ -1616,51 +1625,51 @@ const TOPICS = [
         },
         () => { // a^m ÷ a^n = a^(m−n)
           const a = randInt(2, 6), b = randInt(2, 5), m = randInt(1, 4), n = randInt(1, 3);
-          return { prompt: `Simplify:   ${a * b}x${pw(m + n)} ÷ ${b}x${pw(n)}`, answer: `${a}x${pw(m)}`, hint: alg,
-            steps: [`Divide the coefficients: ${a * b} ÷ ${b} = ${a}`, `Subtract the powers: x${pw(m + n)} ÷ x${pw(n)} = x${pw(m)}`, `Answer: ${a}x${pw(m)}`] };
+          return { prompt: `Simplify:   ${frac(`${a * b}x${pw(m + n)}`, `${b}x${pw(n)}`)}`, answer: `${a}x${pw(m)}`, hint: alg,
+            steps: [`Divide the coefficients: ${frac(a * b, b)} = ${a}`, `Subtract the powers: ${frac(`x${pw(m + n)}`, `x${pw(n)}`)} = x${pw(m)}`, `Answer: ${a}x${pw(m)}`] };
         },
         () => { // (a^m)^n = a^(mn)
           const a = randInt(2, 4), m = randInt(1, 4), n = randInt(2, 3);
-          return { prompt: `Simplify:   (${a}x${pw(m)})^${n}`, answer: `${a ** n}x${pw(m * n)}`, hint: alg,
-            steps: [`Raise the coefficient: ${a}^${n} = ${a ** n}`, `Multiply the powers: (x${pw(m)})^${n} = x${pw(m * n)}`, `Answer: ${a ** n}x${pw(m * n)}`] };
+          return { prompt: `Simplify:   (${a}x${pw(m)})${sup(n)}`, answer: `${a ** n}x${pw(m * n)}`, hint: alg,
+            steps: [`Raise the coefficient: ${a}${sup(n)} = ${a ** n}`, `Multiply the powers: (x${pw(m)})${sup(n)} = x${pw(m * n)}`, `Answer: ${a ** n}x${pw(m * n)}`] };
         },
         () => { // a^0 = 1
           const a = randInt(2, 9), m = randInt(2, 4);
           const asNum = Math.random() < 0.5;
           return asNum
-            ? { prompt: `Evaluate:   ${a}^0`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}^0 = 1`] }
-            : { prompt: `Simplify:   (${a}x${pw(m)})^0`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x${pw(m)})^0 = 1`] };
+            ? { prompt: `Evaluate:   ${a}${sup(0)}`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}${sup(0)} = 1`] }
+            : { prompt: `Simplify:   (${a}x${pw(m)})${sup(0)}`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x${pw(m)})${sup(0)} = 1`] };
         },
         () => { // a^(−m) = 1/a^m
           const a = randInt(2, 5), m = randInt(2, 3);
-          return { prompt: `Evaluate:   ${a}^-${m}`, answer: `1/${a ** m}`, hint: frac,
-            steps: [`A negative index means "one over": ${a}^-${m} = 1 ÷ ${a}^${m}`, `${a}^${m} = ${a ** m}`, `Answer: 1/${a ** m}`] };
+          return { prompt: `Evaluate:   ${a}${sup(`-${m}`)}`, answer: `1/${a ** m}`, answerDisplay: frac(1, a ** m), hint: fracHint,
+            steps: [`A negative index means "one over": ${a}${sup(`-${m}`)} = ${frac(1, `${a}${sup(m)}`)}`, `${a}${sup(m)} = ${a ** m}`, `Answer: ${frac(1, a ** m)}`] };
         },
         () => { // a^(1/n) = ⁿ√a
           const base = randInt(2, 6), n = randInt(2, 3);
-          return { prompt: `Evaluate:   ${base ** n}^(1/${n})`, answer: `${base}`, hint: num,
-            steps: [`A power of 1/${n} means the ${n === 2 ? "square" : "cube"} root`, `${n === 2 ? "√" : "∛"}${base ** n} = ${base}`] };
+          return { prompt: `Evaluate:   ${base ** n}${supFrac(1, n)}`, answer: `${base}`, hint: num,
+            steps: [`A power of ${frac(1, n)} means the ${n === 2 ? "square" : "cube"} root`, `${n === 2 ? "√" : "∛"}${base ** n} = ${base}`] };
         },
         () => { // a^(m/n) = (ⁿ√a)^m
           const base = randInt(2, 3);
           const [n, m] = [[2, 3], [3, 2]][randInt(0, 1)];
-          return { prompt: `Evaluate:   ${base ** n}^(${m}/${n})`, answer: `${base ** m}`, hint: num,
-            steps: [`${base ** n}^(${m}/${n}) = (${n === 2 ? "√" : "∛"}${base ** n})^${m} = ${base}^${m}`, `Answer: ${base ** m}`] };
+          return { prompt: `Evaluate:   ${base ** n}${supFrac(m, n)}`, answer: `${base ** m}`, hint: num,
+            steps: [`${base ** n}${supFrac(m, n)} = (${n === 2 ? "√" : "∛"}${base ** n})${sup(m)} = ${base}${sup(m)}`, `Answer: ${base ** m}`] };
         },
         () => { // a^m × b^m = (ab)^m
           const a = randInt(2, 5), b = [2, 3, 4, 5].filter((x) => x !== a)[randInt(0, 2)], m = randInt(2, 3);
-          return { prompt: `Evaluate:   ${a}^${m} × ${b}^${m}`, answer: `${(a * b) ** m}`, hint: num,
-            steps: [`Same power, so combine the bases: ${a}^${m} × ${b}^${m} = (${a} × ${b})^${m} = ${a * b}^${m}`, `Answer: ${(a * b) ** m}`] };
+          return { prompt: `Evaluate:   ${a}${sup(m)} × ${b}${sup(m)}`, answer: `${(a * b) ** m}`, hint: num,
+            steps: [`Same power, so combine the bases: ${a}${sup(m)} × ${b}${sup(m)} = (${a} × ${b})${sup(m)} = ${a * b}${sup(m)}`, `Answer: ${(a * b) ** m}`] };
         },
         () => { // (a/b)^n = a^n / b^n
           const a = randInt(2, 3), b = randInt(a + 1, 5), n = randInt(2, 3);
-          return { prompt: `Evaluate:   (${a}/${b})^${n}`, answer: `${a ** n}/${b ** n}`, hint: frac,
-            steps: [`Raise the top and bottom separately: (${a}/${b})^${n} = ${a}^${n} / ${b}^${n}`, `Answer: ${a ** n}/${b ** n}`] };
+          return { prompt: `Evaluate:   (${frac(a, b)})${sup(n)}`, answer: `${a ** n}/${b ** n}`, answerDisplay: frac(a ** n, b ** n), hint: fracHint,
+            steps: [`Raise the top and bottom separately: (${frac(a, b)})${sup(n)} = ${frac(`${a}${sup(n)}`, `${b}${sup(n)}`)}`, `Answer: ${frac(a ** n, b ** n)}`] };
         },
         () => { // if a^x = a^k then x = k
           const base = randInt(2, 4), k = randInt(2, 5);
-          return { prompt: `Solve for x:   ${base}^x = ${base ** k}`, answer: `${k}`, hint: num,
-            steps: [`Write the right side as a power of ${base}: ${base ** k} = ${base}^${k}`, `Equal bases means equal powers: x = ${k}`] };
+          return { prompt: `Solve for x:   ${base}${sup("x")} = ${base ** k}`, answer: `${k}`, hint: num,
+            steps: [`Write the right side as a power of ${base}: ${base ** k} = ${base}${sup(k)}`, `Equal bases means equal powers: x = ${k}`] };
         },
       ];
       return forms[randInt(0, forms.length - 1)]();
@@ -6902,8 +6911,9 @@ export default function MathsUnlockedBN() {
                   />
                   {!feedback && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
-                      style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
-                      <Pencil size={13} /> Write
+                      aria-label="Write the answer by hand"
+                      style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
+                      <Pencil size={16} />
                     </button>
                   )}
                 </div>
@@ -7017,10 +7027,10 @@ export default function MathsUnlockedBN() {
                   border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`,
                   background: sketchOn ? "var(--blue)" : "var(--card)",
                   color: sketchOn ? "var(--on-accent)" : "var(--muted)",
-                  cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)",
+                  cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1,
                 }}
               >
-                <Pencil size={15} />
+                🗒
               </button>
             </div>
           </div>
