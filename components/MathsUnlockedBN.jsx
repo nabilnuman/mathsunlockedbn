@@ -4620,9 +4620,10 @@ function ProfileCard({ profile, onEditIcon, onEditBanner }) {
     <div
       onClick={onEditBanner}
       style={{
-        flex: 1, minWidth: 0, alignSelf: "stretch", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 7,
+        flex: 1, minWidth: 0, alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8,
         background: "var(--card)", border: `1px ${badges.length ? "solid" : "dashed"} var(--grid)`, borderRadius: 12,
         padding: "8px 10px", cursor: onEditBanner ? "pointer" : "default",
+        WebkitTapHighlightColor: "transparent", outline: "none",
       }}
     >
       {badges.length > 0
@@ -4641,7 +4642,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner }) {
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div
             onClick={onEditIcon}
-            style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, cursor: onEditIcon ? "pointer" : "default", ...frameStyle(profile) }}
+            style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, cursor: onEditIcon ? "pointer" : "default", WebkitTapHighlightColor: "transparent", outline: "none", ...frameStyle(profile) }}
           >
             {avatarChar(profile)}
           </div>
@@ -5972,7 +5973,7 @@ export default function MathsUnlockedBN() {
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
         .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
         .mub-grid input::placeholder, .mub-grid textarea::placeholder { color: var(--muted); }
-        svg, svg *, button { -webkit-tap-highlight-color: transparent; }
+        * { -webkit-tap-highlight-color: transparent; }
         svg [role], svg rect, svg circle, svg polygon { outline: none; }
       `}</style>
 
@@ -7118,12 +7119,12 @@ export default function MathsUnlockedBN() {
                                 <button key={j} onClick={() => { if (c.full) { setRosterProfile(c.full); markMilestone("friendview"); } }}
                                   style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
                                   <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                  {c.full && <MiniAvatar profile={c.full} size={30} />}
                                   <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                     <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{c.name}</span>
                                     {c.prestige > 0 && <PrestigeBadge prestige={c.prestige} size={13} />}
                                     <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--muted)" }}>Level {c.level}</span>
                                   </div>
-                                  {c.full && <MiniAvatar profile={c.full} size={30} />}
                                   <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{c.xp.toLocaleString()}</div>
                                 </button>
                               ))}
@@ -7150,6 +7151,7 @@ export default function MathsUnlockedBN() {
                           style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer",
                             color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
                           <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, minWidth: 26, flexShrink: 0 }}>#{i + 1}</span>
+                          {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                               <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
@@ -7161,7 +7163,6 @@ export default function MathsUnlockedBN() {
                               {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
                             </div>
                           </div>
-                          {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
                         </button>
                       );
@@ -7210,6 +7211,7 @@ export default function MathsUnlockedBN() {
                               <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
                                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", minWidth: 22, flexShrink: 0 }}>{j + 1}</span>
+                                {m.full && <MiniAvatar profile={m.full} size={30} />}
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                     <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
@@ -7220,7 +7222,6 @@ export default function MathsUnlockedBN() {
                                     {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
                                   </div>
                                 </div>
-                                {m.full && <MiniAvatar profile={m.full} size={30} />}
                                 <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
                               </button>
                             );
