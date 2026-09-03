@@ -1,0 +1,6 @@
+project_id = "ypumzxushtcdsucspjzg"
+
+# The student-auth function is called before the student has a session,
+# so it can't require a user JWT. It does its own validation.
+[functions.student-auth]
+verify_jwt = false

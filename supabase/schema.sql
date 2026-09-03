@@ -109,12 +109,18 @@ revoke all on function public.get_parent_view(text) from public;
 grant execute on function public.get_parent_view(text) to anon, authenticated;
 
 -- ============================================================
---  6. DASHBOARD SETTINGS (not SQL — do this in the UI)
---     Authentication -> Providers -> Email:
---       * Enable Email provider
---       * TURN OFF "Confirm email"  (synthetic addresses can't
---         receive mail; sign-up must return a session directly)
---     Authentication -> URL Configuration:
---       * Site URL = your deployed app URL (for password reset,
---         once the optional email-recovery flow ships)
+--  6. ACCOUNT CREATION  (not SQL)
+--     Hosted Supabase blocks signUp() for our synthetic
+--     name.pin@students.mathsunlockedbn.app addresses (MX check +
+--     confirm-email). Deploy the Edge Function that creates the
+--     accounts with the admin API instead:
+--
+--       see  supabase/functions/student-auth/README.md
+--
+--     (Dashboard -> Edge Functions -> new function "student-auth",
+--      paste index.ts, turn OFF "Verify JWT", deploy.)
+--
+--     Authentication -> Email provider: just leave it enabled.
+--     Confirm-email can stay on or off — the function marks each
+--     account confirmed regardless.
 -- ============================================================
