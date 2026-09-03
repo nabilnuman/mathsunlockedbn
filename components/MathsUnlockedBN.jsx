@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -5118,6 +5118,7 @@ export default function MathsUnlockedBN() {
   const [pin2, setPin2] = useState("");
   const [changePinBusy, setChangePinBusy] = useState(false);
   const [changePinMsg, setChangePinMsg] = useState(null); // { ok, text }
+  const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -6263,17 +6264,18 @@ export default function MathsUnlockedBN() {
                 Question bank
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && (
-              <button onClick={switchStudent} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                <RotateCcw size={13} /> Logout
+            {screen !== "login" && screen !== "parent" ? (
+              <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
+                <Settings size={18} />
               </button>
-            )}
-            <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-              {soundOn ? "🔊" : "🔇"}
-            </button>
-            <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-              {theme === "dark" ? "☀️" : "🌙"}
-            </button>
+            ) : (<>
+              <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                {soundOn ? "🔊" : "🔇"}
+              </button>
+              <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                {theme === "dark" ? "☀️" : "🌙"}
+              </button>
+            </>)}
           </div>
         </div>
 
@@ -7657,6 +7659,32 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {settingsOpen && (
+        <div onClick={() => setSettingsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 70, display: "flex", justifyContent: "flex-end", alignItems: "flex-start", padding: "12px 12px 0" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "min(300px, 82vw)", background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, boxShadow: "0 14px 44px var(--shadow)", overflow: "hidden", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px 11px" }}>
+              <span className="mub-display" style={{ fontSize: 15, fontWeight: 700 }}>Settings</span>
+              <button onClick={() => setSettingsOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}>
+                <XIcon size={16} />
+              </button>
+            </div>
+            {[
+              { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
+              { icon: theme === "dark" ? "🌙" : "☀️", label: "Appearance", value: theme === "dark" ? "Dark" : "Light", onClick: toggleTheme },
+              { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
+              { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
+            ].map((it, i) => (
+              <button key={i} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 16px", background: "none", border: "none", borderTop: "1px solid var(--grid)", cursor: "pointer", color: it.danger ? "var(--red)" : "var(--ink)", textAlign: "left" }}>
+                <span style={{ fontSize: 17, width: 22, textAlign: "center", flexShrink: 0 }}>{it.icon}</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{it.label}</span>
+                {it.value != null && <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>{it.value}</span>}
+                {it.chevron && <span style={{ fontSize: 13, color: "var(--muted)" }}>›</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {changePinOpen && (
         <div onClick={() => setChangePinOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
