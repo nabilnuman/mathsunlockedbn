@@ -101,6 +101,10 @@ function evalNode(node, xVal) {
 }
 function evalString(str, xVal) {
   str = String(str)
+    // display markup → plain math
+    .replace(new RegExp(`${RAISE.a}${FR.a}([^${FR.b}]*)${FR.b}([^${FR.c}]*)${FR.c}${RAISE.b}`, "g"), "^(($1)/($2))")
+    .replace(new RegExp(`${RAISE.a}([^${RAISE.b}]*)${RAISE.b}`, "g"), "^($1)")
+    .replace(new RegExp(`${FR.a}([^${FR.b}]*)${FR.b}([^${FR.c}]*)${FR.c}`, "g"), "(($1)/($2))")
     .replace(/[×∙·]/g, "*").replace(/[÷⁄]/g, "/")
     .replace(/[₀₁₂₃₄₅₆₇₈₉]/g, (c) => "₀₁₂₃₄₅₆₇₈₉".indexOf(c))
     .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻ˣ]+/g, (m) => "^(" + m.replace(/./g, (c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c) >= 0 ? "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c) : c === "⁻" ? "-" : c === "ˣ" ? "x" : c) + ")");
@@ -132,13 +136,15 @@ function checkEquivalent(studentStr, correctStr) {
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const spaced = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
 const tight = (n) => (n >= 0 ? `+${n}` : `-${Math.abs(n)}`);
-// Unicode super/subscripts for index notation (no "^" or "÷" shown).
+// Unicode super/subscripts for simple index notation (no "^" or "÷" shown).
 const SUP = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "-": "⁻", x: "ˣ" };
-const SUB = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉" };
 const sup = (v) => String(v).replace(/[-0-9x]/g, (c) => SUP[c] || c);
-const sub = (v) => String(v).replace(/[0-9]/g, (c) => SUB[c] || c);
-const supFrac = (m, n) => (n == null ? sup(m) : `${sup(m)}⁄${sub(n)}`); // e.g. 27²ᐟ³
 const pw = (p) => (p === 1 ? "" : sup(p)); // x¹ → x, else a superscript index
+// A raised exponent that itself needs a stacked fraction — <MathText> lifts
+// it and draws the fraction small (so 16^(1/2) doesn't read like "16 and a half").
+const RAISE = { a: "", b: "" };
+const raise = (s) => `${RAISE.a}${s}${RAISE.b}`;
+const supFrac = (m, n) => (n == null ? sup(m) : raise(frac(m, n)));
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; }
 function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
 function roundToSF(num, sf) {
@@ -294,28 +300,44 @@ function MathText({ text, style }) {
     if (last < s.length) nodes.push(s.slice(last));
     return <span style={{ whiteSpace: "pre-line", ...style }}>{nodes}</span>;
   }
-  if (!s.includes(FR.a)) return <span style={{ whiteSpace: "pre-line", ...style }}>{s}</span>;
-  const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
-  const parts = [];
-  let last = 0, m;
-  while ((m = re.exec(s))) {
-    if (m.index > last) parts.push({ t: s.slice(last, m.index) });
-    parts.push({ n: m[1], d: m[2] });
+  if (!s.includes(FR.a) && !s.includes(RAISE.a)) return <span style={{ whiteSpace: "pre-line", ...style }}>{s}</span>;
+
+  // render a run that may contain stacked-fraction markup → array of nodes
+  const fracNodes = (str, kb, small) => {
+    if (!str.includes(FR.a)) return str ? [<span key={kb} style={{ whiteSpace: "pre-wrap" }}>{str}</span>] : [];
+    const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
+    const out = [];
+    let last = 0, m, k = 0;
+    while ((m = re.exec(str))) {
+      if (m.index > last) out.push(<span key={`${kb}-${k++}`} style={{ whiteSpace: "pre-wrap" }}>{str.slice(last, m.index)}</span>);
+      out.push(
+        <span key={`${kb}-${k++}`} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle", margin: small ? "0 2px" : "0 4px", textAlign: "center" }}>
+          <span style={{ padding: small ? "0 3px" : "0 6px 1px" }}>{m[1]}</span>
+          <span style={{ alignSelf: "stretch", padding: small ? "0 3px" : "1px 6px 0", borderTop: `${small ? 1 : 1.5}px solid currentColor` }}>{m[2]}</span>
+        </span>
+      );
+      last = m.index + m[0].length;
+    }
+    if (last < str.length) out.push(<span key={`${kb}-${k++}`} style={{ whiteSpace: "pre-wrap" }}>{str.slice(last)}</span>);
+    return out;
+  };
+
+  // split on raised-exponent markup at the top level
+  const raiseRe = new RegExp(`${RAISE.a}([^${RAISE.a}${RAISE.b}]*)${RAISE.b}`, "g");
+  const nodes = [];
+  let last = 0, m, i = 0;
+  while ((m = raiseRe.exec(s))) {
+    if (m.index > last) nodes.push(...fracNodes(s.slice(last, m.index), `p${i++}`, false));
+    nodes.push(
+      <sup key={`r${i++}`} style={{ display: "inline-flex", alignItems: "center", fontSize: "0.68em", lineHeight: 1, verticalAlign: "super" }}>
+        {fracNodes(m[1], `s${i}`, true)}
+      </sup>
+    );
     last = m.index + m[0].length;
   }
-  if (last < s.length) parts.push({ t: s.slice(last) });
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", ...style }}>
-      {parts.map((p, i) => p.t !== undefined
-        ? <span key={i} style={{ whiteSpace: "pre-wrap" }}>{p.t}</span>
-        : (
-          <span key={i} style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", verticalAlign: "middle", margin: "0 4px", textAlign: "center" }}>
-            <span style={{ padding: "0 6px 1px" }}>{p.n}</span>
-            <span style={{ alignSelf: "stretch", padding: "1px 6px 0", borderTop: "1.5px solid currentColor" }}>{p.d}</span>
-          </span>
-        ))}
-    </span>
-  );
+  if (last < s.length) nodes.push(...fracNodes(s.slice(last), `p${i++}`, false));
+
+  return <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", ...style }}>{nodes}</span>;
 }
 
 // A small coordinate grid with one straight line and two marked lattice
