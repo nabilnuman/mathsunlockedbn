@@ -4698,7 +4698,17 @@ const FRAMES = {
 };
 const FRAME_IDS = Object.keys(FRAMES);
 const BANNER_MAX = 3;
-const avatarChar = (p) => AVATARS[(p && p.avatar)] || AVATARS.grad;
+// Achievements you've earned are also selectable as profile icons —
+// stored as "ach:<achievementId>".
+const achAvatarId = (achId) => `ach:${achId}`;
+const avatarChar = (p) => {
+  const id = (p && p.avatar) || "grad";
+  if (id.startsWith("ach:")) {
+    const a = ACHIEVEMENTS.find((x) => x.id === id.slice(4));
+    return a ? a.icon : AVATARS.grad;
+  }
+  return AVATARS[id] || AVATARS.grad;
+};
 const frameStyle = (p) => FRAMES[(p && p.avatarFrame)] || FRAMES.plain;
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
@@ -4735,7 +4745,7 @@ function BadgeChip({ a, size = 40, on = true }) {
 /* Shareable summary of a student's progress. Pure display unless
    onEditIcon / onEditBanner are supplied (own card) — then the icon and
    the banner are tappable to open their pickers. */
-function ProfileCard({ profile, onEditIcon, onEditBanner }) {
+function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   const level = levelFromExp(totalExp(profile));
   const title = titleForLevel(level);
   const prestige = profile.prestige || 0;
@@ -4789,6 +4799,9 @@ function ProfileCard({ profile, onEditIcon, onEditBanner }) {
           >
             {avatarChar(profile)}
           </div>
+          {newIcons && onEditIcon && (
+            <div style={{ position: "absolute", top: -1, right: -1, width: 13, height: 13, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />
+          )}
           {prestige > 0 && (
             <div style={{ position: "absolute", right: -6, bottom: -4 }}>
               <PrestigeBadge prestige={prestige} size={22} />
@@ -4847,6 +4860,27 @@ function IconPickerModal({ profile, onChange, onClose }) {
           );
         })}
       </div>
+      {(() => {
+        const earnedAch = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
+        if (earnedAch.length === 0) return null;
+        return (
+          <>
+            <Head>Unlocked from achievements</Head>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+              {earnedAch.map((a) => {
+                const aid = achAvatarId(a.id);
+                const on = profile.avatar === aid;
+                return (
+                  <button key={a.id} type="button" title={`${a.name} · ${a.tier}`} onClick={() => onChange(() => ({ avatar: aid }))} style={{
+                    width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: "pointer",
+                    background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : TIER_COLOR[a.tier]}`,
+                  }}>{a.icon}</button>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
       <Head>Border</Head>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         {FRAME_IDS.map((id) => {
@@ -5052,7 +5086,7 @@ const emptyProfile = () => ({
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0,
-  avatar: "grad", avatarFrame: "plain", banner: [],
+  avatar: "grad", avatarFrame: "plain", banner: [], seenIconUnlocks: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5263,6 +5297,15 @@ export default function MathsUnlockedBN() {
     document.body.style.background = bg;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
+
+  // Opening the icon picker counts as "seen" — clears the new-unlock dots.
+  useEffect(() => {
+    if (!pickIcon) return;
+    const p = profileRef.current || {};
+    const earned = (p.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
+    if (earned.every((id) => (p.seenIconUnlocks || []).includes(id))) return;
+    patchProfile((prev) => ({ seenIconUnlocks: [...new Set([...(prev.seenIconUnlocks || []), ...earned])] }));
+  }, [pickIcon]);
 
   // Teacher-only screens are unreachable without the ?teacher=1 unlock.
   useEffect(() => {
@@ -6236,6 +6279,11 @@ export default function MathsUnlockedBN() {
     missionTasks.filter((t) => taskDone(t, missionDay) && !missionDay.claimed[t.id]).length +
     missionMs.filter((m) => (profile.milestones || {})[m.id] === "ready").length;
 
+  // Earned achievements double as profile icons; a red dot flags the ones
+  // the student hasn't seen offered yet (clears when they open the picker).
+  const earnedAchIds = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
+  const newIconCount = earnedAchIds.filter((id) => !(profile.seenIconUnlocks || []).includes(id)).length;
+
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
   return (
@@ -6482,8 +6530,9 @@ export default function MathsUnlockedBN() {
                   <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
                     Parent link
                   </button>
-                  <button onClick={() => setShowCard(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+                  <button onClick={() => setShowCard(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
                     Share card
+                    {newIconCount > 0 && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
                   </button>
                 </div>
               </div>
@@ -7604,7 +7653,7 @@ export default function MathsUnlockedBN() {
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px", zIndex: 50, overflowY: "auto" }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <ProfileCard profile={profile} onEditIcon={() => setPickIcon(true)} onEditBanner={() => setPickBanner(true)} />
+            <ProfileCard profile={profile} onEditIcon={() => setPickIcon(true)} onEditBanner={() => setPickBanner(true)} newIcons={newIconCount > 0} />
             <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Tap your icon or banner to customise · screenshot to share · tap outside to close</div>
           </div>
         </div>
