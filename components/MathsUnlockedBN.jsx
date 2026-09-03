@@ -1439,7 +1439,7 @@ function SketchOverlay({ active, strokes, setStrokes }) {
 /* Handwriting input for the answer box. The student scribbles, an on-device
    model reads it, and the guess is dropped into the box for them to check
    or fix before pressing Check answer. */
-function WritePad({ onInsert, onClose, mode }) {
+function WritePad({ onInsert, onConfirm, onClose, mode }) {
   const canvasRef = useRef(null);
   const cur = useRef(null);
   const strokesRef = useRef([]);
@@ -1511,21 +1511,25 @@ function WritePad({ onInsert, onClose, mode }) {
         </div>
         <canvas ref={canvasRef} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
           style={{ width: "100%", height: 200, display: "block", background: "#fff", border: "1.5px dashed #c9d2da", borderRadius: 10, touchAction: "none", cursor: "crosshair" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", minHeight: 24 }}>
-          <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Reads as</span>
-          <span className="mub-mono" style={{ fontSize: 19, fontWeight: 700, color: "var(--ink)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", minHeight: 28 }}>
+          <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }}>Reads as</span>
+          <span className="mub-mono" style={{ fontSize: 19, fontWeight: 700, color: "var(--ink)", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
             {busy ? (everRan.current ? "…" : <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>loading the recogniser…</span>) : (guess || "—")}
           </span>
+          <button onClick={clearAll} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={clearAll} style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Clear</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
           <button onClick={() => { if (guess && ready) { onInsert(guess); onClose(); } }} disabled={!guess || !ready}
-            style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: guess && ready ? "pointer" : "default", opacity: guess && ready ? 1 : 0.5 }}>
-            Insert into answer
+            style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: guess && ready ? "pointer" : "default", opacity: guess && ready ? 1 : 0.5 }}>
+            Insert to text box
+          </button>
+          <button onClick={() => { if (guess && ready) { onConfirm(guess); onClose(); } }} disabled={!guess || !ready}
+            style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "11px 14px", cursor: guess && ready ? "pointer" : "default", opacity: guess && ready ? 1 : 0.5 }}>
+            Check answer
           </button>
         </div>
         <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.4 }}>
-          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading, then Insert. You can still edit before pressing Check answer.
+          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading first. <b>Check answer</b> uses it straight away; <b>Insert to text box</b> lets you edit it before checking.
         </div>
       </div>
     </div>
@@ -5721,8 +5725,9 @@ export default function MathsUnlockedBN() {
     });
   }
 
-  function submitAnswer() {
+  function submitAnswer(override) {
     if (feedback) return;
+    const typed = typeof override === "string" ? override : answerInput;
     let correct;
     if (question.venn) {
       if (vennPressed.length === 0) return;
@@ -5762,8 +5767,8 @@ export default function MathsUnlockedBN() {
         ? !!question.check(multiInput)
         : question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
     } else {
-      if (!answerInput.trim()) return;
-      correct = question.check ? !!question.check(answerInput) : checkEquivalent(answerInput, question.answer);
+      if (!typed.trim()) return;
+      correct = question.check ? !!question.check(typed) : checkEquivalent(typed, question.answer);
     }
     const elapsed = (Date.now() - startTimeRef.current) / 1000;
     const expBefore = totalExp(profile);
@@ -7417,6 +7422,7 @@ export default function MathsUnlockedBN() {
         <WritePad
           mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
           onInsert={(t) => { setAnswerInput(t); setTimeout(() => answerRef.current && answerRef.current.focus(), 0); }}
+          onConfirm={(t) => { setAnswerInput(t); submitAnswer(t); }}
           onClose={() => setWritePad(false)}
         />
       )}
