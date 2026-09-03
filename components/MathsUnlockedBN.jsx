@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil } from "lucide-react";
 import { storage } from "../lib/storage";
+import { signInOrRegister, signOut, currentUser, getLeaderboard, getParentView } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
 /* ---------------------------------------------------------
@@ -5043,9 +5044,6 @@ const emptyProfile = () => ({
   avatar: "grad", avatarFrame: "plain", banner: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
-// A student is identified by name + 4-digit PIN, so two students who share
-// a name stay separate. slug() never yields "__", so it's a safe divider.
-const studentKey = (name, pin) => `student_${slug(name)}__${/^\d{4}$/.test(pin || "") ? pin : "0000"}`;
 const genToken = () => {
   try { return crypto.randomUUID().replace(/-/g, "").slice(0, 18); } catch (e) { /* fall through */ }
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -5096,6 +5094,7 @@ export default function MathsUnlockedBN() {
   const [pinInput, setPinInput] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
+  const [authUid, setAuthUid] = useState(null); // the signed-in user's real auth.uid()
   const [showSchool, setShowSchool] = useState(false);
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [devTopic, setDevTopic] = useState(TOPICS[0].id);
@@ -5183,26 +5182,32 @@ export default function MathsUnlockedBN() {
         if (window.localStorage.getItem("mub_teacher") === "1") setTeacherMode(true);
       } catch (e) { /* defaults are fine */ }
 
-      // Parent Link: ?p=<token> shows a read-only view of one student.
+      // Parent Link: ?p=<token> shows a read-only view of one student,
+      // resolved through a SECURITY DEFINER function (the parent isn't
+      // signed in, and RLS hides the row from anonymous queries).
       try {
         const pTok = new URLSearchParams(window.location.search).get("p");
         if (pTok) {
-          const r = await storage.get(`parent_${pTok}`, true);
-          if (r && r.value) setParentView(JSON.parse(r.value));
-          else setParentView({ __missing: true });
+          const pv = await getParentView(pTok);
+          setParentView(pv || { __missing: true });
           setScreen("parent");
           setReady(true);
           return;
         }
       } catch (e) { setParentView({ __missing: true }); setScreen("parent"); setReady(true); return; }
 
+      // Restore a persisted Supabase session, if any.
       try {
-        const res = await storage.get("profile");
-        if (res && res.value) {
-          setProfile(JSON.parse(res.value));
-          setScreen("dashboard");
+        const user = await currentUser();
+        if (user) {
+          setAuthUid(user.id);
+          const res = await storage.get("profile");
+          if (res && res.value) {
+            setProfile(JSON.parse(res.value));
+            setScreen("dashboard");
+          }
         }
-      } catch (e) { /* no saved profile yet */ }
+      } catch (e) { /* not signed in, or no saved profile yet */ }
       await loadCustomQuestions();
       setReady(true);
     })();
@@ -5489,13 +5494,10 @@ export default function MathsUnlockedBN() {
   }, [blitzPhase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function persistProfile(next) {
+    // One row now: scope = the student's auth uid, key = "profile".
+    // The leaderboard and parent-link reads go through RPCs that read
+    // every profile server-side, so there's nothing to fan out here.
     try { await storage.set("profile", JSON.stringify(next)); } catch (e) { /* ignore */ }
-    if (next.name && next.pin) {
-      try { await storage.set(studentKey(next.name, next.pin), JSON.stringify(next), true); } catch (e) { /* ignore */ }
-      if (next.parentToken) {
-        try { await storage.set(`parent_${next.parentToken}`, JSON.stringify(next), true); } catch (e) { /* ignore */ }
-      }
-    }
   }
   async function saveProfile(next) {
     if (next.name && !next.parentToken) next.parentToken = genToken();
@@ -5515,68 +5517,56 @@ export default function MathsUnlockedBN() {
     });
   }
 
-  // Login by name + 4-digit PIN. An existing name+PIN resumes that
-  // student's progress (the shared record survives "Switch student");
-  // a new name+PIN creates a fresh profile with the chosen school.
+  // Login by name + 6-digit PIN, backed by a real Supabase Auth account
+  // (email "<slug>.<pin>@students.mathsunlockedbn.app", password derived
+  // from name + PIN). An existing name+PIN signs in and resumes that
+  // student's saved progress; a new one creates the account and a fresh
+  // profile with the chosen school.
   async function startSession() {
     if (starting) return;
     const nm = nameInput.trim();
     const pin = pinInput.trim();
     if (!nm) { setStartError("Enter your name."); return; }
-    if (!/^\d{4}$/.test(pin)) { setStartError("Your PIN must be exactly 4 digits."); return; }
+    if (!/^\d{6}$/.test(pin)) { setStartError("Your PIN must be exactly 6 digits."); return; }
     setStartError("");
     setStarting(true);
-    const isBlank = (p) => !p || (Object.keys(p.topics || {}).length === 0 && !(p.prestige > 0) && !(p.totalCorrect > 0));
-    let prof = null;
     try {
-      const r = await storage.get(studentKey(nm, pin), true);
-      if (r && r.value) prof = JSON.parse(r.value);
-    } catch (e) { /* first time for this name + PIN */ }
-    // Legacy accounts (created before PINs) are keyed by name only. Adopt
-    // one when there's no real name+PIN account yet — also when a blank
-    // name+PIN account exists (e.g. from a failed recovery attempt).
-    let adoptedLegacy = false;
-    if (isBlank(prof)) {
-      try {
-        const legacy = await storage.get(`student_${slug(nm)}`, true);
-        if (legacy && legacy.value) {
-          const legacyProf = JSON.parse(legacy.value);
-          if (!isBlank(legacyProf)) { prof = legacyProf; adoptedLegacy = true; }
-        }
-      } catch (e) { /* no legacy account */ }
+      const { user, created } = await signInOrRegister(nm, pin);
+      setAuthUid(user.id);
+
+      let prof = null;
+      if (!created) {
+        try {
+          const r = await storage.get("profile");
+          if (r && r.value) prof = JSON.parse(r.value);
+        } catch (e) { /* account exists but no saved profile yet */ }
+      }
+      if (prof) {
+        prof.name = prof.name || nm;
+        prof.pin = pin;
+        if (!prof.school) prof.school = schoolInput;
+        if (!prof.achievedAt) prof.achievedAt = {};
+      } else {
+        prof = emptyProfile();
+        prof.name = nm;
+        prof.pin = pin;
+        prof.school = schoolInput;
+        prof.createdAt = Date.now();
+      }
+      await saveProfile(prof);
+      setScreen("dashboard");
+    } catch (e) {
+      setStartError(e && e.message ? e.message : "Could not sign in. Try again.");
     }
-    if (prof) {
-      prof.name = prof.name || nm;
-      prof.pin = pin;
-      if (!prof.school) prof.school = schoolInput;
-      if (!prof.achievedAt) prof.achievedAt = {};
-    } else {
-      prof = emptyProfile();
-      prof.name = nm;
-      prof.pin = pin;
-      prof.school = schoolInput;
-      prof.createdAt = Date.now();
-    }
-    await saveProfile(prof);
-    if (adoptedLegacy) {
-      // Only remove the legacy key once the new name+PIN record is
-      // confirmed saved — otherwise keep it as a fallback.
-      try {
-        const check = await storage.get(studentKey(nm, pin), true);
-        if (check && check.value && !isBlank(JSON.parse(check.value))) {
-          await storage.delete(`student_${slug(nm)}`, true);
-        }
-      } catch (e) { /* keep the legacy key */ }
-    }
-    setScreen("dashboard");
     setStarting(false);
   }
 
-  // Non-destructive: forgets this device's session so the login screen
-  // shows, but the student's progress stays saved (name + PIN) and
-  // resumes when they sign back in.
+  // Non-destructive: signs out of Supabase so the login screen shows.
+  // The student's progress stays saved in their own row and resumes when
+  // they sign back in with the same name + PIN.
   async function switchStudent() {
-    try { await storage.delete("profile"); } catch (e) { /* ignore */ }
+    await signOut();
+    setAuthUid(null);
     setProfile(emptyProfile());
     setActiveTopic(null);
     setScreen("login");
@@ -5881,16 +5871,8 @@ export default function MathsUnlockedBN() {
   async function loadStudents() {
     setAdminLoading(true);
     try {
-      const listRes = await storage.list("student_", true);
-      const keys = (listRes && listRes.keys) || [];
-      const results = [];
-      for (const k of keys) {
-        try {
-          const r = await storage.get(k, true);
-          if (r && r.value) results.push(JSON.parse(r.value));
-        } catch (e) { /* skip unreadable entry */ }
-      }
-      results.sort((a, b) => a.name.localeCompare(b.name));
+      const results = await getLeaderboard();
+      results.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       setStudents(results);
     } catch (e) { setStudents([]); }
     setAdminLoading(false);
@@ -5916,9 +5898,8 @@ export default function MathsUnlockedBN() {
     setScreen("friends");
   }
 
-  // Search students by name. The record key already contains the name
-  // slug (student_<name>__<pin>), so we filter keys first and only fetch
-  // the matches — no full table scan.
+  // Search students by name. get_leaderboard() returns every public
+  // profile in one call; filter by name slug client-side.
   async function runFriendSearch() {
     const q = friendQuery.trim();
     const qs = slug(q);
@@ -5926,23 +5907,12 @@ export default function MathsUnlockedBN() {
     setFriendLoading(true);
     setFriendView(null);
     setFriendResults(null);
-    let keys = [];
-    try {
-      const res = await storage.list("student_", true);
-      keys = (res && res.keys) || [];
-    } catch (e) { /* offline */ }
-    const matches = keys
-      .map((k) => ({ key: k, nameSlug: k.replace(/^student_/, "").replace(/__\d+$/, "") }))
-      .filter((x) => x.nameSlug.includes(qs))
+    let all = [];
+    try { all = await getLeaderboard(); } catch (e) { /* offline */ }
+    const out = all
+      .filter((m) => m && m.name && slug(m.name).includes(qs))
+      .sort((a, b) => leaderboardScore(b) - leaderboardScore(a) || (a.name || "").localeCompare(b.name || ""))
       .slice(0, 30);
-    const out = [];
-    for (const m of matches) {
-      try {
-        const r = await storage.get(m.key, true);
-        if (r && r.value) out.push(JSON.parse(r.value));
-      } catch (e) { /* skip */ }
-    }
-    out.sort((a, b) => leaderboardScore(b) - leaderboardScore(a) || (a.name || "").localeCompare(b.name || ""));
     setFriendResults(out);
     setFriendLoading(false);
   }
@@ -5964,21 +5934,13 @@ export default function MathsUnlockedBN() {
     } catch (e) { /* clipboard unavailable — the link is shown for manual copy */ }
   }
 
-  // Client-side aggregation: read every student record once, then build
-  // two boards — all-time (top-10 leaderboard scores) and this week (sum
-  // of every student's XP earned since Monday).
+  // Client-side aggregation: pull every public profile in one RPC call,
+  // then build the boards — all-time (top-10 leaderboard scores), this
+  // week (XP earned since Monday) and individual players.
   async function loadBoard() {
     setBoard({ loading: true, schools: [], weekly: [], players: [] });
     let all = [];
-    try {
-      const listRes = await storage.list("student_", true);
-      for (const k of (listRes && listRes.keys) || []) {
-        try {
-          const r = await storage.get(k, true);
-          if (r && r.value) all.push(JSON.parse(r.value));
-        } catch (e) { /* skip */ }
-      }
-    } catch (e) { /* leave all empty */ }
+    try { all = await getLeaderboard(); } catch (e) { /* leave all empty */ }
 
     const bySchool = {};
     for (const s of all) {
@@ -6185,12 +6147,12 @@ export default function MathsUnlockedBN() {
               placeholder="e.g. Amirah"
               style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
             />
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>4-digit PIN <span style={{ fontWeight: 400 }}>(pick one you'll remember)</span></label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>6-digit PIN <span style={{ fontWeight: 400 }}>(pick one you'll remember)</span></label>
             <input
               value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
               onKeyDown={(e) => { if (e.key === "Enter") startSession(); }}
-              inputMode="numeric" placeholder="e.g. 4051"
+              inputMode="numeric" placeholder="e.g. 405126"
               style={{ width: "100%", marginTop: 6, marginBottom: 4, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
             />
             <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot it? Ask your teacher.</div>
@@ -6233,8 +6195,8 @@ export default function MathsUnlockedBN() {
             )}
             <button
               onClick={startSession}
-              disabled={!nameInput.trim() || !/^\d{4}$/.test(pinInput) || starting}
-              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{4}$/.test(pinInput) || starting ? 0.6 : 1 }}
+              disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
+              style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
             >
               {starting ? "Loading…" : "Start / continue"}
             </button>
@@ -7310,7 +7272,7 @@ export default function MathsUnlockedBN() {
                 <div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {board.players.map((m, i) => {
-                      const mine = m.full && profile.name === m.name && (profile.pin === m.full.pin);
+                      const mine = m.full && ((authUid && m.full.uid === authUid) || (!authUid && profile.name === m.name));
                       const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
                       const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                       return (
