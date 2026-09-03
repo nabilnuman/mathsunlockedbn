@@ -9,6 +9,13 @@ import {
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
+// Email-based PIN recovery is off by default: Supabase's built-in mailer
+// only delivers to your org's team members, so it can't reach students
+// without a paid custom-SMTP domain. Set NEXT_PUBLIC_ENABLE_EMAIL_RECOVERY=1
+// once real SMTP is configured. Teacher-run PIN reset (admin view) works
+// regardless.
+const EMAIL_RECOVERY = process.env.NEXT_PUBLIC_ENABLE_EMAIL_RECOVERY === "1";
+
 /* ---------------------------------------------------------
    Tiny expression engine — lets a student type an answer in
    any equivalent form (2x+3, x/2, 0.5x, 7/12, 0.583...) and
@@ -6265,7 +6272,7 @@ export default function MathsUnlockedBN() {
               inputMode="numeric" placeholder="e.g. 405126"
               style={{ width: "100%", marginTop: 6, marginBottom: 4, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
             />
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot it? Ask your teacher — or add a recovery email once you're in.</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot your PIN? Your teacher can set a new one.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the leaderboard — optional)</span></label>
             {schoolInput !== SOLO_SCHOOL ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
@@ -6317,21 +6324,27 @@ export default function MathsUnlockedBN() {
             </div>
             {forgotOpen && (
               <div style={{ marginTop: 10, padding: 12, border: "1px solid var(--grid)", borderRadius: 10, background: "var(--paper)" }}>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}>
-                  Added a recovery email? Enter it and we&rsquo;ll send a reset link — open it on this device and choose a new PIN. No recovery email? Ask your teacher.
-                </div>
-                <input
-                  value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") submitForgotPin(); }}
-                  type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
-                  style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-                />
-                {forgotMsg && (
-                  <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: forgotMsg.ok === false ? "var(--red)" : forgotMsg.ok ? "var(--green)" : "var(--muted)" }}>{forgotMsg.text}</div>
+                {EMAIL_RECOVERY ? (<>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}>
+                    Added a recovery email? Enter it and we&rsquo;ll send a reset link — open it on this device and choose a new PIN. No recovery email? Ask your teacher.
+                  </div>
+                  <input
+                    value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitForgotPin(); }}
+                    type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
+                    style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                  />
+                  {forgotMsg && (
+                    <div style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: forgotMsg.ok === false ? "var(--red)" : forgotMsg.ok ? "var(--green)" : "var(--muted)" }}>{forgotMsg.text}</div>
+                  )}
+                  <button onClick={submitForgotPin} disabled={!!forgotMsg && forgotMsg.ok === null} style={{ marginTop: 8, width: "100%", padding: "9px 12px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    Send reset link
+                  </button>
+                </>) : (
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+                    Ask your teacher — they can set you a new PIN from the class list. Your progress is safe; only the PIN changes.
+                  </div>
                 )}
-                <button onClick={submitForgotPin} disabled={!!forgotMsg && forgotMsg.ok === null} style={{ marginTop: 8, width: "100%", padding: "9px 12px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                  Send reset link
-                </button>
               </div>
             )}
             {teacherMode && (
@@ -6386,9 +6399,11 @@ export default function MathsUnlockedBN() {
                     <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                       🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
                     </button>
-                    <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
-                    </button>
+                    {EMAIL_RECOVERY && (
+                      <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                        🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
