@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -5119,6 +5119,7 @@ export default function MathsUnlockedBN() {
   const [changePinBusy, setChangePinBusy] = useState(false);
   const [changePinMsg, setChangePinMsg] = useState(null); // { ok, text }
   const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
+  const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -6206,6 +6207,15 @@ export default function MathsUnlockedBN() {
 
   const vars = THEMES[theme] || THEMES.light;
 
+  // Missions = today's daily tasks + unclaimed first-time bonuses. The
+  // header button colours up when something is ready to claim.
+  const missionDay = (profile.daily && profile.daily.date === todayKey()) ? profile.daily : freshDay(profile);
+  const missionTasks = (missionDay.tasks || []).map((id) => TASK_BY_ID[id]).filter(Boolean);
+  const missionMs = MILESTONES.filter((m) => (profile.milestones || {})[m.id] !== "claimed");
+  const missionClaims =
+    missionTasks.filter((t) => taskDone(t, missionDay) && !missionDay.claimed[t.id]).length +
+    missionMs.filter((m) => (profile.milestones || {})[m.id] === "ready").length;
+
   if (!ready) return <div style={{ ...vars, minHeight: 400 }} />;
 
   return (
@@ -6264,18 +6274,32 @@ export default function MathsUnlockedBN() {
                 Question bank
               </button>
             )}
-            {screen !== "login" && screen !== "parent" ? (
-              <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
-                <Settings size={18} />
-              </button>
-            ) : (<>
-              <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-                {soundOn ? "🔊" : "🔇"}
-              </button>
-              <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-                {theme === "dark" ? "☀️" : "🌙"}
-              </button>
-            </>)}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              {screen !== "login" && screen !== "parent" ? (<>
+                <button onClick={() => setMissionsOpen(true)} aria-label="Missions" title="Missions" style={{
+                  position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  border: missionClaims > 0 ? "none" : "1px solid var(--grid)",
+                  background: missionClaims > 0 ? "var(--green)" : "var(--card)",
+                  color: missionClaims > 0 ? "var(--on-accent)" : "var(--muted)",
+                }}>
+                  <ClipboardCheck size={15} />
+                  {missionClaims > 0 && (
+                    <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: "var(--red)", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--paper)", boxSizing: "border-box" }}>{missionClaims}</span>
+                  )}
+                </button>
+                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
+                  <Settings size={18} />
+                </button>
+              </>) : (<>
+                <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                  {soundOn ? "🔊" : "🔇"}
+                </button>
+                <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                  {theme === "dark" ? "☀️" : "🌙"}
+                </button>
+              </>)}
+            </div>
           </div>
         </div>
 
@@ -6505,63 +6529,6 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
             </div>
-
-            {(() => {
-              const day = (profile.daily && profile.daily.date === todayKey()) ? profile.daily : freshDay(profile);
-              const dailyTasks = (day.tasks || []).map((id) => TASK_BY_ID[id]).filter(Boolean);
-              const openMs = MILESTONES.filter((m) => (profile.milestones || {})[m.id] !== "claimed");
-              const xpFor = (id) => (id === "showup" ? DAILY_XP.showup : DAILY_XP.task);
-              const rowStyle = { display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 };
-              return (
-                <div style={{ border: "1px solid var(--grid)", background: "var(--card)", borderRadius: 12, padding: "12px 14px", marginBottom: 20 }}>
-                  <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Today</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {dailyTasks.map((task) => {
-                      const done = taskDone(task, day);
-                      const claimed = !!day.claimed[task.id];
-                      const cur = task.id === "showup" ? 1 : task.progress(day);
-                      return (
-                        <div key={task.id} style={rowStyle}>
-                          <span style={{ fontSize: 14, flexShrink: 0 }}>{claimed ? "✅" : done ? "🟢" : "⚪"}</span>
-                          <div style={{ flex: 1, minWidth: 0, color: claimed ? "var(--muted)" : "var(--ink)" }}>
-                            {typeof task.label === "function" ? task.label(day) : task.label}
-                            {!claimed && !done ? <span style={{ color: "var(--muted)" }}> · {cur}/{task.goal}</span> : ""}
-                          </div>
-                          {claimed ? (
-                            <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700, flexShrink: 0 }}>+{xpFor(task.id)} XP</span>
-                          ) : done ? (
-                            <button onClick={() => claimDailyTask(task.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
-                              Claim +{xpFor(task.id)}
-                            </button>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {openMs.length > 0 && (
-                    <>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" }}>First-time bonuses</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {openMs.map((m) => {
-                          const st = (profile.milestones || {})[m.id];
-                          return (
-                            <div key={m.id} style={rowStyle}>
-                              <span style={{ fontSize: 14, flexShrink: 0 }}>{st === "ready" ? "🟢" : "⚪"}</span>
-                              <div style={{ flex: 1, minWidth: 0 }}>{m.label}</div>
-                              {st === "ready" && (
-                                <button onClick={() => claimMilestone(m.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>
-                                  Claim +{MILESTONE_XP}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })()}
 
             {(() => {
               const lvl = levelFromExp(totalExp(profile));
@@ -7652,6 +7619,77 @@ export default function MathsUnlockedBN() {
                 ))}
                 {hits.length === 0 && <div style={{ padding: "9px 12px", fontSize: 12.5, color: "var(--muted)" }}>No match.</div>}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {missionsOpen && (() => {
+        const xpFor = (id) => (id === "showup" ? DAILY_XP.showup : DAILY_XP.task);
+        const rowStyle = { display: "flex", alignItems: "center", gap: 10, fontSize: 13 };
+        const nothing = missionClaims === 0;
+        return (
+          <div onClick={() => setMissionsOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Missions</span>
+                <button onClick={() => setMissionsOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}>
+                  <XIcon size={16} />
+                </button>
+              </div>
+
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Today</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {missionTasks.map((task) => {
+                  const done = taskDone(task, missionDay);
+                  const claimed = !!missionDay.claimed[task.id];
+                  const cur = task.id === "showup" ? 1 : task.progress(missionDay);
+                  return (
+                    <div key={task.id} style={rowStyle}>
+                      <span style={{ fontSize: 14, flexShrink: 0 }}>{claimed ? "✅" : done ? "🟢" : "⚪"}</span>
+                      <div style={{ flex: 1, minWidth: 0, color: claimed ? "var(--muted)" : "var(--ink)" }}>
+                        {typeof task.label === "function" ? task.label(missionDay) : task.label}
+                        {!claimed && !done ? <span style={{ color: "var(--muted)" }}> · {cur}/{task.goal}</span> : ""}
+                      </div>
+                      {claimed ? (
+                        <span style={{ fontSize: 11, color: "var(--green)", fontWeight: 700, flexShrink: 0 }}>+{xpFor(task.id)} XP</span>
+                      ) : done ? (
+                        <button onClick={() => claimDailyTask(task.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer", flexShrink: 0 }}>
+                          Claim +{xpFor(task.id)}
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {missionMs.length > 0 && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "16px 0 8px" }}>First-time bonuses</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {missionMs.map((m) => {
+                      const st = (profile.milestones || {})[m.id];
+                      return (
+                        <div key={m.id} style={rowStyle}>
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{st === "ready" ? "🟢" : "⚪"}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>{m.label}</div>
+                          {st === "ready" && (
+                            <button onClick={() => claimMilestone(m.id)} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer", flexShrink: 0 }}>
+                              Claim +{MILESTONE_XP}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {nothing && (
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 14, textAlign: "center" }}>
+                  Nothing to claim right now — keep practising and check back.
+                </div>
+              )}
             </div>
           </div>
         );
