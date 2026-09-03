@@ -5,7 +5,7 @@ import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
   addRecoveryEmail, sendPinReset, completePinReset, onPasswordRecovery,
-  teacherResetPin,
+  teacherResetPin, changePin,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -5113,6 +5113,11 @@ export default function MathsUnlockedBN() {
   const [recEmail, setRecEmail] = useState("");
   const [recBusy, setRecBusy] = useState(false);
   const [recMsg, setRecMsg] = useState(null); // { ok, text }
+  const [changePinOpen, setChangePinOpen] = useState(false);
+  const [pin1, setPin1] = useState("");
+  const [pin2, setPin2] = useState("");
+  const [changePinBusy, setChangePinBusy] = useState(false);
+  const [changePinMsg, setChangePinMsg] = useState(null); // { ok, text }
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -5637,6 +5642,27 @@ export default function MathsUnlockedBN() {
       flash(e && e.message ? e.message : "Couldn't set the new PIN.");
     }
     setResetBusy(false);
+  }
+
+  // A signed-in student changes their own PIN.
+  async function submitChangePin() {
+    if (changePinBusy) return;
+    if (!/^\d{6}$/.test(pin1)) { setChangePinMsg({ ok: false, text: "Enter a 6-digit PIN." }); return; }
+    if (pin1 !== pin2) { setChangePinMsg({ ok: false, text: "The two PINs don't match." }); return; }
+    if (pin1 === profile.pin) { setChangePinMsg({ ok: false, text: "That's already your PIN." }); return; }
+    setChangePinBusy(true);
+    setChangePinMsg(null);
+    try {
+      await changePin(profile.name, pin1);
+      const next = { ...profile, pin: pin1 };
+      setProfile(next);
+      await persistProfile(next);
+      setChangePinMsg({ ok: true, text: "Done. Use your new PIN next time you log in." });
+      setPin1(""); setPin2("");
+    } catch (e) {
+      setChangePinMsg({ ok: false, text: e && e.message ? e.message : "Couldn't change the PIN." });
+    }
+    setChangePinBusy(false);
   }
 
   // "Add PIN recovery" — attach an email (only). Password is untouched, so
@@ -6398,6 +6424,9 @@ export default function MathsUnlockedBN() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0 16px", marginBottom: 12 }}>
                     <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                       🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
+                    </button>
+                    <button onClick={() => { setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      🔒 Change PIN
                     </button>
                     {EMAIL_RECOVERY && (
                       <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
@@ -7628,6 +7657,43 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {changePinOpen && (
+        <div onClick={() => setChangePinOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Change your PIN</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+              Pick a new 6-digit PIN. You&rsquo;ll use it with your name to log in from now on. Your progress isn&rsquo;t affected.
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>New PIN</label>
+            <input
+              value={pin1} onChange={(e) => setPin1(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              inputMode="numeric" placeholder="6 digits"
+              style={{ width: "100%", marginTop: 6, marginBottom: 12, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
+            />
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Confirm new PIN</label>
+            <input
+              value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={(e) => { if (e.key === "Enter") submitChangePin(); }}
+              inputMode="numeric" placeholder="6 digits"
+              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
+            />
+            {changePinMsg && (
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: changePinMsg.ok ? "var(--green)" : "var(--red)" }}>{changePinMsg.text}</div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setChangePinOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>
+                {changePinMsg && changePinMsg.ok ? "Done" : "Cancel"}
+              </button>
+              {!(changePinMsg && changePinMsg.ok) && (
+                <button onClick={submitChangePin} disabled={changePinBusy || !/^\d{6}$/.test(pin1) || pin1 !== pin2} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: changePinBusy || !/^\d{6}$/.test(pin1) || pin1 !== pin2 ? 0.6 : 1 }}>
+                  {changePinBusy ? "Saving…" : "Change PIN"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {recoveryOpen && (
         <div onClick={() => setRecoveryOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
