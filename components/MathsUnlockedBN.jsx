@@ -1543,7 +1543,7 @@ function WritePad({ onInsert, onConfirm, onClose, mode }) {
           <button onClick={onClose} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Cancel</button>
         </div>
         <canvas ref={canvasRef} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
-          style={{ width: "100%", height: 200, display: "block", background: "#fff", border: "1.5px dashed #c9d2da", borderRadius: 10, touchAction: "none", cursor: "crosshair" }} />
+          style={{ width: "100%", height: 240, display: "block", background: "#fff", border: "1.5px dashed #c9d2da", borderRadius: 10, touchAction: "none", cursor: "crosshair" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", minHeight: 28 }}>
           <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }}>Reads as</span>
           <span className="mub-mono" style={{ fontSize: 19, fontWeight: 700, color: "var(--ink)", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
@@ -1562,7 +1562,7 @@ function WritePad({ onInsert, onConfirm, onClose, mode }) {
           </button>
         </div>
         <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.4 }}>
-          Write left to right with a small gap between characters. It won&rsquo;t always be perfect — check the reading first. <b>Submit</b> uses it straight away; <b>Insert to text box</b> lets you edit it before checking.
+          Write left to right with a small gap between characters. For a power, write it small and raised, like 2<sup style={{ fontSize: "0.7em" }}>3</sup>. For a fraction, write the top number, a line under it, then the bottom number. It won&rsquo;t always be perfect — check the reading first. <b>Submit</b> uses it straight away; <b>Insert to text box</b> lets you edit it before checking.
         </div>
       </div>
     </div>
