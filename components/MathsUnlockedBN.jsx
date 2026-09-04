@@ -7029,28 +7029,22 @@ export default function MathsUnlockedBN() {
               <div style={{ marginTop: 14 }}>
                 <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} onOpenUnlocks={() => setUnlocksOpen(true)} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                {(() => {
-                  const n = (profile.keys || 0) + (profile.hints || 0) + (profile.shields || 0) + (profile.boosts || 0);
-                  return (
-                    <button onClick={() => setInventoryOpen(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)" }}>
-                      🎒 Inventory
-                      {n > 0 && <span style={{ marginLeft: 6, fontWeight: 800, color: "var(--ink)" }}>{n}</span>}
-                    </button>
-                  );
-                })()}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, maxWidth: 460 }}>
+                <button onClick={() => setInventoryOpen(true)} style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  🎒 Inventory
+                </button>
                 {myLevel >= PERKS.compound.lv && (
-                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)" }}>
+                  <button onClick={() => setPerksOpen(true)} style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)" }}>
                     🎖 Perks
                     <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
                   </button>
                 )}
-                {(profile.boostUntil || 0) > Date.now() && (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--green)" }}>
-                    ⚡ ×2 XP · {Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000))} min left
-                  </span>
-                )}
               </div>
+              {(profile.boostUntil || 0) > Date.now() && (
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--green)", marginTop: 6 }}>
+                  ⚡ ×2 XP · {Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000))} min left
+                </div>
+              )}
 
               {teacherMode && (
                 <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
