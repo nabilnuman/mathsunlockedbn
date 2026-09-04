@@ -4726,7 +4726,14 @@ const SOUND_PACKS = {
   retro: { name: "Retro", lv: 15 },
   bell: { name: "Bell", lv: 19 },
 };
-const PERK_LV = { compound: 7, momentum: 11, quick: 14, forgive: 18 };
+// Equippable perks (2 slots). Applied in submitAnswer; Momentum also in Blitz.
+const PERKS = {
+  compound: { name: "Compound Interest", icon: "📈", lv: 7,  desc: "Longer streaks pay more XP (+1 per 4 in a row, up to +6)" },
+  momentum: { name: "Momentum",          icon: "🔗", lv: 11, desc: "Every 5th correct in a row scores double base XP" },
+  quick:    { name: "Quick Study",        icon: "⚡", lv: 14, desc: "Answer correctly in under 8 seconds for +2 XP" },
+  forgive:  { name: "Error Correction",   icon: "🛟", lv: 18, desc: "Your first slip in each topic each day doesn't break your streak" },
+};
+const PERK_IDS = Object.keys(PERKS);
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
 
@@ -4746,10 +4753,7 @@ function unlocksAtLevel(L) {
   if (bs > bannerSlots(L - 1)) out.push(`Banner slot ${bs}`);
   if (L === SKETCH_LV) out.push("Rough-working pad");
   if (L === WRITE_LV) out.push("Handwriting input");
-  if (PERK_LV.compound === L) out.push("Perk · Compound Interest");
-  if (PERK_LV.momentum === L) out.push("Perk · Momentum");
-  if (PERK_LV.quick === L) out.push("Perk · Quick Study");
-  if (PERK_LV.forgive === L) out.push("Perk · Error Correction");
+  Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
   if (L % 5 === 0) out.push("🔑 Skeleton Key");
   if (L % 4 === 0) out.push("⚡ ×2 XP Boost");
   out.push("💡 +1 Hint coin");
@@ -5234,6 +5238,7 @@ export default function MathsUnlockedBN() {
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
+  const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -5638,7 +5643,10 @@ export default function MathsUnlockedBN() {
     if (newBest) n.blitzBest = sc;
     const before = totalExp(n);
     if (sc > 0) {
-      const gain = sc * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
+      const perks = (n.perks || []).filter((p) => PERKS[p]);
+      let units = sc;
+      if (perks.includes("momentum")) units += Math.floor(sc / 5); // every 5th doubled
+      const gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
       n.bonusExp = (n.bonusExp || 0) + gain;
       bumpWeek(n, gain);
     }
@@ -5942,6 +5950,18 @@ export default function MathsUnlockedBN() {
     startTimeRef.current = Date.now();
   }
 
+  // Equip / unequip a perk (max 2). Ignores locked perks.
+  function togglePerk(id) {
+    const p = PERKS[id];
+    if (!p || levelFromExp(totalExp(profile)) < p.lv) return;
+    patchProfile((prev) => {
+      const cur = (prev.perks || []).filter((x) => PERKS[x]);
+      if (cur.includes(id)) return { perks: cur.filter((x) => x !== id) };
+      if (cur.length >= 2) return {};
+      return { perks: [...cur, id] };
+    });
+  }
+
   // Spend a Hint coin to reveal the first working step for this question.
   function doHint() {
     if (hintShown || feedback || !question) return;
@@ -6046,9 +6066,19 @@ export default function MathsUnlockedBN() {
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const rankBefore = ((profile.topics || {})[scoredId] || {}).highestRank ?? -1;
     const next = JSON.parse(JSON.stringify(profile));
+    const d = ensureDay(next);
+    const perks = (profile.perks || []).filter((p) => PERKS[p]);
+
+    // Error Correction perk: the first wrong answer in each topic per day
+    // is forgiven — streak, topic history and consec-wrong stay untouched.
+    const forgiven = !correct && perks.includes("forgive") && !(d.forgiven || []).includes(scoredId);
+    if (forgiven) d.forgiven = [...(d.forgiven || []), scoredId];
+
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
-    t.history = [...t.history, correct ? 1 : 0].slice(-10);
-    t.streak = correct ? (t.streak || 0) + 1 : 0;
+    if (!forgiven) {
+      t.history = [...t.history, correct ? 1 : 0].slice(-10);
+      t.streak = correct ? (t.streak || 0) + 1 : 0;
+    }
     let candidateIdx = rankIndexForAvg(avgFromHistory(t.history));
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
@@ -6061,12 +6091,13 @@ export default function MathsUnlockedBN() {
     if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
 
     // Daily-task progress
-    const d = ensureDay(next);
     if (!(d.topics || []).includes(scoredId)) d.topics = [...(d.topics || []), scoredId];
     if (activeTopic.id === MIXED_TOPIC.id) {
       d.mixedRounds = Math.max(d.mixedRounds || 0, 1);
-      next.mixedStreak = correct ? (next.mixedStreak || 0) + 1 : 0;      // "Jack of All Trades"
-      next.bestMixedStreak = Math.max(next.bestMixedStreak || 0, next.mixedStreak);
+      if (!forgiven) {
+        next.mixedStreak = correct ? (next.mixedStreak || 0) + 1 : 0;      // "Jack of All Trades"
+        next.bestMixedStreak = Math.max(next.bestMixedStreak || 0, next.mixedStreak);
+      }
     }
 
     if (correct) {
@@ -6084,10 +6115,18 @@ export default function MathsUnlockedBN() {
       d.streakToday = (d.streakToday || 0) + 1;
       d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
       if (scoredId === d.weakTopicId) d.weakCorrect = (d.weakCorrect || 0) + 1;
-      // small XP for every correct answer — doubled while a ×2 XP Boost is running
+      // XP for a correct answer. Base is doubled by a ×2 Boost and, with
+      // Momentum, on every 5th answer in a row. Compound Interest adds more
+      // the longer the streak; Quick Study rewards a sub-8-second answer.
       const boosted = (profile.boostUntil || 0) > Date.now();
-      next.bonusExp = (next.bonusExp || 0) + CORRECT_XP * (boosted ? 2 : 1);
-    } else {
+      let base = CORRECT_XP;
+      if (perks.includes("momentum") && (next.streak || 0) % 5 === 0) base *= 2;
+      if (boosted) base *= 2;
+      let gain = base;
+      if (perks.includes("compound")) gain += Math.min(6, Math.floor((next.streak || 0) / 4));
+      if (perks.includes("quick") && elapsed < 8) gain += 2;
+      next.bonusExp = (next.bonusExp || 0) + gain;
+    } else if (!forgiven) {
       next.streak = 0;
       next.consecWrong = (next.consecWrong || 0) + 1;
       d.streakToday = 0;
@@ -6113,7 +6152,7 @@ export default function MathsUnlockedBN() {
     if (bonusSound) playJingle(!!leveledTo);
     else if (correct) playCorrect();
     if (!correct) playWrong();
-    setFeedback({ correct, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp });
     saveProfile(next);
   }
 
@@ -6635,6 +6674,12 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
                 <span><span style={{ fontSize: 15 }}>🔑</span> <b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
                 <span><span style={{ fontSize: 15 }}>💡</span> <b style={{ color: "var(--ink)" }}>{profile.hints || 0}</b> Hint coin{(profile.hints || 0) === 1 ? "" : "s"}</span>
+                {myLevel >= PERKS.compound.lv && (
+                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                    🎖 Perks
+                    <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("") || "—"}</span>
+                  </button>
+                )}
                 <button onClick={() => setUnlocksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>see all unlocks</button>
               </div>
 
@@ -7346,6 +7391,11 @@ export default function MathsUnlockedBN() {
                       {feedback.correct ? <Check size={15} /> : <XIcon size={15} />}
                       {feedback.correct ? "CORRECT" : "TRY AGAIN"}
                     </div>
+                    {feedback.forgiven && (
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--blue)", display: "flex", alignItems: "center", gap: 4 }}>
+                        🛟 Error Correction — streak safe
+                      </div>
+                    )}
                     {feedback.rankedUp && (() => {
                       const ri = RANK_ORDER.indexOf(feedback.rankedUp.to);
                       const rc = rankDisplay(ri).color;
@@ -7819,6 +7869,45 @@ export default function MathsUnlockedBN() {
                   <button key={s} type="button" onClick={() => setSchoolAndClose(s)} style={row}>{s}</button>
                 ))}
                 {hits.length === 0 && <div style={{ padding: "9px 12px", fontSize: 12.5, color: "var(--muted)" }}>No match.</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {perksOpen && (() => {
+        const equipped = (profile.perks || []).filter((p) => PERKS[p]);
+        return (
+          <div onClick={() => setPerksOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Perks</span>
+                <button onClick={() => setPerksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || myLevel >= PERKS.momentum.lv ? " (Momentum works in Blitz too)" : ""}. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {PERK_IDS.map((id) => {
+                  const p = PERKS[id];
+                  const owned = myLevel >= p.lv;
+                  const on = equipped.includes(id);
+                  const full = !on && equipped.length >= 2;
+                  return (
+                    <button key={id} type="button" disabled={!owned || full} onClick={() => togglePerk(id)} style={{
+                      display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 10, cursor: owned && !full ? "pointer" : "default",
+                      background: on ? "var(--paper)" : "transparent",
+                      border: `1.5px solid ${on ? "var(--green)" : "var(--grid)"}`,
+                      opacity: owned ? (full ? 0.55 : 1) : 0.5,
+                    }}>
+                      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>{owned ? p.icon : "🔒"}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</span>
+                        {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · Level {p.lv}</span>}
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{p.desc}</div>
+                      </span>
+                      <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 800, flexShrink: 0 }}>{on ? "✓" : ""}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
