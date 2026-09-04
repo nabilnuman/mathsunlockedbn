@@ -5437,6 +5437,7 @@ export default function MathsUnlockedBN() {
   const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
   const [achOpen, setAchOpen] = useState(false); // Achievements overlay
+  const [achHideDone, setAchHideDone] = useState(false); // hide earned achievements
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
@@ -8156,18 +8157,25 @@ export default function MathsUnlockedBN() {
               </span>
               <button onClick={() => setAchOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
             </div>
+            <button onClick={() => setAchHideDone((v) => !v)} style={{
+              fontSize: 12, fontWeight: 600, marginBottom: 14, cursor: "pointer",
+              color: achHideDone ? "var(--on-accent)" : "var(--muted)",
+              background: achHideDone ? "var(--blue)" : "none",
+              border: `1px solid ${achHideDone ? "var(--blue)" : "var(--grid)"}`, borderRadius: 999, padding: "5px 12px",
+            }}>{achHideDone ? "✓ Hiding completed" : "Hide completed"}</button>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {TIERS.map((tier) => {
-                const items = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                const all = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                const items = achHideDone ? all.filter((a) => !(profile.achievements || []).includes(a.id)) : all;
                 if (!items.length) return null;
                 const tc = TIER_COLOR[tier];
-                const earned = items.filter((a) => (profile.achievements || []).includes(a.id)).length;
+                const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
                 return (
                   <div key={tier}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
                       <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
-                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{items.length}</span>
+                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{all.length}</span>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {items.map((a) => {
@@ -8193,6 +8201,9 @@ export default function MathsUnlockedBN() {
                   </div>
                 );
               })}
+              {achHideDone && (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length === ACHIEVEMENTS.length && (
+                <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "8px 0" }}>Every achievement earned. 🎉</div>
+              )}
             </div>
           </div>
         </div>
