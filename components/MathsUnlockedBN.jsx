@@ -233,6 +233,18 @@ function surdStr(c, d) {
   if (c === 1) return `√${d}`;
   return `${c}√${d}`;
 }
+// A surd answer must be numerically right AND fully simplified: if it's
+// written as k√m, m must be square-free (no perfect-square factor). Plain
+// numbers / decimals just have to match on value.
+function checkSimplifiedSurd(input, answer) {
+  const s = String(input).replace(/\s|\*|·/g, "").replace(/sqrt/gi, "√").replace(/√\((\d+)\)/g, "√$1");
+  const m = s.match(/^-?\d*√(\d+)$/);
+  if (m) {
+    const rad = parseInt(m[1], 10);
+    for (let f = 2; f * f <= rad; f++) if (rad % (f * f) === 0) return false;
+  }
+  return checkEquivalent(input, answer);
+}
 // Standard form helpers. Accepts a*10^b, a×10^b, a x 10^b, aEb.
 function parseSF(s) {
   const t = String(s).replace(/\s|,/g, "").replace(/×/g, "*").replace(/x10/gi, "*10");
@@ -1718,6 +1730,7 @@ const TOPICS = [
         () => { // simplify √N
           const k = randInt(2, 6), b = [2, 3, 5, 6, 7, 10, 11][randInt(0, 6)];
           return { prompt: `Simplify:   √${k * k * b}`, answer: surdStr(k, b), hint: surdHint,
+            check: (inp) => checkSimplifiedSurd(inp, surdStr(k, b)),
             steps: [`Find the biggest square factor: ${k * k * b} = ${k * k} × ${b}`, `√${k * k * b} = √${k * k} × √${b} = ${k}√${b}`] };
         },
         () => { // √a × √b, product a perfect square → whole number
@@ -1729,9 +1742,12 @@ const TOPICS = [
             steps: [`Multiply under one root: √${a} × √${b} = √(${a} × ${b}) = √${sq}`, `√${sq} = ${r}`] };
         },
         () => { // p√a × q√b → simplified surd
-          const p = randInt(1, 3), q = randInt(1, 3), a = randInt(2, 7), b = randInt(2, 7);
+          const p = randInt(1, 3), q = randInt(1, 3);
+          const pool = [2, 3, 5, 6, 7]; // non-square radicands
+          const a = pool[randInt(0, 4)], b = pool[randInt(0, 4)];
           const { c, d } = surdParts(p * q, a * b);
           return { prompt: `Simplify:   ${surdStr(p, a)} × ${surdStr(q, b)}`, answer: surdStr(c, d), hint: surdHint,
+            check: (inp) => checkSimplifiedSurd(inp, surdStr(c, d)),
             steps: [`Multiply the numbers and the roots separately: ${p} × ${q} = ${p * q},  √${a} × √${b} = √${a * b}`, `${p * q}√${a * b}${d === a * b ? "" : ` = ${surdStr(c, d)}`}`] };
         },
         () => { // rationalise a / √b
@@ -6749,8 +6765,9 @@ export default function MathsUnlockedBN() {
                     <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: "var(--red)", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--paper)", boxSizing: "border-box" }}>{missionClaims}</span>
                   )}
                 </button>
-                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
+                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ position: "relative", display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
                   <Settings size={18} />
+                  {newIconCount > 0 && <span style={{ position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
               </>) : (<>
                 <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -6900,32 +6917,27 @@ export default function MathsUnlockedBN() {
         {screen === "dashboard" && (
           <div>
             <div style={{ marginBottom: 18 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-                <div>
-                  <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, <span style={nameStyleOf(profile)}>{profile.name}</span></div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button onClick={() => setShowCard(true)} style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, borderRadius: "50%" }}>
+                  <MiniAvatar profile={profile} size={46} />
+                  {newIconCount > 0 && <span style={{ position: "absolute", top: 0, right: 0, width: 12, height: 12, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
+                </button>
+                <button onClick={() => setShowCard(true)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minWidth: 0, flex: 1 }}>
+                  <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>Hi, <span style={nameStyleOf(profile)}>{profile.name}</span></div>
+                  <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
-                    <span>· Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</span>
+                    <span>· Current streak: {profile.streak || 0} 🔥</span>
                   </div>
-                  {EMAIL_RECOVERY && (
-                    <div style={{ marginBottom: 12 }}>
-                      <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                        🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-                  <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
-                    Parent link
-                  </button>
-                  <button onClick={() => setShowCard(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
-                    Profile
-                    {newIconCount > 0 && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
-                  </button>
-                </div>
+                </button>
               </div>
+              {EMAIL_RECOVERY && (
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                    🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
+                  </button>
+                </div>
+              )}
               <div style={{ marginTop: 14 }}>
                 <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} onOpenUnlocks={() => setUnlocksOpen(true)} />
               </div>
@@ -8357,16 +8369,21 @@ export default function MathsUnlockedBN() {
               </button>
             </div>
             {[
+              { icon: "🪪", label: "Profile", dot: newIconCount > 0, chevron: true, onClick: () => { setSettingsOpen(false); setShowCard(true); } },
               { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
               { icon: theme === "dark" ? "🌙" : "☀️", label: "Appearance", value: theme === "dark" ? "Dark" : "Light", onClick: toggleTheme },
               { icon: "🏫", label: "School", value: profile.school && profile.school !== SOLO_SCHOOL ? "Set" : "None", chevron: true, onClick: () => { setSettingsOpen(false); setSchoolEditQuery(""); setShowSchool(true); } },
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
+              { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
             ].map((it, i) => (
               <button key={i} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 16px", background: "none", border: "none", borderTop: "1px solid var(--grid)", cursor: "pointer", color: it.danger ? "var(--red)" : "var(--ink)", textAlign: "left" }}>
                 <span style={{ fontSize: 17, width: 22, textAlign: "center", flexShrink: 0 }}>{it.icon}</span>
-                <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{it.label}</span>
+                <span style={{ flex: 1, fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                  {it.label}
+                  {it.dot && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--red)" }} />}
+                </span>
                 {it.value != null && <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>{it.value}</span>}
                 {it.chevron && <span style={{ fontSize: 13, color: "var(--muted)" }}>›</span>}
               </button>
