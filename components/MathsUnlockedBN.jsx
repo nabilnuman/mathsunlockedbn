@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Users } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -5385,7 +5385,7 @@ const emptyProfile = () => ({
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
-  cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [],
+  cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5523,6 +5523,7 @@ export default function MathsUnlockedBN() {
   const [friendGraph, setFriendGraph] = useState({ friends: [], incoming: [], outgoing: [] });
   const [friendPeople, setFriendPeople] = useState({});      // uid -> public profile
   const [friendBusy, setFriendBusy] = useState(null);        // uid mid-action
+  const [friendFind, setFriendFind] = useState(false);       // friends screen: search sub-view
   const [confirmPrestige, setConfirmPrestige] = useState(false);
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
@@ -5608,6 +5609,7 @@ export default function MathsUnlockedBN() {
             setScreen("dashboard");
           }
           await loadCustomQuestions(); // shared reads need a session
+          refreshFriends();
         }
       } catch (e) { /* not signed in, or no saved profile yet */ }
       setReady(true);
@@ -6014,6 +6016,7 @@ export default function MathsUnlockedBN() {
       if (!Array.isArray(prof.seenIcons)) prof.seenIcons = unlockedAvatarIds(prof);
       await saveProfile(prof);
       loadCustomQuestions(); // shared reads need a session
+      refreshFriends();
       setScreen("dashboard");
     } catch (e) {
       setStartError(e && e.message ? e.message : "Could not sign in. Try again.");
@@ -6531,11 +6534,28 @@ export default function MathsUnlockedBN() {
 
   function openFriends() {
     setFriendView(null);
+    setFriendFind(false);
     setFriendResults(null);
     setFriendQuery("");
     setScreen("friends");
     refreshFriends();
   }
+
+  // Leaving the Friends screen clears the "new friend" dots.
+  const prevScreenRef = useRef("login");
+  useEffect(() => {
+    if (prevScreenRef.current === "friends" && screen !== "friends") {
+      const seen = friendGraph.friends;
+      if (seen.some((u) => !(profileRef.current.seenFriends || []).includes(u))) {
+        patchProfile(() => ({ seenFriends: seen }));
+      }
+    }
+    prevScreenRef.current = screen;
+  }, [screen, friendGraph]);
+
+  const friendAlert =
+    (friendGraph.incoming || []).length > 0 ||
+    (friendGraph.friends || []).some((u) => !(profile.seenFriends || []).includes(u));
 
   async function refreshFriends() {
     try {
@@ -6790,11 +6810,6 @@ export default function MathsUnlockedBN() {
                 Leaderboard
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && screen !== "friends" && (
-              <button onClick={openFriends} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
-                Find friends
-              </button>
-            )}
             {screen !== "login" && screen !== "parent" && teacherMode && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
@@ -6807,6 +6822,14 @@ export default function MathsUnlockedBN() {
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               {screen !== "login" && screen !== "parent" ? (<>
+                <button onClick={openFriends} aria-label="Friends" title="Friends" style={{
+                  position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
+                }}>
+                  <Users size={15} />
+                  {friendAlert && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
+                </button>
                 <button onClick={() => setAchOpen(true)} aria-label="Achievements" title="Achievements" style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
@@ -7782,11 +7805,11 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
-        {/* FIND A FRIEND */}
+        {/* FRIENDS */}
         {screen === "friends" && (
           <div>
-            <button onClick={() => { if (friendView) setFriendView(null); else setScreen("dashboard"); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
-              <ArrowLeft size={14} /> {friendView ? "back to results" : "back"}
+            <button onClick={() => { if (friendView) setFriendView(null); else if (friendFind) setFriendFind(false); else setScreen("dashboard"); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+              <ArrowLeft size={14} /> {friendView ? "back" : friendFind ? "my friends" : "back"}
             </button>
             {friendView ? (
               <div>
@@ -7811,47 +7834,56 @@ export default function MathsUnlockedBN() {
                 })()}
                 <StudentProfileView profile={friendView} />
               </div>
-            ) : (
+            ) : !friendFind ? (
               <div>
                 {(() => {
-                  const rows = (uids, actions) => uids.map((uid) => {
+                  const seen = profile.seenFriends || [];
+                  const row = (uid, actions, showDot) => {
                     const p = friendPeople[uid];
                     return (
-                      <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 10 }}>
+                      <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 10, position: "relative" }}>
+                        {showDot && <span style={{ position: "absolute", top: -4, left: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
                         {p ? <MiniAvatar profile={p} size={30} /> : <span style={{ width: 30, flexShrink: 0 }} />}
                         <button onClick={() => p && setFriendView(p)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", cursor: p ? "pointer" : "default", padding: 0, color: "var(--ink)" }}>
                           <div style={{ fontWeight: 700, fontSize: 13 }}>{p ? p.name : "Student"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p ? `Lv ${levelFromExp(totalExp(p))}${p.school && p.school !== SOLO_SCHOOL ? ` · ${p.school}` : ""}` : ""}</div>
                         </button>
-                        {actions(uid)}
+                        {actions}
                       </div>
                     );
-                  });
+                  };
                   return (<>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 10 }}>
+                      <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Friends <span style={{ fontSize: 13, fontWeight: 500, color: "var(--muted)" }}>{friendGraph.friends.length}</span></div>
+                      <button onClick={() => { setFriendFind(true); setFriendResults(null); setFriendQuery(""); }} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "7px 13px", cursor: "pointer", flexShrink: 0 }}>Find friends</button>
+                    </div>
                     {friendGraph.incoming.length > 0 && (<>
-                      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Friend requests <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>{friendGraph.incoming.length}</span></div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Requests</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                        {rows(friendGraph.incoming, (uid) => (
+                        {friendGraph.incoming.map((uid) => row(uid, (
                           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                             <button onClick={() => doFriendAction("accept", uid)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>Accept</button>
                             <button onClick={() => doFriendAction("remove", uid)} aria-label="Decline" style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>✕</button>
                           </div>
-                        ))}
+                        ), true))}
                       </div>
                     </>)}
-                    <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>My friends <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>{friendGraph.friends.length}</span></div>
                     {friendGraph.friends.length === 0 ? (
-                      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 20 }}>No friends yet — search below and send a request.</div>
+                      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 20 }}>No friends yet. Tap <b>Find friends</b> to search and send a request.</div>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>{rows(friendGraph.friends, () => null)}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                        {friendGraph.friends.map((uid) => row(uid, null, !seen.includes(uid)))}
+                      </div>
                     )}
                     {friendGraph.outgoing.length > 0 && (
                       <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 16 }}>{friendGraph.outgoing.length} request{friendGraph.outgoing.length === 1 ? "" : "s"} sent, waiting for a reply.</div>
                     )}
                   </>);
                 })()}
-
-                <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Add a friend</div>
+              </div>
+            ) : (
+              <div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Find friends</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>Search by name, open a profile, then send a request.</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <input
