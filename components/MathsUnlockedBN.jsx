@@ -5428,6 +5428,7 @@ export default function MathsUnlockedBN() {
   const [schoolEditQuery, setSchoolEditQuery] = useState("");
   const [devTopic, setDevTopic] = useState(TOPICS[0].id);
   const [devJingle, setDevJingle] = useState("achievement"); // dev-tools jingle picker
+  const [devOpen, setDevOpen] = useState(false); // dev-tools panel collapsed by default
   const [toast, setToast] = useState(null);
   const [activeTopic, setActiveTopic] = useState(null);
   const [question, setQuestion] = useState(null);
@@ -6869,23 +6870,20 @@ export default function MathsUnlockedBN() {
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
                     <span>· Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</span>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0 16px", marginBottom: 12 }}>
-                    <button onClick={() => { setSchoolEditQuery(""); setShowSchool(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                      🏫 {profile.school && profile.school !== SOLO_SCHOOL ? profile.school : "Add your school"}
-                    </button>
-                    {EMAIL_RECOVERY && (
+                  {EMAIL_RECOVERY && (
+                    <div style={{ marginBottom: 12 }}>
                       <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                         🔑 {profile.recoveryEmail ? `Recovery: ${profile.recoveryEmail}` : "Add PIN recovery"}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
                   <button onClick={openParentLink} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
                     Parent link
                   </button>
                   <button onClick={() => setShowCard(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
-                    Share card
+                    Profile
                     {newIconCount > 0 && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
                   </button>
                 </div>
@@ -6903,7 +6901,6 @@ export default function MathsUnlockedBN() {
                     <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("") || "—"}</span>
                   </button>
                 )}
-                <button onClick={() => setUnlocksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>see all unlocks</button>
               </div>
 
               {(() => {
@@ -6933,8 +6930,12 @@ export default function MathsUnlockedBN() {
 
               {teacherMode && (
                 <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
-                  <div style={{ fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>🛠 Teacher / dev tools <span style={{ fontWeight: 400, color: "var(--muted)" }}>— affects your own account</span></div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <button onClick={() => setDevOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 700, color: "var(--amber)" }}>
+                    <span>🛠 Teacher / dev tools <span style={{ fontWeight: 400, color: "var(--muted)" }}>— affects your own account</span></span>
+                    <span style={{ transform: devOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▸</span>
+                  </button>
+                  {devOpen && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
                     {(() => {
                       const b = { fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" };
                       return (
@@ -6972,6 +6973,7 @@ export default function MathsUnlockedBN() {
                       );
                     })()}
                   </div>
+                  )}
                 </div>
               )}
             </div>
@@ -8263,6 +8265,7 @@ export default function MathsUnlockedBN() {
             {[
               { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
               { icon: theme === "dark" ? "🌙" : "☀️", label: "Appearance", value: theme === "dark" ? "Dark" : "Light", onClick: toggleTheme },
+              { icon: "🏫", label: "School", value: profile.school && profile.school !== SOLO_SCHOOL ? "Set" : "None", chevron: true, onClick: () => { setSettingsOpen(false); setSchoolEditQuery(""); setShowSchool(true); } },
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
