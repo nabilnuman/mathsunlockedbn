@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
   addRecoveryEmail, sendPinReset, completePinReset, onPasswordRecovery,
   teacherResetPin, changePin,
+  sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -5519,6 +5520,9 @@ export default function MathsUnlockedBN() {
   const [friendResults, setFriendResults] = useState(null); // null = not searched yet
   const [friendLoading, setFriendLoading] = useState(false);
   const [friendView, setFriendView] = useState(null);       // a selected student's profile
+  const [friendGraph, setFriendGraph] = useState({ friends: [], incoming: [], outgoing: [] });
+  const [friendPeople, setFriendPeople] = useState({});      // uid -> public profile
+  const [friendBusy, setFriendBusy] = useState(null);        // uid mid-action
   const [confirmPrestige, setConfirmPrestige] = useState(false);
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
@@ -5654,6 +5658,21 @@ export default function MathsUnlockedBN() {
   function flash(msg) {
     setToast(msg);
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
+  }
+
+  // No repeats within a run of 20: re-roll a question whose prompt+answer
+  // matches one of the last 20. Falls back to whatever comes up after a
+  // bounded number of tries (small topics may not have 21 distinct Qs).
+  const recentQRef = useRef([]);
+  function freshQuestion(pick) {
+    let q, sig = "";
+    for (let i = 0; i < 45; i++) {
+      q = pick();
+      sig = `${q.prompt}␟${q.answer ?? JSON.stringify(q.answers || q.choices || "")}`;
+      if (!recentQRef.current.includes(sig)) break;
+    }
+    recentQRef.current = [...recentQRef.current, sig].slice(-20);
+    return q;
   }
 
   function claimDailyTask(taskId) {
@@ -5818,8 +5837,9 @@ export default function MathsUnlockedBN() {
 
   function startMixed() {
     if (levelFromExp(totalExp(profile)) < MIXED_UNLOCK_LEVEL) return;
+    recentQRef.current = [];
     setActiveTopic(MIXED_TOPIC);
-    setQuestion(pickMixed());
+    setQuestion(freshQuestion(pickMixed));
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6162,8 +6182,9 @@ export default function MathsUnlockedBN() {
 
   function startTopic(topic) {
     if (!isUnlocked(topic, profile)) return;
+    recentQRef.current = [];
     setActiveTopic(topic);
-    setQuestion(pickQuestion(topic));
+    setQuestion(freshQuestion(() => pickQuestion(topic)));
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6183,7 +6204,7 @@ export default function MathsUnlockedBN() {
   }
 
   function nextQuestion() {
-    setQuestion(activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
+    setQuestion(freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic)));
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6513,6 +6534,38 @@ export default function MathsUnlockedBN() {
     setFriendResults(null);
     setFriendQuery("");
     setScreen("friends");
+    refreshFriends();
+  }
+
+  async function refreshFriends() {
+    try {
+      const [graph, all] = await Promise.all([loadFriendGraph(), getLeaderboard()]);
+      setFriendGraph(graph);
+      const map = {};
+      for (const p of all) if (p && p.uid) map[p.uid] = p;
+      setFriendPeople(map);
+    } catch (e) { /* offline */ }
+  }
+
+  async function doFriendAction(kind, uid) {
+    if (!uid || friendBusy) return;
+    setFriendBusy(uid);
+    try {
+      if (kind === "request") await sendFriendRequest(uid);
+      else if (kind === "accept") await acceptFriend(uid);
+      else if (kind === "remove") await removeFriend(uid);
+      await refreshFriends();
+    } catch (e) { flash("Couldn't do that — try again."); }
+    setFriendBusy(null);
+  }
+
+  // Relationship of a uid to me: "self" | "friend" | "incoming" | "outgoing" | "none"
+  function friendState(uid) {
+    if (!uid || uid === authUid) return "self";
+    if (friendGraph.friends.includes(uid)) return "friend";
+    if (friendGraph.incoming.includes(uid)) return "incoming";
+    if (friendGraph.outgoing.includes(uid)) return "outgoing";
+    return "none";
   }
 
   // Search students by name. get_leaderboard() returns every public
@@ -7737,13 +7790,69 @@ export default function MathsUnlockedBN() {
             </button>
             {friendView ? (
               <div>
-                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>{friendView.name}</div>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>{friendView.name}</div>
+                {(() => {
+                  const st = friendState(friendView.uid);
+                  if (st === "self" || !friendView.uid) return null;
+                  const busy = friendBusy === friendView.uid;
+                  if (st === "friend") return (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>✓ Friends</span>
+                      <button onClick={() => doFriendAction("remove", friendView.uid)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Remove</button>
+                    </div>
+                  );
+                  if (st === "incoming") return (
+                    <button onClick={() => doFriendAction("accept", friendView.uid)} disabled={busy} style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}>Accept friend request</button>
+                  );
+                  if (st === "outgoing") return <div style={{ marginBottom: 14, fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>Friend request sent</div>;
+                  return (
+                    <button onClick={() => doFriendAction("request", friendView.uid)} disabled={busy} style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>+ Add friend</button>
+                  );
+                })()}
                 <StudentProfileView profile={friendView} />
               </div>
             ) : (
               <div>
-                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Find a friend</div>
-                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Search by name to see someone&rsquo;s profile card and grades.</div>
+                {(() => {
+                  const rows = (uids, actions) => uids.map((uid) => {
+                    const p = friendPeople[uid];
+                    return (
+                      <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 10 }}>
+                        {p ? <MiniAvatar profile={p} size={30} /> : <span style={{ width: 30, flexShrink: 0 }} />}
+                        <button onClick={() => p && setFriendView(p)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", cursor: p ? "pointer" : "default", padding: 0, color: "var(--ink)" }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{p ? p.name : "Student"}</div>
+                          <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p ? `Lv ${levelFromExp(totalExp(p))}${p.school && p.school !== SOLO_SCHOOL ? ` · ${p.school}` : ""}` : ""}</div>
+                        </button>
+                        {actions(uid)}
+                      </div>
+                    );
+                  });
+                  return (<>
+                    {friendGraph.incoming.length > 0 && (<>
+                      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Friend requests <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>{friendGraph.incoming.length}</span></div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                        {rows(friendGraph.incoming, (uid) => (
+                          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                            <button onClick={() => doFriendAction("accept", uid)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>Accept</button>
+                            <button onClick={() => doFriendAction("remove", uid)} aria-label="Decline" style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 9px", cursor: "pointer" }}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    </>)}
+                    <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>My friends <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>{friendGraph.friends.length}</span></div>
+                    {friendGraph.friends.length === 0 ? (
+                      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 20 }}>No friends yet — search below and send a request.</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>{rows(friendGraph.friends, () => null)}</div>
+                    )}
+                    {friendGraph.outgoing.length > 0 && (
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 16 }}>{friendGraph.outgoing.length} request{friendGraph.outgoing.length === 1 ? "" : "s"} sent, waiting for a reply.</div>
+                    )}
+                  </>);
+                })()}
+
+                <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Add a friend</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>Search by name, open a profile, then send a request.</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <input
                     value={friendQuery} onChange={(e) => setFriendQuery(e.target.value)}
@@ -7761,18 +7870,23 @@ export default function MathsUnlockedBN() {
                   <div style={{ fontSize: 13, color: "var(--muted)" }}>No one found matching “{friendQuery.trim()}”.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {friendResults.map((s, i) => (
-                      <button key={i} onClick={() => { setFriendView(s); markMilestone("friendview"); }} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)", cursor: "pointer", color: "var(--ink)" }}>
-                        <PrestigeBadge prestige={s.prestige} size={16} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {s.school && s.school !== SOLO_SCHOOL ? s.school : "Solo"}
-                          </div>
+                    {friendResults.map((s, i) => {
+                      const st = friendState(s.uid);
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)", color: "var(--ink)" }}>
+                          <MiniAvatar profile={s} size={30} />
+                          <button onClick={() => { setFriendView(s); markMilestone("friendview"); }} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--ink)" }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                            <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Lv {levelFromExp(totalExp(s))}{s.school && s.school !== SOLO_SCHOOL ? ` · ${s.school}` : ""}</div>
+                          </button>
+                          {st === "friend" ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", flexShrink: 0 }}>✓</span>
+                            : st === "outgoing" ? <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>sent</span>
+                            : st === "incoming" ? <button onClick={() => doFriendAction("accept", s.uid)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer", flexShrink: 0 }}>Accept</button>
+                            : st === "none" ? <button onClick={() => doFriendAction("request", s.uid)} disabled={friendBusy === s.uid} style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", background: "none", border: "1px solid var(--blue)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", flexShrink: 0 }}>+ Add</button>
+                            : null}
                         </div>
-                        <span className="mub-display" style={{ fontSize: 13, fontWeight: 700, color: "var(--blue)", flexShrink: 0 }}>Lv {levelFromExp(totalExp(s))}</span>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -8049,6 +8163,15 @@ export default function MathsUnlockedBN() {
             )}
           </div>
         )}
+      </div>
+
+      <div style={{ padding: "16px 16px 22px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", fontSize: 11.5, color: "var(--muted)" }}>
+        <a href="https://www.instagram.com/mathsunlockedbn?igsi=MThmZWl6Y3E5YW9rNg==" target="_blank" rel="noopener noreferrer"
+          style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--muted)", textDecoration: "none", fontWeight: 700 }}>
+          MathsUnlockedBN <Instagram size={13} />
+        </a>
+        <span style={{ opacity: 0.6 }}>|</span>
+        <span>© 2026 MathsUnlockedBN &nbsp;·&nbsp; All rights reserved</span>
       </div>
 
       {showCard && (

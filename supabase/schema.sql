@@ -182,3 +182,36 @@ grant execute on function public.resolve_pin_login(text) to anon, authenticated;
 --  This keeps: every new scope = '<auth-uid>' row, and the
 --  question banks (scope = 'shared', key 'questions_*').
 -- ============================================================
+
+
+-- ============================================================
+--  8. FRIENDS
+--     a = the student who sent the request, b = the target.
+--     RLS: either party can read or delete a row; only the
+--     requester can insert; only the target can flip it to
+--     'accepted'. No SECURITY DEFINER needed.
+-- ============================================================
+create table if not exists friendships (
+  a uuid not null,
+  b uuid not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted')),
+  created_at timestamptz not null default now(),
+  primary key (a, b)
+);
+alter table friendships enable row level security;
+
+drop policy if exists fr_select on friendships;
+create policy fr_select on friendships for select to authenticated
+  using (a = auth.uid() or b = auth.uid());
+
+drop policy if exists fr_insert on friendships;
+create policy fr_insert on friendships for insert to authenticated
+  with check (a = auth.uid() and status = 'pending');
+
+drop policy if exists fr_accept on friendships;
+create policy fr_accept on friendships for update to authenticated
+  using (b = auth.uid()) with check (b = auth.uid());
+
+drop policy if exists fr_delete on friendships;
+create policy fr_delete on friendships for delete to authenticated
+  using (a = auth.uid() or b = auth.uid());
