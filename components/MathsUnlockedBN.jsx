@@ -4485,17 +4485,24 @@ function levelProgress(exp) {
   const into = exp - base;
   return { level, into, need, pct: Math.max(0, Math.min(100, Math.round((into / need) * 100))), capped: false };
 }
-function LevelBar({ profile, onPrestige }) {
+function LevelBar({ profile, onPrestige, onOpenUnlocks }) {
   const { level, into, need, pct, capped } = levelProgress(totalExp(profile));
   const prestige = profile.prestige || 0;
   const belowC = TOPICS.filter((t) => !topicRankAtLeast(profile, t.id, "C"));
   const prestigeSlot = capped && prestige < PRESTIGE_CAP && typeof onPrestige === "function";
+  const LevelChip = (
+    <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+      <PrestigeBadge prestige={prestige} size={18} />
+      <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5 }}>LV</span>{level}
+    </div>
+  );
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-      <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--blue)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
-        <PrestigeBadge prestige={prestige} size={18} />
-        <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 0.5 }}>LV</span>{level}
-      </div>
+      {onOpenUnlocks ? (
+        <button onClick={onOpenUnlocks} title="See what unlocks at each level" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center" }}>
+          {LevelChip}
+        </button>
+      ) : LevelChip}
       <div style={{ flex: 1, minWidth: 40 }}>
         <div style={{ height: 8, background: "var(--locked)", borderRadius: 999, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: capped ? "var(--amber)" : "var(--blue)", transition: "width 0.4s ease" }} />
@@ -4697,7 +4704,57 @@ const FRAMES = {
   glow: { border: "3px solid #E8A82D", boxShadow: "0 0 0 4px rgba(232,168,45,0.25)" },
 };
 const FRAME_IDS = Object.keys(FRAMES);
-const BANNER_MAX = 3;
+
+/* ---- per-level unlock schedule -------------------------------------
+   One source of truth for what each level 1..20 grants. Cosmetic and
+   tool gates check levelFromExp(totalExp(profile)) >= the level here.
+   Skeleton Keys / XP Boosts are granted in creditLevelUps(); they're
+   listed in unlocksAtLevel() only for the reveal + Unlocks screen. */
+const AVATAR_LV = {
+  grad: 1, star: 1, brain: 2, owl: 3, bolt: 4, fox: 5, ghost: 6, cat: 7,
+  rocket: 8, flower: 9, panda: 10, tiger: 11, crown: 13, wizard: 14,
+  alien: 16, ninja: 17, dragon: 18, robot: 20,
+};
+const FRAME_LV = {
+  plain: 1, blue: 3, green: 6, dashed: 9, rose: 11, violet: 14,
+  gold: 15, double: 17, glow: 19,
+};
+const SOUND_PACKS = {
+  default: { name: "Classic", lv: 1 },
+  arcade: { name: "Arcade", lv: 5 },
+  chime: { name: "Chime", lv: 10 },
+  retro: { name: "Retro", lv: 15 },
+  bell: { name: "Bell", lv: 19 },
+};
+const PERK_LV = { compound: 7, momentum: 11, quick: 14, forgive: 18 };
+const SKETCH_LV = 2;
+const WRITE_LV = 3;
+
+const avatarLevel = (id) => AVATAR_LV[id] || 1;
+const frameLevel = (id) => FRAME_LV[id] || 1;
+const bannerSlots = (lv) => (lv < 2 ? 0 : lv < 8 ? 1 : lv < 12 ? 2 : lv < 16 ? 3 : lv < 20 ? 4 : 5);
+const BANNER_MAX = 5; // hard ceiling; the live cap is bannerSlots(level)
+
+// Human-readable unlocks landing exactly at level L.
+function unlocksAtLevel(L) {
+  const out = [];
+  Object.entries(AVATAR_LV).forEach(([id, lv]) => { if (lv === L) out.push(`${AVATARS[id]} profile icon`); });
+  const frames = Object.entries(FRAME_LV).filter(([id, lv]) => lv === L && id !== "plain").length;
+  if (frames) out.push(`${frames > 1 ? `${frames} icon frames` : "a new icon frame"}`);
+  Object.values(SOUND_PACKS).forEach((p) => { if (p.lv === L && p.name !== "Classic") out.push(`${p.name} sound pack`); });
+  const bs = bannerSlots(L);
+  if (bs > bannerSlots(L - 1)) out.push(`Banner slot ${bs}`);
+  if (L === SKETCH_LV) out.push("Rough-working pad");
+  if (L === WRITE_LV) out.push("Handwriting input");
+  if (PERK_LV.compound === L) out.push("Perk · Compound Interest");
+  if (PERK_LV.momentum === L) out.push("Perk · Momentum");
+  if (PERK_LV.quick === L) out.push("Perk · Quick Study");
+  if (PERK_LV.forgive === L) out.push("Perk · Error Correction");
+  if (L % 5 === 0) out.push("🔑 Skeleton Key");
+  if (L % 4 === 0) out.push("⚡ ×2 XP Boost");
+  out.push("💡 +1 Hint coin");
+  return out;
+}
 // Achievements you've earned are also selectable as profile icons —
 // stored as "ach:<achievementId>".
 const achAvatarId = (achId) => `ach:${achId}`;
@@ -4723,11 +4780,12 @@ function MiniAvatar({ profile, size = 32 }) {
 // the pinned badges that are actually earned and still exist
 function bannerBadges(profile) {
   const earned = profile.achievements || [];
+  const slots = bannerSlots(levelFromExp(totalExp(profile)));
   return (profile.banner || [])
     .filter((id) => earned.includes(id))
     .map((id) => ACHIEVEMENTS.find((a) => a.id === id))
     .filter(Boolean)
-    .slice(0, BANNER_MAX);
+    .slice(0, slots);
 }
 
 // one badge chip with a tier-coloured border (bronze/silver/gold/platinum)
@@ -4843,20 +4901,30 @@ function EditSheet({ title, onClose, children }) {
 }
 
 function IconPickerModal({ profile, onChange, onClose }) {
+  const level = levelFromExp(totalExp(profile));
   const Head = ({ children }) => (
     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>{children}</div>
+  );
+  const lockPill = (lv) => (
+    <span style={{ position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)", fontSize: 8, fontWeight: 800, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "0 4px", whiteSpace: "nowrap" }}>Lv {lv}</span>
   );
   return (
     <EditSheet title="Profile icon" onClose={onClose}>
       <Head>Icon</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
         {AVATAR_IDS.map((id) => {
           const on = (profile.avatar || "grad") === id;
+          const lv = avatarLevel(id);
+          const locked = level < lv;
           return (
-            <button key={id} type="button" onClick={() => onChange(() => ({ avatar: id }))} style={{
-              width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: "pointer",
-              background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-            }}>{AVATARS[id]}</button>
+            <div key={id} style={{ position: "relative" }}>
+              <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ avatar: id }))} style={{
+                width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: locked ? "default" : "pointer",
+                background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
+              }}>{AVATARS[id]}</button>
+              {locked && lockPill(lv)}
+            </div>
           );
         })}
       </div>
@@ -4882,15 +4950,21 @@ function IconPickerModal({ profile, onChange, onClose }) {
         );
       })()}
       <Head>Border</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, paddingBottom: 4 }}>
         {FRAME_IDS.map((id) => {
           const on = (profile.avatarFrame || "plain") === id;
+          const lv = frameLevel(id);
+          const locked = level < lv;
           return (
-            <button key={id} type="button" onClick={() => onChange(() => ({ avatarFrame: id }))} style={{
-              width: 46, height: 46, borderRadius: "50%", background: "var(--card)", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1,
-              ...FRAMES[id], outline: on ? "2px solid var(--blue)" : "none", outlineOffset: 3,
-            }}>{avatarChar(profile)}</button>
+            <div key={id} style={{ position: "relative" }}>
+              <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ avatarFrame: id }))} style={{
+                width: 46, height: 46, borderRadius: "50%", background: "var(--card)", cursor: locked ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1,
+                ...FRAMES[id], outline: on ? "2px solid var(--blue)" : "none", outlineOffset: 3,
+                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
+              }}>{avatarChar(profile)}</button>
+              {locked && lockPill(lv)}
+            </div>
           );
         })}
       </div>
@@ -4899,16 +4973,19 @@ function IconPickerModal({ profile, onChange, onClose }) {
 }
 
 function BannerPickerModal({ profile, onChange, onClose }) {
+  const slots = bannerSlots(levelFromExp(totalExp(profile)));
   const earned = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
   const banner = (profile.banner || []).filter((id) => earned.some((a) => a.id === id));
   const toggle = (id) => onChange((p) => {
     const b = (p.banner || []).filter((x) => earned.some((a) => a.id === x));
     if (b.includes(id)) return { banner: b.filter((x) => x !== id) };
-    return b.length < BANNER_MAX ? { banner: [...b, id] } : {};
+    return b.length < slots ? { banner: [...b, id] } : {};
   });
   return (
-    <EditSheet title={`Banner · ${banner.length}/${BANNER_MAX}`} onClose={onClose}>
-      {earned.length === 0 ? (
+    <EditSheet title={`Banner · ${banner.length}/${slots}`} onClose={onClose}>
+      {slots === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Banner slots unlock at Level 2. Keep going!</div>
+      ) : earned.length === 0 ? (
         <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Earn badges and they&rsquo;ll show up here to choose from.</div>
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
@@ -5073,6 +5150,7 @@ function creditLevelUps(next, expBefore) {
       if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
       if (L % 5 === 0) next.keys = (next.keys || 0) + 1;
       if (L % 4 === 0) next.boosts = (next.boosts || 0) + 1;
+      next.hints = (next.hints || 0) + 1; // one Hint coin per level
     }
   }
   return after > before ? after : null;
@@ -5085,7 +5163,7 @@ const emptyProfile = () => ({
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
-  boosts: 0, boostUntil: 0,
+  boosts: 0, boostUntil: 0, hints: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], seenIconUnlocks: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
@@ -5154,6 +5232,8 @@ export default function MathsUnlockedBN() {
   const [changePinMsg, setChangePinMsg] = useState(null); // { ok, text }
   const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
+  const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
+  const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -5502,6 +5582,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
+    setHintShown(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -5838,6 +5919,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
+    setHintShown(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -5855,8 +5937,18 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
+    setHintShown(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
+  }
+
+  // Spend a Hint coin to reveal the first working step for this question.
+  function doHint() {
+    if (hintShown || feedback || !question) return;
+    if (!(question.steps && question.steps.length > 0)) { flash("No hint for this one."); return; }
+    if ((profile.hints || 0) <= 0) { flash("No Hint coins — you get one every level up."); return; }
+    patchProfile((p) => ({ hints: Math.max(0, (p.hints || 0) - 1) }));
+    setHintShown(true);
   }
 
   // "Draw the graph" questions: tap lattice points, keep the last two, FIFO.
@@ -6283,6 +6375,7 @@ export default function MathsUnlockedBN() {
   // the student hasn't seen offered yet (clears when they open the picker).
   const earnedAchIds = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
   const newIconCount = earnedAchIds.filter((id) => !(profile.seenIconUnlocks || []).includes(id)).length;
+  const myLevel = levelFromExp(totalExp(profile));
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
@@ -6537,12 +6630,12 @@ export default function MathsUnlockedBN() {
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>
-                <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} />
+                <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} onOpenUnlocks={() => setUnlocksOpen(true)} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
-                <span style={{ fontSize: 15 }}>🔑</span>
-                <span><b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
-                <span style={{ opacity: 0.7 }}>· opens a locked topic early</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
+                <span><span style={{ fontSize: 15 }}>🔑</span> <b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
+                <span><span style={{ fontSize: 15 }}>💡</span> <b style={{ color: "var(--ink)" }}>{profile.hints || 0}</b> Hint coin{(profile.hints || 0) === 1 ? "" : "s"}</span>
+                <button onClick={() => setUnlocksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>see all unlocks</button>
               </div>
 
               {(() => {
@@ -6582,6 +6675,7 @@ export default function MathsUnlockedBN() {
                           <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
+                          <button onClick={() => saveProfile({ ...profile, hints: (profile.hints || 0) + 5 })} style={b}>+5 Hint coins</button>
                           <select value={devJingle} onChange={(e) => setDevJingle(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             <option value="achievement">Jingle · achievement</option>
                             <option value="levelup">Jingle · level-up</option>
@@ -7178,7 +7272,7 @@ export default function MathsUnlockedBN() {
                     disabled={!!feedback}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
-                  {!feedback && (
+                  {!feedback && myLevel >= WRITE_LV && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
                       style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
@@ -7205,6 +7299,24 @@ export default function MathsUnlockedBN() {
                   </div>
                 );
               })()}
+
+              {!feedback && question.steps && question.steps.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  {hintShown ? (
+                    <div style={{ fontSize: 12.5, background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 8, padding: "9px 12px", color: "var(--ink)" }}>
+                      <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>💡 Hint</span>
+                      <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.steps[0]} /></div>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={doHint} disabled={(profile.hints || 0) <= 0} style={{
+                      fontSize: 12, fontWeight: 600,
+                      color: (profile.hints || 0) > 0 ? "var(--amber)" : "var(--muted)",
+                      background: "none", border: `1px solid ${(profile.hints || 0) > 0 ? "var(--amber)" : "var(--grid)"}`,
+                      borderRadius: 8, padding: "6px 12px", cursor: (profile.hints || 0) > 0 ? "pointer" : "default",
+                    }}>💡 Hint · {profile.hints || 0} coin{(profile.hints || 0) === 1 ? "" : "s"}</button>
+                  )}
+                </div>
+              )}
 
               {!feedback && (() => {
                 const notReady = (question.drawGraph && drawPts.length < 2)
@@ -7264,10 +7376,14 @@ export default function MathsUnlockedBN() {
                     </div>
                   )}
                   {feedback.leveledTo && (
-                    <div className="mub-stamp" style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 10 }}>
-                      ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
-                      {feedback.keysWon > 0 && ` · 🔑 +${feedback.keysWon} Skeleton Key${feedback.keysWon > 1 ? "s" : ""}`}
-                      {feedback.boostsWon > 0 && ` · ⚡ +${feedback.boostsWon} ×2 XP Boost${feedback.boostsWon > 1 ? "s" : ""}`}
+                    <div className="mub-stamp" style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, marginBottom: 6 }}>
+                        ⭐ Level up! You&rsquo;re now Level {feedback.leveledTo}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--blue)", borderRadius: 8, padding: "9px 12px" }}>
+                        <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>🎁 Unlocked</span>
+                        <div style={{ marginTop: 3 }}>{unlocksAtLevel(feedback.leveledTo).join(" · ")}</div>
+                      </div>
                     </div>
                   )}
                   {feedback.expGain > 0 && (
@@ -7286,21 +7402,23 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
-              <button
-                onClick={() => setSketchOn((v) => !v)}
-                title={sketchOn ? "Hide rough working" : "Rough working"}
-                style={{
-                  position: "absolute", bottom: 8, right: 8, zIndex: 6,
-                  width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-                  border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`,
-                  background: sketchOn ? "var(--blue)" : "var(--card)",
-                  color: sketchOn ? "var(--on-accent)" : "var(--muted)",
-                  cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1,
-                }}
-              >
-                🗒
-              </button>
+              {myLevel >= SKETCH_LV && (<>
+                <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
+                <button
+                  onClick={() => setSketchOn((v) => !v)}
+                  title={sketchOn ? "Hide rough working" : "Rough working"}
+                  style={{
+                    position: "absolute", bottom: 8, right: 8, zIndex: 6,
+                    width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                    border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`,
+                    background: sketchOn ? "var(--blue)" : "var(--card)",
+                    color: sketchOn ? "var(--on-accent)" : "var(--muted)",
+                    cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1,
+                  }}
+                >
+                  🗒
+                </button>
+              </>)}
             </div>
           </div>
         )}
@@ -7706,6 +7824,35 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {unlocksOpen && (
+        <div onClick={() => setUnlocksOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 420, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Unlocks</span>
+              <button onClick={() => setUnlocksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
+              You&rsquo;re Level {myLevel}{profile.prestige ? ` · Prestige ${profile.prestige}` : ""}. Every level gives a 💡 Hint coin plus:
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {Array.from({ length: LEVEL_CAP }, (_, i) => i + 1).map((L) => {
+                const done = myLevel >= L;
+                return (
+                  <div key={L} style={{ display: "flex", gap: 10, padding: "9px 11px", border: "1px solid var(--grid)", borderRadius: 10, background: done ? "var(--paper)" : "transparent", opacity: done ? 1 : 0.5 }}>
+                    <div style={{ flexShrink: 0, width: 30, textAlign: "center" }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: done ? "var(--green)" : "var(--muted)" }}>{done ? "✓" : "🔒"}</div>
+                      <div style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 700 }}>L{L}</div>
+                    </div>
+                    <div style={{ flex: 1, fontSize: 12.5, alignSelf: "center" }}>{unlocksAtLevel(L).join(" · ")}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 12 }}>Card backgrounds unlock one per Prestige. Name styles and extra titles come with Prestige too.</div>
+          </div>
+        </div>
+      )}
 
       {missionsOpen && (() => {
         const xpFor = (id) => (id === "showup" ? DAILY_XP.showup : DAILY_XP.task);
