@@ -5436,6 +5436,7 @@ export default function MathsUnlockedBN() {
   const [changePinMsg, setChangePinMsg] = useState(null); // { ok, text }
   const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
+  const [achOpen, setAchOpen] = useState(false); // Achievements overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
@@ -6727,6 +6728,13 @@ export default function MathsUnlockedBN() {
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               {screen !== "login" && screen !== "parent" ? (<>
+                <button onClick={() => setAchOpen(true)} aria-label="Achievements" title="Achievements" style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
+                }}>
+                  <Trophy size={15} />
+                </button>
                 <button onClick={() => setMissionsOpen(true)} aria-label="Missions" title="Missions" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
@@ -7107,51 +7115,6 @@ export default function MathsUnlockedBN() {
             </div>
               );
             })()}
-
-            <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
-              <Trophy size={16} /> Achievements
-              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>
-                {profile.achievements.filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length}/{ACHIEVEMENTS.length}
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {TIERS.map((tier) => {
-                const items = ACHIEVEMENTS.filter((a) => a.tier === tier);
-                if (!items.length) return null;
-                const tc = TIER_COLOR[tier];
-                const earned = items.filter((a) => profile.achievements.includes(a.id)).length;
-                return (
-                  <div key={tier}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
-                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{items.length}</span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                      {items.map((a) => {
-                        const unlocked = profile.achievements.includes(a.id);
-                        const hidden = a.secret && !unlocked;
-                        return (
-                          <div key={a.id} title={hidden ? "Secret achievement — revealed when earned" : a.desc} style={{
-                            display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999,
-                            background: unlocked ? "var(--card)" : "transparent",
-                            border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
-                            boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
-                            opacity: unlocked ? 1 : 0.4, fontSize: 12.5,
-                          }}>
-                            <span style={{ fontSize: 16, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
-                            <div>
-                              <div style={{ fontWeight: 600 }}>{hidden ? "???" : a.name}</div>
-                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{hidden ? "???" : a.desc}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -8180,6 +8143,60 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {achOpen && (
+        <div onClick={() => setAchOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 420, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <span className="mub-display" style={{ fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                <Trophy size={16} /> Achievements
+                <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)" }}>
+                  {(profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length}/{ACHIEVEMENTS.length}
+                </span>
+              </span>
+              <button onClick={() => setAchOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {TIERS.map((tier) => {
+                const items = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                if (!items.length) return null;
+                const tc = TIER_COLOR[tier];
+                const earned = items.filter((a) => (profile.achievements || []).includes(a.id)).length;
+                return (
+                  <div key={tier}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
+                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{items.length}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {items.map((a) => {
+                        const unlocked = (profile.achievements || []).includes(a.id);
+                        const hidden = a.secret && !unlocked;
+                        return (
+                          <div key={a.id} style={{
+                            display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
+                            background: unlocked ? "var(--card)" : "transparent",
+                            border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
+                            boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
+                            opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
+                          }}>
+                            <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 700 }}>{hidden ? "???" : a.name}</div>
+                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{hidden ? "Secret — revealed when earned" : a.desc}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {unlocksOpen && (
         <div onClick={() => setUnlocksOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
