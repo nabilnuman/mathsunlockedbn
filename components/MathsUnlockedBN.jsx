@@ -374,6 +374,41 @@ function MathText({ text, style }) {
   return <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", ...style }}>{nodes}</span>;
 }
 
+// Turn the plain `^(...)` / `(a)/(b)` syntax the answer parser (and the
+// handwriting recogniser) both understand into the same private-use
+// markup <MathText> renders — so a write-pad preview of "5^(5)" shows a
+// real raised 5, and "(2)/(7)" shows as a stacked fraction, instead of
+// the raw syntax. Recognises balanced parens, so a power inside a
+// fraction (or vice versa) still nests correctly.
+function prettyMathPreview(str) {
+  const s = String(str ?? "");
+  const n = s.length;
+  const readParen = (start) => {
+    let depth = 0;
+    for (let j = start; j < n; j++) {
+      if (s[j] === "(") depth++;
+      else if (s[j] === ")") { depth--; if (depth === 0) return { inner: s.slice(start + 1, j), end: j + 1 }; }
+    }
+    return null; // unbalanced — leave as-is
+  };
+  let out = "", i = 0;
+  while (i < n) {
+    if (s[i] === "(") {
+      const num = readParen(i);
+      if (num && s[num.end] === "/" && s[num.end + 1] === "(") {
+        const den = readParen(num.end + 1);
+        if (den) { out += frac(prettyMathPreview(num.inner), prettyMathPreview(den.inner)); i = den.end; continue; }
+      }
+    }
+    if (s[i] === "^" && s[i + 1] === "(") {
+      const exp = readParen(i + 1);
+      if (exp) { out += raise(prettyMathPreview(exp.inner)); i = exp.end; continue; }
+    }
+    out += s[i]; i++;
+  }
+  return out;
+}
+
 // A small coordinate grid with one straight line and two marked lattice
 // points — used by the "read the equation off the graph" question.
 function LineGraph({ data }) {
@@ -1547,7 +1582,9 @@ function WritePad({ onInsert, onConfirm, onClose, mode }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", minHeight: 28 }}>
           <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }}>Reads as</span>
           <span className="mub-mono" style={{ fontSize: 19, fontWeight: 700, color: "var(--ink)", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
-            {busy ? (everRan.current ? "…" : <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>loading the recogniser…</span>) : (guess || "—")}
+            {busy
+              ? (everRan.current ? "…" : <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>loading the recogniser…</span>)
+              : guess ? <MathText text={prettyMathPreview(guess)} /> : "—"}
           </span>
           <button onClick={clearAll} style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
         </div>
