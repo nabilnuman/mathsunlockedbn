@@ -4781,6 +4781,16 @@ function unlocksAtLevel(L) {
 // Achievements you've earned are also selectable as profile icons —
 // stored as "ach:<achievementId>".
 const achAvatarId = (achId) => `ach:${achId}`;
+// Every profile-icon id the student can currently pick — base icons up to
+// their level, then one per earned achievement. Used for the "new" dots.
+function unlockedAvatarIds(profile) {
+  const lv = levelFromExp(totalExp(profile));
+  const base = Object.keys(AVATARS).filter((id) => lv >= (AVATAR_LV[id] || 1));
+  const ach = (profile.achievements || [])
+    .filter((id) => ACHIEVEMENTS.some((a) => a.id === id))
+    .map((id) => achAvatarId(id));
+  return [...base, ...ach];
+}
 const avatarChar = (p) => {
   const id = (p && p.avatar) || "grad";
   if (id.startsWith("ach:")) {
@@ -4907,7 +4917,8 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
       onClick={onEditBanner}
       style={{
         flex: 1, minWidth: 0, alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8,
-        background: "var(--card)", border: `${badges.length ? "2px solid" : "1px dashed"} ${badges.length ? bannerCol : "var(--grid)"}`, borderRadius: 12,
+        background: badges.length ? `color-mix(in srgb, ${bannerCol} 14%, var(--card))` : "var(--card)",
+        border: `${badges.length ? "2px solid" : "1px dashed"} ${badges.length ? bannerCol : "var(--grid)"}`, borderRadius: 12,
         padding: "8px 10px", cursor: onEditBanner ? "pointer" : "default",
         WebkitTapHighlightColor: "transparent", outline: "none",
       }}
@@ -4987,47 +4998,37 @@ function IconPickerModal({ profile, onChange, onClose }) {
   const lockPill = (lv) => (
     <span style={{ position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)", fontSize: 8, fontWeight: 800, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "0 4px", whiteSpace: "nowrap" }}>Lv {lv}</span>
   );
+  const seen = profile.seenIcons || [];
+  const iconItems = [
+    ...Object.keys(AVATARS)
+      .sort((a, b) => avatarLevel(a) - avatarLevel(b))
+      .map((id) => ({ id, char: AVATARS[id], lv: avatarLevel(id), border: "var(--grid)" })),
+    ...ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id))
+      .map((a) => ({ id: achAvatarId(a.id), char: a.icon, lv: 0, border: TIER_COLOR[a.tier], title: `${a.name} · ${a.tier}` })),
+  ];
   return (
     <EditSheet title="Profile icon" onClose={onClose}>
       <Head>Icon</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-        {AVATAR_IDS.map((id) => {
-          const on = (profile.avatar || "grad") === id;
-          const lv = avatarLevel(id);
-          const locked = level < lv;
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 22 }}>
+        {iconItems.map((it) => {
+          const on = (profile.avatar || "grad") === it.id;
+          const locked = it.lv > 0 && level < it.lv;
+          const isNew = !locked && !seen.includes(it.id);
           return (
-            <div key={id} style={{ position: "relative" }}>
-              <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ avatar: id }))} style={{
-                width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: locked ? "default" : "pointer",
-                background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
-              }}>{AVATARS[id]}</button>
-              {locked && lockPill(lv)}
+            <div key={it.id} style={{ position: "relative" }}>
+              <button type="button" title={it.title} disabled={locked}
+                onClick={() => { if (locked) return; onChange((p) => ({ avatar: it.id, seenIcons: [...new Set([...(p.seenIcons || []), it.id])] })); }}
+                style={{
+                  width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: locked ? "default" : "pointer",
+                  background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : it.border}`,
+                  filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
+                }}>{it.char}</button>
+              {locked && lockPill(it.lv)}
+              {isNew && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--card)", boxSizing: "border-box" }} />}
             </div>
           );
         })}
       </div>
-      {(() => {
-        const earnedAch = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
-        if (earnedAch.length === 0) return null;
-        return (
-          <>
-            <Head>Unlocked from achievements</Head>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
-              {earnedAch.map((a) => {
-                const aid = achAvatarId(a.id);
-                const on = profile.avatar === aid;
-                return (
-                  <button key={a.id} type="button" title={`${a.name} · ${a.tier}`} onClick={() => onChange(() => ({ avatar: aid }))} style={{
-                    width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: "pointer",
-                    background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : TIER_COLOR[a.tier]}`,
-                  }}>{a.icon}</button>
-                );
-              })}
-            </div>
-          </>
-        );
-      })()}
       <Head>Border</Head>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, paddingBottom: 4 }}>
         {FRAME_IDS.map((id) => {
@@ -5096,7 +5097,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
               <div key={id} style={{ position: "relative" }}>
                 <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ bannerColor: id }))} style={{
                   width: 40, height: 40, borderRadius: 10, cursor: locked ? "default" : "pointer",
-                  background: "var(--paper)", border: `3px solid ${FRAME_COLOR[id]}`,
+                  background: `color-mix(in srgb, ${FRAME_COLOR[id]} 16%, var(--card))`, border: `3px solid ${FRAME_COLOR[id]}`,
                   outline: on ? "2px solid var(--blue)" : "none", outlineOffset: 3,
                   filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
                 }} />
@@ -5348,7 +5349,7 @@ const emptyProfile = () => ({
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
-  cardBg: "graph", nameStyle: "plain", title: "", seenIconUnlocks: [],
+  cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5582,14 +5583,6 @@ export default function MathsUnlockedBN() {
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
-  // Opening the icon picker counts as "seen" — clears the new-unlock dots.
-  useEffect(() => {
-    if (!pickIcon) return;
-    const p = profileRef.current || {};
-    const earned = (p.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
-    if (earned.every((id) => (p.seenIconUnlocks || []).includes(id))) return;
-    patchProfile((prev) => ({ seenIconUnlocks: [...new Set([...(prev.seenIconUnlocks || []), ...earned])] }));
-  }, [pickIcon]);
 
   // Teacher-only screens are unreachable without the ?teacher=1 unlock.
   useEffect(() => {
@@ -5951,6 +5944,8 @@ export default function MathsUnlockedBN() {
         prof.school = schoolInput;
         prof.createdAt = Date.now();
       }
+      // Seed "seen" icons so the new-unlock dots only flag genuinely new ones.
+      if (!Array.isArray(prof.seenIcons)) prof.seenIcons = unlockedAvatarIds(prof);
       await saveProfile(prof);
       loadCustomQuestions(); // shared reads need a session
       setScreen("dashboard");
@@ -6650,8 +6645,7 @@ export default function MathsUnlockedBN() {
 
   // Earned achievements double as profile icons; a red dot flags the ones
   // the student hasn't seen offered yet (clears when they open the picker).
-  const earnedAchIds = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
-  const newIconCount = earnedAchIds.filter((id) => !(profile.seenIconUnlocks || []).includes(id)).length;
+  const newIconCount = unlockedAvatarIds(profile).filter((id) => !(profile.seenIcons || []).includes(id)).length;
   const myLevel = levelFromExp(totalExp(profile));
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
