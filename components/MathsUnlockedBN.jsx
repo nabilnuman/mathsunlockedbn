@@ -4671,7 +4671,7 @@ function statGroupValue(profile, ids) {
   const sum = ids.reduce((s, id) => s + Math.max(0, Math.min((topics[id] || {}).highestRank ?? -1, maxIdx)), 0);
   return ids.length ? sum / (ids.length * maxIdx) : 0; // 0..1
 }
-function RadarChart({ profile }) {
+function RadarChart({ profile, dark }) {
   const cx = 120, cy = 104, R = 62, labelR = 82;
   const groups = STAT_GROUPS.map((g) => ({ name: g.name, v: statGroupValue(profile, g.ids) }));
   const at = (i, frac) => {
@@ -4680,20 +4680,25 @@ function RadarChart({ profile }) {
   };
   const ring = (frac) => groups.map((_, i) => at(i, frac).join(",")).join(" ");
   const data = groups.map((g, i) => at(i, Math.max(0.02, g.v)).join(",")).join(" ");
+  // Contrast against whatever card background is behind us.
+  const web = dark ? "#FFFFFF" : "var(--muted)";
+  const webOp = dark ? 0.32 : 0.5;
+  const acc = dark ? "#7FE0BB" : "var(--green)";
+  const lab = dark ? "#EAF2EE" : "var(--ink)";
   return (
     <svg viewBox="-28 -6 296 232" width="100%" style={{ display: "block", maxWidth: 300, margin: "0 auto" }}>
-      {[0.34, 0.67, 1].map((f, k) => <polygon key={k} points={ring(f)} fill="none" stroke="var(--grid)" strokeWidth="1" />)}
-      {groups.map((_, i) => { const [x, y] = at(i, 1); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--grid)" strokeWidth="1" />; })}
-      <polygon points={data} fill="var(--green)" fillOpacity="0.32" stroke="var(--green)" strokeWidth="1.5" strokeLinejoin="round" />
-      {groups.map((g, i) => { const [x, y] = at(i, Math.max(0.02, g.v)); return <circle key={i} cx={x} cy={y} r="2.4" fill="var(--green)" />; })}
+      {[0.34, 0.67, 1].map((f, k) => <polygon key={k} points={ring(f)} fill="none" stroke={web} strokeOpacity={webOp} strokeWidth="1" />)}
+      {groups.map((_, i) => { const [x, y] = at(i, 1); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke={web} strokeOpacity={webOp} strokeWidth="1" />; })}
+      <polygon points={data} fill={acc} fillOpacity={dark ? 0.24 : 0.32} stroke={acc} strokeWidth="2" strokeLinejoin="round" />
+      {groups.map((g, i) => { const [x, y] = at(i, Math.max(0.02, g.v)); return <circle key={i} cx={x} cy={y} r="2.6" fill={acc} />; })}
       {groups.map((g, i) => {
         const a = (-90 + i * 72) * Math.PI / 180;
         const x = cx + Math.cos(a) * labelR, y = cy + Math.sin(a) * labelR;
         const anchor = Math.abs(x - cx) < 3 ? "middle" : x < cx ? "end" : "start";
         return (
-          <text key={i} x={x} y={y} textAnchor={anchor} fill="var(--muted)">
+          <text key={i} x={x} y={y} textAnchor={anchor} fill={lab}>
             <tspan fontSize="9" fontWeight="700">{g.name}</tspan>
-            <tspan x={x} dy="10" fontSize="8" fontWeight="700" fill="var(--green)">{Math.round(g.v * 100)}%</tspan>
+            <tspan x={x} dy="10" fontSize="8" fontWeight="700" fill={acc}>{Math.round(g.v * 100)}%</tspan>
           </text>
         );
       })}
@@ -4837,15 +4842,15 @@ const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
   plain:     { name: "Clean",       bg: "var(--card)" },
-  mint:      { name: "Mint",        bg: "linear-gradient(135deg,#EAF7F0,#DDF0E8)" },
-  sky:       { name: "Sky",         bg: "linear-gradient(135deg,#E9F1FB,#DCEAF7)" },
-  dots:      { name: "Dotted",      bg: "var(--paper)", img: "radial-gradient(var(--grid) 1px, transparent 1px)", size: "12px 12px" },
-  blueprint: { name: "Blueprint",   bg: "#12335A", img: "linear-gradient(rgba(255,255,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.14) 1px,transparent 1px)", size: "20px 20px", dark: true },
-  sunset:    { name: "Sunset",      bg: "linear-gradient(135deg,#FBE7D6,#F7D9E0)" },
+  mint:      { name: "Mint",        bg: "linear-gradient(135deg,#CDEEDC,#A9E0C6)" },
+  sky:       { name: "Sky",         bg: "linear-gradient(135deg,#CFE2F6,#AFCDEF)" },
+  dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
+  blueprint: { name: "Blueprint",   bg: "#12335A", img: "linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px)", size: "18px 18px", dark: true },
+  sunset:    { name: "Sunset",      bg: "linear-gradient(135deg,#FAD9BE,#F4B9C6)" },
   slate:     { name: "Slate",       bg: "#2A3644", dark: true },
-  stripes:   { name: "Stripes",     bg: "var(--paper)", img: "repeating-linear-gradient(45deg,var(--grid) 0 1px,transparent 1px 11px)" },
-  aurora:    { name: "Aurora",      bg: "linear-gradient(135deg,#E7E9FB,#DCF0EE)" },
-  gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#FBF3DE,#F6E7C8)" },
+  stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
+  aurora:    { name: "Aurora",      bg: "linear-gradient(135deg,#D6D9F6,#BFE9E1)" },
+  gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#F6E7BF,#EAD29A)" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
@@ -4892,23 +4897,25 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   const cardBg = cardBgOf(profile);
   const nameSty = nameStyleOf(profile);
   const bannerCol = bannerColorOf(profile);
+  const sub = cardBg.dark ? "rgba(255,255,255,0.62)" : "var(--muted)";
+  const accent = cardBg.dark ? "#9FD0F5" : "var(--blue)";
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
   const badges = bannerBadges(profile);
   const showBanner = badges.length > 0 || !!onEditBanner; // header slot: banner if there's one to show, else name
   const stat = (label, value) => (
     <div style={{ textAlign: "center" }}>
-      <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
+      <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>{value}</div>
       <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
     </div>
   );
   const nameBlock = (
     <div style={{ minWidth: 0 }}>
       <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty }}>{profile.name || "Student"}</div>
-      <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600, marginTop: 2 }}>
+      <div style={{ fontSize: 12, color: accent, fontWeight: 600, marginTop: 2 }}>
         {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
       </div>
       {profile.school && profile.school !== SOLO_SCHOOL && (
-        <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, wordBreak: "break-word" }}>{profile.school}</div>
+        <div style={{ fontSize: 10.5, color: sub, marginTop: 2, wordBreak: "break-word" }}>{profile.school}</div>
       )}
     </div>
   );
@@ -4967,10 +4974,10 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
       </div>
 
-      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+      <div style={{ fontSize: 10, color: sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
         Mastery
       </div>
-      <RadarChart profile={profile} />
+      <RadarChart profile={profile} dark={cardBg.dark} />
     </div>
   );
 }
@@ -5166,20 +5173,26 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       </div>
 
       <Head>Card background {prestige === 0 ? "· unlock with Prestige" : ""}</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         {CARD_BG_IDS.map((id, i) => {
           const b = CARD_BGS[id];
           const locked = prestige < i;
           const on = (profile.cardBg || "graph") === id;
           return (
-            <div key={id} style={{ position: "relative", width: 66 }}>
+            <div key={id} style={{ position: "relative", width: 104 }}>
               <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ cardBg: id }))} style={{
-                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer",
+                width: 104, height: 66, borderRadius: 10, cursor: locked ? "default" : "pointer", padding: "0 0 0 9px",
+                display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", gap: 5,
                 border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-                background: b.bg, backgroundImage: b.img, backgroundSize: b.size,
-                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
-              }} />
-              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `P${i}` : b.name}</div>
+                background: b.grid ? "var(--paper)" : b.bg,
+                backgroundImage: b.grid ? "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)" : b.img,
+                backgroundSize: b.grid ? "10px 10px" : b.size,
+                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
+              }}>
+                <span style={{ width: 17, height: 17, borderRadius: "50%", background: b.dark ? "#7FE0BB" : "var(--green)" }} />
+                <span style={{ width: 60, height: 8, borderRadius: 3, background: b.dark ? "rgba(255,255,255,0.6)" : "#FFFFFF", boxShadow: "0 0 0 1px rgba(0,0,0,0.06)" }} />
+              </button>
+              <div style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", marginTop: 3, fontWeight: 600 }}>{locked ? `Prestige ${i}` : b.name}</div>
             </div>
           );
         })}
