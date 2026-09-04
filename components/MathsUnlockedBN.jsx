@@ -4778,9 +4778,9 @@ function unlocksAtLevel(L) {
   if (L === WRITE_LV) out.push("Handwriting input");
   Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
   if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
-  if (L % 5 === 0) out.push("🔑 Skeleton Key");
+  if (L % 5 === 0) out.push("🗝 Skeleton Key");
   if (L % 4 === 0) out.push("⚡ ×2 XP Boost");
-  out.push("💡 +1 Hint coin");
+  out.push("🪙 +1 Hint coin");
   return out;
 }
 // Achievements you've earned are also selectable as profile icons —
@@ -5438,6 +5438,7 @@ export default function MathsUnlockedBN() {
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
   const [achOpen, setAchOpen] = useState(false); // Achievements overlay
   const [achHideDone, setAchHideDone] = useState(false); // hide earned achievements
+  const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
@@ -6928,42 +6929,28 @@ export default function MathsUnlockedBN() {
               <div style={{ marginTop: 14 }}>
                 <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} onOpenUnlocks={() => setUnlocksOpen(true)} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
-                <span><span style={{ fontSize: 15 }}>🔑</span> <b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
-                <span><span style={{ fontSize: 15 }}>💡</span> <b style={{ color: "var(--ink)" }}>{profile.hints || 0}</b> Hint coin{(profile.hints || 0) === 1 ? "" : "s"}</span>
-                {(profile.shields || 0) > 0 && <span><span style={{ fontSize: 15 }}>🛟</span> <b style={{ color: "var(--ink)" }}>{profile.shields}</b> Streak Shield{profile.shields === 1 ? "" : "s"}</span>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                {(() => {
+                  const n = (profile.keys || 0) + (profile.hints || 0) + (profile.shields || 0) + (profile.boosts || 0);
+                  return (
+                    <button onClick={() => setInventoryOpen(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer" }}>
+                      🎒 Inventory
+                      {n > 0 && <span style={{ marginLeft: 6, fontWeight: 800, color: "var(--ink)" }}>{n}</span>}
+                    </button>
+                  );
+                })()}
                 {myLevel >= PERKS.compound.lv && (
-                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                     🎖 Perks
-                    <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("") || "—"}</span>
+                    <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
                   </button>
                 )}
+                {(profile.boostUntil || 0) > Date.now() && (
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--green)" }}>
+                    ⚡ ×2 XP · {Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000))} min left
+                  </span>
+                )}
               </div>
-
-              {(() => {
-                const active = (profile.boostUntil || 0) > Date.now();
-                const held = profile.boosts || 0;
-                if (!active && held === 0) return null;
-                const minsLeft = Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000));
-                return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15 }}>⚡</span>
-                    {active ? (
-                      <span style={{ color: "var(--green)", fontWeight: 700 }}>
-                        ×2 XP active · {minsLeft} min left
-                      </span>
-                    ) : (
-                      <>
-                        <span><b style={{ color: "var(--ink)" }}>{held}</b> XP Boost{held === 1 ? "" : "s"}</span>
-                        <button onClick={activateBoost} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "3px 10px", cursor: "pointer" }}>
-                          Activate ×2 (1 hr)
-                        </button>
-                      </>
-                    )}
-                    {active && held > 0 && <span style={{ opacity: 0.7 }}>· {held} more ready</span>}
-                  </div>
-                );
-              })()}
 
               {teacherMode && (
                 <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
@@ -7107,7 +7094,7 @@ export default function MathsUnlockedBN() {
                         onClick={(e) => { e.stopPropagation(); setKeyTarget(t); }}
                         style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
                       >
-                        🔑 Use key
+                        🗝 Use key
                       </button>
                     )}
                   </div>
@@ -7567,7 +7554,7 @@ export default function MathsUnlockedBN() {
                 <div style={{ marginBottom: 12 }}>
                   {hintShown ? (
                     <div style={{ fontSize: 12.5, background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 8, padding: "9px 12px", color: "var(--ink)" }}>
-                      <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>💡 Hint</span>
+                      <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>🪙 Hint</span>
                       <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.steps[0]} /></div>
                     </div>
                   ) : (
@@ -7576,7 +7563,7 @@ export default function MathsUnlockedBN() {
                       color: (profile.hints || 0) > 0 ? "var(--amber)" : "var(--muted)",
                       background: "none", border: `1px solid ${(profile.hints || 0) > 0 ? "var(--amber)" : "var(--grid)"}`,
                       borderRadius: 8, padding: "6px 12px", cursor: (profile.hints || 0) > 0 ? "pointer" : "default",
-                    }}>💡 Hint · {profile.hints || 0} coin{(profile.hints || 0) === 1 ? "" : "s"}</button>
+                    }}>🪙 Hint · {profile.hints || 0} coin{(profile.hints || 0) === 1 ? "" : "s"}</button>
                   )}
                 </div>
               )}
@@ -8145,6 +8132,57 @@ export default function MathsUnlockedBN() {
         );
       })()}
 
+      {inventoryOpen && (() => {
+        const boostActive = (profile.boostUntil || 0) > Date.now();
+        const boostMins = Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000));
+        const items = [
+          { icon: "🗝", n: profile.keys || 0, name: "Skeleton Key", desc: "Opens a locked topic early — use it from a locked topic's card." },
+          { icon: "🪙", n: profile.hints || 0, name: "Hint coin", desc: "Reveals the first working step of a question. +1 every level up." },
+          { icon: "🛟", n: profile.shields || 0, name: "Streak Shield", desc: "Keeps your streak alive after a wrong answer, and lets you retry." },
+        ];
+        return (
+          <div onClick={() => setInventoryOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>🎒 Inventory</span>
+                <button onClick={() => setInventoryOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {items.map((it) => (
+                  <div key={it.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 10, opacity: it.n > 0 ? 1 : 0.55 }}>
+                    <span style={{ fontSize: 22, flexShrink: 0 }}>{it.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{it.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{it.desc}</div>
+                    </div>
+                    <span className="mub-display" style={{ fontSize: 20, fontWeight: 800, flexShrink: 0 }}>{it.n}</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: `1px solid ${boostActive ? "var(--green)" : "var(--grid)"}`, borderRadius: 10, opacity: (profile.boosts || 0) > 0 || boostActive ? 1 : 0.55 }}>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>⚡</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>XP Boost</div>
+                    <div style={{ fontSize: 11, color: boostActive ? "var(--green)" : "var(--muted)", marginTop: 1, fontWeight: boostActive ? 700 : 400 }}>
+                      {boostActive ? `Active — ${boostMins} min left` : "Doubles the +2 XP per correct answer for one hour."}
+                    </div>
+                  </div>
+                  {!boostActive && (profile.boosts || 0) > 0 && (
+                    <button onClick={activateBoost} style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>Activate</button>
+                  )}
+                  {!boostActive && (profile.boosts || 0) === 0 && (
+                    <span className="mub-display" style={{ fontSize: 20, fontWeight: 800, flexShrink: 0 }}>0</span>
+                  )}
+                  {boostActive && (profile.boosts || 0) > 0 && (
+                    <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>{profile.boosts} more</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 12 }}>Items come from levelling up. Keep grinding.</div>
+            </div>
+          </div>
+        );
+      })()}
+
       {achOpen && (
         <div onClick={() => setAchOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 420, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
@@ -8217,7 +8255,7 @@ export default function MathsUnlockedBN() {
               <button onClick={() => setUnlocksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
             </div>
             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
-              You&rsquo;re Level {myLevel}{profile.prestige ? ` · Prestige ${profile.prestige}` : ""}. Every level gives a 💡 Hint coin plus:
+              You&rsquo;re Level {myLevel}{profile.prestige ? ` · Prestige ${profile.prestige}` : ""}. Every level gives a 🪙 Hint coin plus:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {Array.from({ length: LEVEL_CAP }, (_, i) => i + 1).map((L) => {
@@ -8454,7 +8492,7 @@ export default function MathsUnlockedBN() {
       {keyTarget && (
         <div onClick={() => setKeyTarget(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 360, fontFamily: "Inter, sans-serif" }}>
-            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>🔑 Use a Skeleton Key?</div>
+            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>🗝 Use a Skeleton Key?</div>
             <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
               Unlock <b>{keyTarget.name}</b> now, skipping its prerequisite. You have <b>{profile.keys || 0}</b> key{(profile.keys || 0) === 1 ? "" : "s"}.
             </div>
