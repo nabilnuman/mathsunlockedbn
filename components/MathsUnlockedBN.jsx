@@ -4387,8 +4387,8 @@ function blitzQuestion() {
    runs against the whole profile after every answer; ids are permanent
    (renaming/retiering an achievement keeps anyone who already earned it).
    Rank checks read the ratcheted highestRank, so they never un-earn. */
-const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
-const TIER_COLOR = { Bronze: "#B07437", Silver: "#8A929E", Gold: "#C99A1E", Platinum: "#3E9CB8" };
+const TIERS = ["Bronze", "Silver", "Gold", "Platinum", "Diamond"];
+const TIER_COLOR = { Bronze: "#B07437", Silver: "#8A929E", Gold: "#C99A1E", Platinum: "#3E9CB8", Diamond: "#7EC8E3" };
 
 const ACHIEVEMENTS = [
   /* ---------------- Bronze ---------------- */
@@ -4418,6 +4418,19 @@ const ACHIEVEMENTS = [
     check: (p) => (p.bestMixedStreak || 0) >= 10 },
   { id: "thunderclap", tier: "Bronze", name: "Thunderclap", icon: "💥", desc: "Answer 15 correctly in one Blitz",
     check: (p) => (p.blitzBest || 0) >= 15 },
+  { id: "hintcoin", tier: "Bronze", name: "Every Puzzle Has an Answer", icon: "🎩", desc: "Use a Hint coin for the first time",
+    check: (p) => !!p.usedHint },
+  { id: "circlecorrect", tier: "Bronze", name: "What Goes Around Comes Around", icon: "💫", desc: "Get a Circles question correct",
+    check: (p) => !!p.gotCircle },
+  { id: "nicetry", tier: "Bronze", name: "Nice Try", icon: "🤡",
+    desc: "Back out of the same topic 3 times to dodge a question, then answer one anyway",
+    secret: true, check: (p) => !!p.dodgeCaught },
+  { id: "guidingkey", tier: "Bronze", name: "Your Guiding Key", icon: "🔑", desc: "Use a Skeleton Key",
+    check: (p) => (p.keyedTopics || []).length > 0 },
+  { id: "practicemakesperfect", tier: "Bronze", name: "Practice Makes Perfect", icon: "🎰", desc: "Play 7 days in a row",
+    check: (p) => (p.playStreak || 0) >= 7 },
+  { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
+    check: (p) => !!p.gotFriend },
 
   /* ---------------- Silver ---------------- */
   { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
@@ -4444,11 +4457,44 @@ const ACHIEVEMENTS = [
     check: (p) => allTopicsRankAtLeast(p, TOPICS, "S") },
   { id: "neversleep", tier: "Gold", name: "Numbers Never Sleep", icon: "🌙", desc: "500 correct answers in total",
     check: (p) => (p.totalCorrect || 0) >= 500 },
+  { id: "groundhog", tier: "Gold", name: "Groundhog Day", icon: "🐗", desc: "Prestige once",
+    check: (p) => (p.prestige || 0) >= 1 },
 
   /* ---------------- Platinum ---------------- */
-  { id: "unlocked", tier: "Platinum", name: "Mathematics Unlocked", icon: "🏆", desc: "Reach S+ rank in every topic",
+  { id: "unlocked", tier: "Platinum", name: "Touch Grass", icon: "🏕", desc: "Reach S+ rank in every topic",
     secret: true, check: (p) => allTopicsRankAtLeast(p, TOPICS, "S+") },
+
+  /* ---------------- Diamond ---------------- */
+  // Self-reference is safe: `check` only runs after the module has fully
+  // loaded, by which point ACHIEVEMENTS (and LEVEL_CAP/PRESTIGE_CAP below)
+  // are fully initialised.
+  { id: "mathsunlocked", tier: "Diamond", name: "Maths Unlocked", icon: "🏆",
+    desc: "Max prestige, max level, and every other achievement",
+    secret: true,
+    check: (p) =>
+      (p.prestige || 0) >= PRESTIGE_CAP &&
+      levelFromExp(totalExp(p)) >= LEVEL_CAP &&
+      ACHIEVEMENTS.filter((a) => a.id !== "mathsunlocked").every((a) => (p.achievements || []).includes(a.id)) },
 ];
+
+/* Runs every achievement's check() against a profile draft (mutated
+   in place — `next.achievements`/`next.achievedAt` grow with anything
+   newly earned) and returns the freshly-unlocked achievement objects.
+   Call this anywhere a profile mutation might cross an achievement's
+   threshold, not just from the quiz flow. */
+function awardAchievements(next) {
+  const unlocked = [];
+  next.achievements = next.achievements || [];
+  next.achievedAt = next.achievedAt || {};
+  ACHIEVEMENTS.forEach((a) => {
+    if (!next.achievements.includes(a.id) && a.check(next)) {
+      next.achievements.push(a.id);
+      next.achievedAt[a.id] = Date.now();
+      unlocked.push(a);
+    }
+  });
+  return unlocked;
+}
 
 /* Ranks are based on the TOTAL of the last 10 answers (10 correct = 100),
    and a topic's rank only ever ratchets UP. A wrong answer never drops
@@ -5417,6 +5463,8 @@ const emptyProfile = () => ({
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
   cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
   seenChallenges: [],
+  usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
+  dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5689,7 +5737,12 @@ export default function MathsUnlockedBN() {
     const newWeek = !profile.week || profile.week.of !== weekKey();
     if (newDay || newWeek) {
       const n = JSON.parse(JSON.stringify(profile));
-      if (newDay) n.daily = freshDay(n);
+      if (newDay) {
+        // "Practice Makes Perfect" — consecutive calendar days opened.
+        const yesterday = todayKey(new Date(Date.now() - 86400000));
+        n.playStreak = (profile.daily && profile.daily.date === yesterday) ? (n.playStreak || 0) + 1 : 1;
+        n.daily = freshDay(n);
+      }
       if (newWeek) bumpWeek(n, 0);
       saveProfile(n);
     }
@@ -5996,11 +6049,7 @@ export default function MathsUnlockedBN() {
       bumpWeek(n, gain);
     }
     creditLevelUps(n, before);
-    const unlocked = [];
-    n.achievedAt = n.achievedAt || {};
-    ACHIEVEMENTS.forEach((a) => {
-      if (!n.achievements.includes(a.id) && a.check(n)) { n.achievements.push(a.id); n.achievedAt[a.id] = Date.now(); unlocked.push(a); }
-    });
+    const unlocked = awardAchievements(n);
     setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked });
     if (unlocked.length) playJingle(true);
     saveProfile(n);
@@ -6252,10 +6301,7 @@ export default function MathsUnlockedBN() {
       const prevRank = (next.topics[id] || {}).highestRank ?? -1;
       next.topics[id] = { history: hist, highestRank: Math.max(prevRank, rankIdx), streak: rankIdx >= S_PLUS_IDX ? STREAK_FOR_S_PLUS : 0 };
     });
-    next.achievedAt = next.achievedAt || {};
-    ACHIEVEMENTS.forEach((a) => {
-      if (!next.achievements.includes(a.id) && a.check(next)) { next.achievements.push(a.id); next.achievedAt[a.id] = Date.now(); }
-    });
+    awardAchievements(next);
     next.levelReachedAt = next.levelReachedAt || {};
     const lvl = levelFromExp(totalExp(next));
     for (let L = 2; L <= lvl; L++) if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
@@ -6298,7 +6344,10 @@ export default function MathsUnlockedBN() {
     if (!isUnlocked(topic, profile)) return;
     recentQRef.current = [];
     setActiveTopic(topic);
-    setQuestion(freshQuestion(() => pickQuestion(topic)));
+    // Caught dodging before ("Nice Try") — a topic left unanswered follows
+    // you back in instead of re-rolling, so ducking out no longer works.
+    const stuck = profile.dodgeLocked && profile.dodgeStuck && profile.dodgeStuck[topic.id];
+    setQuestion(stuck || freshQuestion(() => pickQuestion(topic)));
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6315,6 +6364,23 @@ export default function MathsUnlockedBN() {
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
+  }
+
+  // "back to topics" while a question sits unanswered — leaving and
+  // re-entering a topic normally re-rolls a fresh question, which is easy
+  // to abuse to dodge anything that isn't easy. Track it for "Nice Try";
+  // once that's been caught, remember the exact question so it follows
+  // the student back in instead of re-rolling (see startTopic).
+  function leaveQuizUnanswered() {
+    if (!feedback && activeTopic && question) {
+      const tid = activeTopic.id;
+      const next = JSON.parse(JSON.stringify(profile));
+      next.dodgeCount = next.dodgeTopic === tid ? (next.dodgeCount || 0) + 1 : 1;
+      next.dodgeTopic = tid;
+      if (next.dodgeLocked) next.dodgeStuck = { ...(next.dodgeStuck || {}), [tid]: question };
+      saveProfile(next);
+    }
+    setScreen("dashboard");
   }
 
   function nextQuestion() {
@@ -6372,8 +6438,13 @@ export default function MathsUnlockedBN() {
     if (hintShown || feedback || !question) return;
     if (!(question.steps && question.steps.length > 0)) { flash("No hint for this one."); return; }
     if ((profile.hints || 0) <= 0) { flash("No Hint coins — you get one every level up."); return; }
-    patchProfile((p) => ({ hints: Math.max(0, (p.hints || 0) - 1) }));
+    const next = JSON.parse(JSON.stringify(profile));
+    next.hints = Math.max(0, (next.hints || 0) - 1);
+    next.usedHint = true; // "Every Puzzle Has an Answer"
+    const unlocked = awardAchievements(next);
     setHintShown(true);
+    saveProfile(next);
+    if (unlocked.length) playJingle(true);
   }
 
   // "Draw the graph" questions: tap lattice points, keep the last two, FIFO.
@@ -6553,15 +6624,23 @@ export default function MathsUnlockedBN() {
     const boostsWon = (next.boosts || 0) - (profile.boosts || 0);
     const xpDoubled = (profile.boostUntil || 0) > Date.now();
 
-    const unlocked = [];
-    next.achievedAt = next.achievedAt || {};
-    ACHIEVEMENTS.forEach((a) => {
-      if (!next.achievements.includes(a.id) && a.check(next)) {
-        next.achievements.push(a.id);
-        next.achievedAt[a.id] = Date.now();
-        unlocked.push(a);
-      }
-    });
+    if (correct && scoredId === "circles") next.gotCircle = true; // "What Goes Around Comes Around"
+
+    // "Nice Try" — back out of a topic 3+ times without answering (see
+    // leaveQuizUnanswered), then actually answer one correctly in it.
+    // A stuck question they'd dodged is now resolved either way.
+    if (next.dodgeStuck && next.dodgeStuck[scoredId] !== undefined) {
+      const rest = { ...next.dodgeStuck };
+      delete rest[scoredId];
+      next.dodgeStuck = rest;
+    }
+    if (correct && next.dodgeTopic === scoredId && (next.dodgeCount || 0) >= 3 && !next.dodgeCaught) {
+      next.dodgeCaught = true;
+      next.dodgeLocked = true; // caught once — dodging no longer re-rolls the question, ever
+    }
+    if (next.dodgeTopic === scoredId) { next.dodgeTopic = null; next.dodgeCount = 0; }
+
+    const unlocked = awardAchievements(next);
     const bonusSound = unlocked.length > 0 || leveledTo;
     if (bonusSound) playJingle(!!leveledTo);
     else if (correct) playCorrect();
@@ -6597,11 +6676,13 @@ export default function MathsUnlockedBN() {
     if ((cur.keys || 0) < 1) return;
     if ((cur.keyedTopics || []).includes(topic.id)) return;
     cur.keys -= 1;
-    cur.keyedTopics = [...(cur.keyedTopics || []), topic.id];
+    cur.keyedTopics = [...(cur.keyedTopics || []), topic.id]; // "Your Guiding Key"
     if (!(cur.milestones || {}).usekey) cur.milestones = { ...(cur.milestones || {}), usekey: "ready" };
+    const unlocked = awardAchievements(cur);
     setKeyTarget(null);
     saveProfile(cur);
-    playUnlock();
+    if (unlocked.length) playJingle(true);
+    else playUnlock();
   }
 
   async function loadStudents() {
@@ -6688,6 +6769,12 @@ export default function MathsUnlockedBN() {
       for (const p of all) if (p && p.uid) map[p.uid] = p;
       setFriendPeople(map);
       setBlitzChallenges(challenges);
+      if (graph.friends.length > 0 && !profileRef.current.gotFriend) {
+        const next = { ...profileRef.current, gotFriend: true }; // "Is This Friends?"
+        const unlocked = awardAchievements(next);
+        saveProfile(next);
+        if (unlocked.length) playJingle(true);
+      }
     } catch (e) { /* offline */ }
   }
 
@@ -7546,7 +7633,7 @@ export default function MathsUnlockedBN() {
         {/* QUIZ */}
         {screen === "quiz" && question && (
           <div>
-            <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+            <button onClick={leaveQuizUnanswered} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
               <ArrowLeft size={14} /> back to topics
             </button>
 
