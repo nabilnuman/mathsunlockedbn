@@ -5484,6 +5484,24 @@ function lastImprovementAt(profile) {
   return times.length ? Math.max(...times) : 0;
 }
 
+// Shape a raw profile (as returned by getLeaderboard, or `profile` itself)
+// into a leaderboard row. Shared by the Top Players and Friends tabs.
+function toBoardEntry(m) {
+  return {
+    name: m.name,
+    school: m.school && m.school !== SOLO_SCHOOL ? m.school : null,
+    score: leaderboardScore(m),
+    prestige: m.prestige || 0,
+    level: levelFromExp(totalExp(m)),
+    title: titleFor(m),
+    correct: m.totalCorrect || 0,
+    achievements: (m.achievements || []).length,
+    bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
+    at: lastImprovementAt(m),
+    full: m,
+  };
+}
+
 /* Two palettes keyed to the same CSS-variable names. The root <div> gets
    whichever set the current theme selects, so every `var(--x)` downstream
    flips automatically. Rank/tier badge colours are left as fixed hues —
@@ -5599,7 +5617,8 @@ export default function MathsUnlockedBN() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
   const [board, setBoard] = useState(null);           // { loading, schools, weekly, ... }
-  const [boardTab, setBoardTab] = useState("week");   // "week" | "alltime"
+  const [boardTab, setBoardTab] = useState("school"); // "school" | "players" | "friends"
+  const [schoolSubTab, setSchoolSubTab] = useState("alltime"); // within the School tab: "alltime" | "week"
   const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
   const [rosterProfile, setRosterProfile] = useState(null); // a leaderboard student whose full profile is shown in a modal
   const [friendQuery, setFriendQuery] = useState("");
@@ -6721,6 +6740,7 @@ export default function MathsUnlockedBN() {
     setOpenSchool(null);
     setRosterProfile(null);
     loadBoard();
+    refreshFriends(); // so the Friends tab has fresh data too
     markMilestone("leaderboard");
   }
 
@@ -6920,19 +6940,7 @@ export default function MathsUnlockedBN() {
     // ---- individual players (every student, all schools + solo) ----
     const players = all
       .filter((m) => m && m.name)
-      .map((m) => ({
-        name: m.name,
-        school: m.school && m.school !== SOLO_SCHOOL ? m.school : null,
-        score: leaderboardScore(m),
-        prestige: m.prestige || 0,
-        level: levelFromExp(totalExp(m)),
-        title: titleFor(m),
-        correct: m.totalCorrect || 0,
-        achievements: (m.achievements || []).length,
-        bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
-        at: lastImprovementAt(m),
-        full: m,
-      }))
+      .map(toBoardEntry)
       .sort((a, b) => b.score - a.score || a.at - b.at || a.name.localeCompare(b.name))
       .slice(0, 50);
 
@@ -7086,7 +7094,6 @@ export default function MathsUnlockedBN() {
                   border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
                 }}>
                   <Settings size={16} />
-                  {newIconCount > 0 && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
               </>) : (<>
                 <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -7264,12 +7271,21 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => setInventoryOpen(true)} style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   🎒 Inventory
                 </button>
-                {myLevel >= PERKS.compound.lv && (
-                  <button onClick={() => setPerksOpen(true)} style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)" }}>
-                    🎖 Perks
-                    <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
-                  </button>
-                )}
+                {(() => {
+                  const perksOk = myLevel >= PERKS.compound.lv;
+                  return (
+                    <button onClick={() => perksOk && setPerksOpen(true)} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS.compound.lv}`} style={{
+                      flex: 1, fontSize: 12.5, fontWeight: 700, color: perksOk ? "var(--blue)" : "var(--muted)",
+                      background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px",
+                      cursor: perksOk ? "pointer" : "default", opacity: perksOk ? 1 : 0.5,
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)",
+                    }}>
+                      🎖 Perks {perksOk
+                        ? <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
+                        : <span style={{ fontSize: 11 }}>🔒 Lv {PERKS.compound.lv}</span>}
+                    </button>
+                  );
+                })()}
               </div>
               {(profile.boostUntil || 0) > Date.now() && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--green)", marginTop: 6 }}>
@@ -8356,7 +8372,7 @@ export default function MathsUnlockedBN() {
               </button>
             </div>
             <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
-              {[["alltime", "Schools"], ["week", "This week"], ["players", "Top players"]].map(([id, label]) => (
+              {[["school", "School"], ["players", "Top players"], ["friends", "Friends"]].map(([id, label]) => (
                 <button key={id} onClick={() => { setBoardTab(id); setOpenSchool(null); }} style={{
                   flex: 1, padding: "7px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", borderRadius: 8,
                   border: `1.5px solid ${boardTab === id ? "var(--blue)" : "var(--grid)"}`,
@@ -8368,48 +8384,124 @@ export default function MathsUnlockedBN() {
 
             {!board || board.loading ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
-            ) : boardTab === "week" ? (
+            ) : boardTab === "school" ? (
               <div>
-                {board.lastChampion && (
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--amber)", background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
-                    🏆 Last week: {board.lastChampion.name} · {board.lastChampion.lastXp.toLocaleString()} XP
+                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                  {[["alltime", "All-time"], ["week", "This week"]].map(([id, label]) => (
+                    <button key={id} onClick={() => { setSchoolSubTab(id); setOpenSchool(null); }} style={{
+                      padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", borderRadius: 999,
+                      border: `1px solid ${schoolSubTab === id ? "var(--blue)" : "var(--grid)"}`,
+                      background: schoolSubTab === id ? "var(--blue)" : "none",
+                      color: schoolSubTab === id ? "var(--on-accent)" : "var(--muted)",
+                    }}>{label}</button>
+                  ))}
+                </div>
+                {schoolSubTab === "week" ? (
+                  <div>
+                    {board.lastChampion && (
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--amber)", background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+                        🏆 Last week: {board.lastChampion.name} · {board.lastChampion.lastXp.toLocaleString()} XP
+                      </div>
+                    )}
+                    {(board.weekly || []).length === 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--muted)" }}>No XP earned yet this week — be the first to put your school on the board.</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {board.weekly.map((s, i) => {
+                          const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
+                          const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
+                          const expanded = openSchool === s.name;
+                          return (
+                            <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden" }}>
+                              <button onClick={() => setOpenSchool(expanded ? null : s.name)}
+                                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}>
+                                <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
+                                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.active} active this week · tap to {expanded ? "hide" : "see"} who</div>
+                                </div>
+                                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.xp.toLocaleString()}</div>
+                                <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+                              </button>
+                              {expanded && (
+                                <div style={{ borderTop: "1px solid var(--grid)" }}>
+                                  {s.contributors.map((c, j) => (
+                                    <button key={j} onClick={() => { if (c.full) { setRosterProfile(c.full); markMilestone("friendview"); } }}
+                                      style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
+                                      {c.full && <MiniAvatar profile={c.full} size={30} />}
+                                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                        <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{c.name}</span>
+                                        {c.prestige > 0 && <PrestigeBadge prestige={c.prestige} size={13} />}
+                                        <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--muted)" }}>Level {c.level}</span>
+                                      </div>
+                                      <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{c.xp.toLocaleString()}</div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-                {(board.weekly || []).length === 0 ? (
-                  <div style={{ fontSize: 13, color: "var(--muted)" }}>No XP earned yet this week — be the first to put your school on the board.</div>
+                ) : board.schools.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>No schools ranked yet — students choose a school when they register.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {board.weekly.map((s, i) => {
+                    {board.schools.map((s, i) => {
                       const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
                       const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
                       const expanded = openSchool === s.name;
                       return (
                         <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden" }}>
-                          <button onClick={() => setOpenSchool(expanded ? null : s.name)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}>
+                          <button
+                            onClick={() => setOpenSchool(expanded ? null : s.name)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}
+                          >
                             <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
-                              <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.active} active this week · tap to {expanded ? "hide" : "see"} who</div>
+                              <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"} · tap to {expanded ? "hide" : "see"} the top {Math.min(20, s.roster.length)}</div>
                             </div>
-                            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.xp.toLocaleString()}</div>
+                            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.score}</div>
                             <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
                           </button>
+
+                          {!expanded && s.top.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 14px 12px" }}>
+                              {s.top.map((m, j) => (
+                                <span key={j} style={{ fontSize: 10.5, color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 7px" }}>
+                                  {m.name} · {m.prestige ? `P${m.prestige} ` : ""}L{m.level}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
                           {expanded && (
                             <div style={{ borderTop: "1px solid var(--grid)" }}>
-                              {s.contributors.map((c, j) => (
-                                <button key={j} onClick={() => { if (c.full) { setRosterProfile(c.full); markMilestone("friendview"); } }}
-                                  style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 0 ? "none" : "1px solid var(--grid)" }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
-                                  {c.full && <MiniAvatar profile={c.full} size={30} />}
-                                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                    <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{c.name}</span>
-                                    {c.prestige > 0 && <PrestigeBadge prestige={c.prestige} size={13} />}
-                                    <span style={{ fontSize: 10.5, fontWeight: 500, color: "var(--muted)" }}>Level {c.level}</span>
-                                  </div>
-                                  <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{c.xp.toLocaleString()}</div>
-                                </button>
-                              ))}
+                              {s.roster.map((m, j) => {
+                                const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                                return (
+                                  <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
+                                    style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
+                                    {m.full && <MiniAvatar profile={m.full} size={30} />}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                        <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
+                                        {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
+                                        {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                                      </div>
+                                      <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                                        {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
+                                      </div>
+                                    </div>
+                                    <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -8452,69 +8544,51 @@ export default function MathsUnlockedBN() {
                   </div>
                 </div>
               )
-            ) : board.schools.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--muted)" }}>No schools ranked yet — students choose a school when they register.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {board.schools.map((s, i) => {
-                  const mine = profile.school && profile.school !== SOLO_SCHOOL && s.name === profile.school;
-                  const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--blue)";
-                  const expanded = openSchool === s.name;
-                  return (
-                    <div key={s.name} style={{ border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 12, background: "var(--card)", overflow: "hidden" }}>
-                      <button
-                        onClick={() => setOpenSchool(expanded ? null : s.name)}
-                        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--ink)" }}
-                      >
-                        <span className="mub-display" style={{ fontSize: 18, fontWeight: 700, color: rankColor, minWidth: 30, flexShrink: 0 }}>#{i + 1}</span>
+            ) : (() => {
+              // Friends tab: you + your accepted friends, ranked together.
+              const entries = [toBoardEntry({ ...profile, uid: authUid })];
+              (friendGraph.friends || []).forEach((uid) => {
+                const p = friendPeople[uid];
+                if (p) entries.push(toBoardEntry(p));
+              });
+              entries.sort((a, b) => b.score - a.score || a.at - b.at || a.name.localeCompare(b.name));
+              if (entries.length <= 1) {
+                return (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                    Add friends to see how you stack up. <button onClick={openFriends} style={{ color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13 }}>Find friends →</button>
+                  </div>
+                );
+              }
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {entries.map((m, i) => {
+                    const mine = m.full && m.full.uid === authUid;
+                    const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
+                    const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                    return (
+                      <button key={i} onClick={() => { if (!mine && m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
+                        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: mine ? "default" : "pointer",
+                          color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
+                        <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, flexShrink: 0 }}>#{i + 1}</span>
+                        {m.full && <MiniAvatar profile={m.full} size={30} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}{mine ? " · your school" : ""}</div>
-                          <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.members} student{s.members === 1 ? "" : "s"} · tap to {expanded ? "hide" : "see"} the top {Math.min(20, s.roster.length)}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
+                            {mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                            {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
+                            {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                            {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
+                          </div>
                         </div>
-                        <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{s.score}</div>
-                        <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+                        <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
                       </button>
-
-                      {!expanded && s.top.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 14px 12px" }}>
-                          {s.top.map((m, j) => (
-                            <span key={j} style={{ fontSize: 10.5, color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 7px" }}>
-                              {m.name} · {m.prestige ? `P${m.prestige} ` : ""}L{m.level}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {expanded && (
-                        <div style={{ borderTop: "1px solid var(--grid)" }}>
-                          {s.roster.map((m, j) => {
-                            const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
-                            return (
-                              <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                                style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
-                                {m.full && <MiniAvatar profile={m.full} size={30} />}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                    <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
-                                    {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
-                                    {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
-                                  </div>
-                                  <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                                    {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
-                                  </div>
-                                </div>
-                                <div className="mub-display" style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{m.score}</div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -8533,10 +8607,17 @@ export default function MathsUnlockedBN() {
           onClick={() => { setShowCard(false); setPickIcon(false); setPickBanner(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "32px 16px", zIndex: 50, overflowY: "auto" }}
         >
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowCard(false); setPickIcon(false); setPickBanner(false); }}
+            aria-label="Close" title="Close"
+            style={{ position: "fixed", top: 16, right: 16, width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.4)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 51 }}
+          >
+            <XIcon size={18} />
+          </button>
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <ProfileCard profile={profile} onEditIcon={() => setPickIcon(true)} onEditBanner={() => setPickBanner(true)} newIcons={newIconCount > 0} />
             <button onClick={() => setStylePickerOpen(true)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}>🎨 Style — sound, title, background</button>
-            <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Tap your icon or banner to customise · screenshot to share · tap outside to close</div>
+            <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Tap your icon or banner to customise · screenshot to share</div>
           </div>
         </div>
       )}
