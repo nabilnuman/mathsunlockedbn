@@ -5531,11 +5531,19 @@ export default function MathsUnlockedBN() {
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; });
 
+  // Only auto-focus inputs on devices with a real pointer (desktop). On
+  // touch, focusing pops the on-screen keyboard over the question — let
+  // the student read it and tap the box themselves.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    try { setIsDesktop(!!(window.matchMedia && window.matchMedia("(pointer: fine)").matches)); } catch (e) { /* noop */ }
+  }, []);
+
   // Desktop keyboard flow in a quiz: keep focus in the answer box while
   // answering, then on the "Next question" button after feedback so Enter
   // advances without a mouse.
   useEffect(() => {
-    if (screen !== "quiz") return;
+    if (screen !== "quiz" || !isDesktop) return;
     const t = setTimeout(() => {
       try {
         if (feedback) { nextRef.current && nextRef.current.focus(); }
@@ -5543,7 +5551,7 @@ export default function MathsUnlockedBN() {
       } catch (e) { /* noop */ }
     }, 30);
     return () => clearTimeout(t);
-  }, [screen, question, feedback, shieldOffer]);
+  }, [screen, question, feedback, shieldOffer, isDesktop]);
 
   // Insert a symbol at the caret in the answer box (for keys not on a
   // phone keyboard).
@@ -6214,7 +6222,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setMcPick(null); setDrawTri([]);
     startTimeRef.current = Date.now();
-    setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
+    if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
   }
   // Decline the shield: commit the wrong answer normally.
@@ -7488,7 +7496,7 @@ export default function MathsUnlockedBN() {
                     {["vx", "vy"].map((k, i) => (
                       <input key={k}
                         ref={i === 0 ? answerRef : undefined}
-                        autoFocus={i === 0}
+                        autoFocus={isDesktop && i === 0}
                         className="mub-mono" inputMode="numeric"
                         autoCapitalize="none" autoCorrect="off" spellCheck={false}
                         value={multiInput[k] || ""}
@@ -7509,7 +7517,7 @@ export default function MathsUnlockedBN() {
                       <span className="mub-mono" style={{ fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>{f.label}</span>
                       <input
                         ref={i === 0 ? answerRef : undefined}
-                        autoFocus={i === 0}
+                        autoFocus={isDesktop && i === 0}
                         className="mub-mono"
                         autoCapitalize="none" autoCorrect="off" spellCheck={false}
                         value={multiInput[f.key] || ""}
@@ -7526,7 +7534,7 @@ export default function MathsUnlockedBN() {
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   <input
                     ref={answerRef}
-                    autoFocus className="mub-mono" value={answerInput}
+                    autoFocus={isDesktop} className="mub-mono" value={answerInput}
                     autoCapitalize="none" autoCorrect="off" spellCheck={false}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
