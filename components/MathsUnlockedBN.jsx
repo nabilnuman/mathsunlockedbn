@@ -8701,10 +8701,11 @@ export default function MathsUnlockedBN() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {TIERS.map((tier) => {
                 const all = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
+                if (tier === "Diamond" && earned === 0) return null; // whole tier stays hidden until unlocked
                 const items = achHideDone ? all.filter((a) => !(profile.achievements || []).includes(a.id)) : all;
                 if (!items.length) return null;
                 const tc = TIER_COLOR[tier];
-                const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
                 return (
                   <div key={tier}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
