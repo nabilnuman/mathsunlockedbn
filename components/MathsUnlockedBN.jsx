@@ -4854,6 +4854,18 @@ const CARD_BGS = {
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
+// Build a clean style object — never emit `backgroundImage: undefined`,
+// which React turns into `= ''` and wipes a `background:` gradient.
+function cardBgStyle(b, swatch) {
+  if (b.grid) {
+    return swatch
+      ? { backgroundColor: "var(--paper)", backgroundImage: "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)", backgroundSize: "9px 9px" }
+      : {};
+  }
+  const s = { background: b.bg };
+  if (b.img) { s.backgroundImage = b.img; s.backgroundSize = b.size; }
+  return s;
+}
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
   return (
@@ -4939,7 +4951,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
     <div className={cardBg.grid ? "mub-grid" : undefined} style={{
       width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22,
       color: cardBg.dark ? "#F2F5F8" : "var(--ink)",
-      ...(cardBg.grid ? {} : { background: cardBg.bg, backgroundImage: cardBg.img, backgroundSize: cardBg.size }),
+      ...cardBgStyle(cardBg),
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>MathsUnlocked</span>
@@ -5173,26 +5185,20 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       </div>
 
       <Head>Card background {prestige === 0 ? "· unlock with Prestige" : ""}</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         {CARD_BG_IDS.map((id, i) => {
           const b = CARD_BGS[id];
           const locked = prestige < i;
           const on = (profile.cardBg || "graph") === id;
           return (
-            <div key={id} style={{ position: "relative", width: 104 }}>
+            <div key={id} style={{ width: 66 }}>
               <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ cardBg: id }))} style={{
-                width: 104, height: 66, borderRadius: 10, cursor: locked ? "default" : "pointer", padding: "0 0 0 9px",
-                display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", gap: 5,
+                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 0,
                 border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-                background: b.grid ? "var(--paper)" : b.bg,
-                backgroundImage: b.grid ? "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)" : b.img,
-                backgroundSize: b.grid ? "10px 10px" : b.size,
+                ...cardBgStyle(b, true),
                 filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
-              }}>
-                <span style={{ width: 17, height: 17, borderRadius: "50%", background: b.dark ? "#7FE0BB" : "var(--green)" }} />
-                <span style={{ width: 60, height: 8, borderRadius: 3, background: b.dark ? "rgba(255,255,255,0.6)" : "#FFFFFF", boxShadow: "0 0 0 1px rgba(0,0,0,0.06)" }} />
-              </button>
-              <div style={{ fontSize: 10, color: "var(--muted)", textAlign: "center", marginTop: 3, fontWeight: 600 }}>{locked ? `Prestige ${i}` : b.name}</div>
+              }} />
+              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `P${i}` : b.name}</div>
             </div>
           );
         })}
