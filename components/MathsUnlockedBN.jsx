@@ -6849,9 +6849,13 @@ export default function MathsUnlockedBN() {
                     <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 999, background: "var(--red)", color: "#fff", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid var(--paper)", boxSizing: "border-box" }}>{missionClaims}</span>
                   )}
                 </button>
-                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{ position: "relative", display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--muted)" }}>
-                  <Settings size={18} />
-                  {newIconCount > 0 && <span style={{ position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
+                <button onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings" style={{
+                  position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
+                }}>
+                  <Settings size={16} />
+                  {newIconCount > 0 && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
               </>) : (<>
                 <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -7029,14 +7033,14 @@ export default function MathsUnlockedBN() {
                 {(() => {
                   const n = (profile.keys || 0) + (profile.hints || 0) + (profile.shields || 0) + (profile.boosts || 0);
                   return (
-                    <button onClick={() => setInventoryOpen(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer" }}>
+                    <button onClick={() => setInventoryOpen(true)} style={{ position: "relative", fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)" }}>
                       🎒 Inventory
                       {n > 0 && <span style={{ marginLeft: 6, fontWeight: 800, color: "var(--ink)" }}>{n}</span>}
                     </button>
                   );
                 })()}
                 {myLevel >= PERKS.compound.lv && (
-                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "5px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)" }}>
                     🎖 Perks
                     <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
                   </button>
