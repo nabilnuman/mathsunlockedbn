@@ -5488,8 +5488,23 @@ export default function MathsUnlockedBN() {
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
+  const nextRef = useRef(null);
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; });
+
+  // Desktop keyboard flow in a quiz: keep focus in the answer box while
+  // answering, then on the "Next question" button after feedback so Enter
+  // advances without a mouse.
+  useEffect(() => {
+    if (screen !== "quiz") return;
+    const t = setTimeout(() => {
+      try {
+        if (feedback) { nextRef.current && nextRef.current.focus(); }
+        else if (!shieldOffer && answerRef.current) { answerRef.current.focus(); }
+      } catch (e) { /* noop */ }
+    }, 30);
+    return () => clearTimeout(t);
+  }, [screen, question, feedback, shieldOffer]);
 
   // Insert a symbol at the caret in the answer box (for keys not on a
   // phone keyboard).
@@ -7682,7 +7697,7 @@ export default function MathsUnlockedBN() {
                     </div>
                   )}
                   <div>
-                    <button onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    <button ref={nextRef} onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                       Next question →
                     </button>
                   </div>
