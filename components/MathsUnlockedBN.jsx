@@ -3961,12 +3961,12 @@ const TOPICS = [
         const bagDesc = joinAnd(names.map((nm, i) => `${counts[i]} ${nm}`));
         if (Math.random() < 0.5) {
           const [sn, sd] = simp(n, total);
-          return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is ${c}. Give your answer as a fraction in its lowest terms.`,
+          return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is ${c}.`,
             answer: `${n}/${total}`, hint: "favourable ÷ total, then simplify.",
             steps: [`P(${c}) = ${n} ÷ ${total} = ${sn}/${sd}`] };
         }
         const [sn, sd] = simp(total - n, total);
-        return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is NOT ${c}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is NOT ${c}.`,
           answer: `${total - n}/${total}`, hint: "P(not X) = 1 − P(X).",
           steps: [`P(${c}) = ${n}/${total}`, `P(not ${c}) = 1 − ${n}/${total} = ${sn}/${sd}`] };
       }
@@ -3994,7 +3994,7 @@ const TOPICS = [
           desc = `the sum of the two numbers is at most ${k}`;
         }
         const [sn, sd] = simp(fav, total);
-        return { prompt: `Two fair ${sides}-sided spinners, each numbered 1 to ${sides}, are spun together. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `Two fair ${sides}-sided spinners, each numbered 1 to ${sides}, are spun together. Find the probability that ${desc}.`,
           answer: `${fav}/${total}`, hint: "A possibility diagram (grid of all outcomes) helps — count how many fit.",
           steps: [`There are ${sides} × ${sides} = ${total} equally likely outcomes.`, `${fav} of them fit.`, `P = ${fav}/${total} = ${sn}/${sd}`] };
       }
@@ -4014,7 +4014,7 @@ const TOPICS = [
         else { num = den - b * (b - 1); desc = "at least one counter is red";
           workLines = [`P(no red) = (${b}/${tt}) × (${b - 1}/${tt - 1})`, `P(at least one red) = 1 − P(no red)`]; }
         const [sn, sd] = simp(num, den);
-        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Two counters are taken at random, without replacement. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Two counters are taken at random, without replacement. Find the probability that ${desc}.`,
           answer: `${num}/${den}`, hint: "Draw a tree diagram — multiply along the branches, add if there's more than one way.",
           steps: [...workLines, `= ${num}/${den} = ${sn}/${sd}`] };
       }
@@ -4026,7 +4026,7 @@ const TOPICS = [
         const cnt = useRed ? rr : b, name = useRed ? "red" : "blue";
         const num = cnt * (cnt - 1) * (cnt - 2), den = tt * (tt - 1) * (tt - 2);
         const [sn, sd] = simp(num, den);
-        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Three counters are taken at random, without replacement. Find the probability that all three are ${name}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Three counters are taken at random, without replacement. Find the probability that all three are ${name}.`,
           answer: `${num}/${den}`, hint: "Multiply three fractions, one fewer each time.",
           steps: [`P(all ${name}) = (${cnt}/${tt}) × (${cnt - 1}/${tt - 1}) × (${cnt - 2}/${tt - 2})`, `= ${num}/${den} = ${sn}/${sd}`] };
       }
@@ -4040,7 +4040,7 @@ const TOPICS = [
         const den = n * n;
         const [sn, sd] = simp(num, den);
         const desc = both ? "both numbers are odd" : "one number is odd and the other is even";
-        return { prompt: `A bag contains ${n} balls numbered 1 to ${n}. A ball is taken at random, its number noted, and replaced. A second ball is then taken at random. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `A bag contains ${n} balls numbered 1 to ${n}. A ball is taken at random, its number noted, and replaced. A second ball is then taken at random. Find the probability that ${desc}.`,
           answer: `${num}/${den}`, hint: `${oddCount} of the ${n} numbers are odd.`,
           steps: both
             ? [`P(odd) = ${oddCount}/${n}`, `P(both odd) = (${oddCount}/${n})² = ${num}/${den} = ${sn}/${sd}`]
@@ -4077,7 +4077,7 @@ const TOPICS = [
         else if (kind === "multiple") { const mm = pick([3, 4, 5]); fav = nums.filter((v) => v % mm === 0).length; desc = `a multiple of ${mm}`; }
         else { fav = nums.filter(isPrime).length; desc = "a prime number"; }
         const [sn, sd] = simp(fav, nums.length);
-        return { prompt: `The cards ${pool.join(", ")} are shuffled. Two of them are chosen at random and placed next to each other to make a two-digit number. Find the probability that the two-digit number is ${desc}. Give your answer as a fraction in its lowest terms.`,
+        return { prompt: `The cards ${pool.join(", ")} are shuffled. Two of them are chosen at random and placed next to each other to make a two-digit number. Find the probability that the two-digit number is ${desc}.`,
           answer: `${fav}/${nums.length}`, hint: "List all the possible two-digit numbers, then count.",
           steps: [`There are ${nums.length} possible two-digit numbers.`, `${fav} of them are ${desc}.`, `P = ${fav}/${nums.length} = ${sn}/${sd}`] };
       }
