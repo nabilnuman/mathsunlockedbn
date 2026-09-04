@@ -7,6 +7,7 @@ import {
   addRecoveryEmail, sendPinReset, completePinReset, onPasswordRecovery,
   teacherResetPin, changePin,
   sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
+  createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -5415,6 +5416,7 @@ const emptyProfile = () => ({
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
   cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
+  seenChallenges: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5524,6 +5526,13 @@ export default function MathsUnlockedBN() {
   const blitzCorrect = useRef(0);
   const blitzAdvance = useRef(null);
   const blitzDone = useRef(false);
+  // Async PvP: while a challenge run is live this holds
+  // { mode:"create"|"play", id, opponentUid, opponentName, opponentScore, questions, idx };
+  // null for a normal solo Blitz.
+  const challengeRef = useRef(null);
+  const [challengeResult, setChallengeResult] = useState(null); // { mode, opponentName, myScore, opponentScore }
+  const [blitzChallenges, setBlitzChallenges] = useState([]);   // every challenge involving me
+  const [challengeBusy, setChallengeBusy] = useState(false);
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [pinResetFor, setPinResetFor] = useState(null); // student uid whose PIN reset panel is open
@@ -5892,8 +5901,38 @@ export default function MathsUnlockedBN() {
   // ---- Blitz ----
   function startBlitz() {
     if (levelFromExp(totalExp(profile)) < BLITZ_UNLOCK_LEVEL) return;
+    challengeRef.current = null;
+    setChallengeResult(null);
     setBlitzPhase("intro");
     setBlitzResult(null);
+    setScreen("blitz");
+  }
+  // Challenge a friend: I play first, my questions + score seed the row.
+  function startChallenge(friend) {
+    if (!friend || !friend.uid) return;
+    if (levelFromExp(totalExp(profile)) < BLITZ_UNLOCK_LEVEL) return;
+    const questions = Array.from({ length: 40 }, () => blitzQuestion());
+    challengeRef.current = {
+      mode: "create", id: null, opponentUid: friend.uid,
+      opponentName: friend.name || "Friend", opponentScore: null, questions, idx: 0,
+    };
+    setChallengeResult(null);
+    setBlitzResult(null);
+    setBlitzPhase("intro");
+    setScreen("blitz");
+  }
+  // Answer a challenge someone sent me: replay their exact question set.
+  function playChallenge(row) {
+    if (!row || !Array.isArray(row.questions)) return;
+    const opp = friendPeople[row.a] || {};
+    challengeRef.current = {
+      mode: "play", id: row.id, opponentUid: row.a,
+      opponentName: opp.name || "Friend", opponentScore: row.score_a ?? 0,
+      questions: row.questions, idx: 0,
+    };
+    setChallengeResult(null);
+    setBlitzResult(null);
+    setBlitzPhase("intro");
     setScreen("blitz");
   }
   function beginBlitzRun() {
@@ -5903,13 +5942,23 @@ export default function MathsUnlockedBN() {
     setBlitzScore(0);
     setBlitzLeft(BLITZ_SECONDS);
     setBlitzPick(null);
-    setBlitzQ(blitzQuestion());
+    setChallengeResult(null);
+    const ch = challengeRef.current;
+    if (ch) { ch.idx = 0; setBlitzQ(ch.questions[0]); }
+    else setBlitzQ(blitzQuestion());
     setBlitzPhase("playing");
   }
   function nextBlitzQ() {
     clearTimeout(blitzAdvance.current);
     setBlitzPick(null);
-    setBlitzQ(blitzQuestion());
+    const ch = challengeRef.current;
+    if (ch) {
+      ch.idx += 1;
+      if (ch.idx >= ch.questions.length) { finishBlitz(); return; }
+      setBlitzQ(ch.questions[ch.idx]);
+    } else {
+      setBlitzQ(blitzQuestion());
+    }
   }
   function scoreBlitz(isCorrect) {
     if (isCorrect) { blitzCorrect.current += 1; setBlitzScore((s) => s + 1); playCorrect(); }
@@ -5955,12 +6004,45 @@ export default function MathsUnlockedBN() {
     setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked });
     if (unlocked.length) playJingle(true);
     saveProfile(n);
+    if (challengeRef.current) {
+      const ch = challengeRef.current;
+      setChallengeBusy(true);
+      setChallengeResult({ mode: ch.mode, opponentName: ch.opponentName, myScore: sc, opponentScore: ch.opponentScore ?? null });
+      finalizeChallenge(sc);
+    }
+  }
+  // Push my challenge score to Supabase after the run ends.
+  async function finalizeChallenge(sc) {
+    const ch = challengeRef.current;
+    if (!ch) return;
+    setChallengeBusy(true);
+    try {
+      if (ch.mode === "create") {
+        const res = await createBlitzChallenge(ch.opponentUid, ch.questions, sc);
+        if (res && res.challenge) ch.id = res.challenge.id;
+        setChallengeResult({ mode: "create", opponentName: ch.opponentName, myScore: sc, opponentScore: null });
+      } else {
+        await submitBlitzChallengeScore(ch.id, sc);
+        setChallengeResult({ mode: "play", opponentName: ch.opponentName, myScore: sc, opponentScore: ch.opponentScore ?? 0 });
+      }
+      refreshBlitzChallenges();
+    } catch (e) {
+      setChallengeResult({ mode: ch.mode, opponentName: ch.opponentName, myScore: sc, opponentScore: ch.opponentScore ?? null, failed: true });
+    }
+    setChallengeBusy(false);
+  }
+  async function refreshBlitzChallenges() {
+    try { setBlitzChallenges(await loadBlitzChallenges()); } catch (e) { /* offline */ }
   }
   function leaveBlitz() {
     if (!blitzDone.current && blitzPhase === "playing") finishBlitz();
     clearTimeout(blitzAdvance.current);
+    const wasChallenge = !!challengeRef.current;
+    challengeRef.current = null;
+    setChallengeResult(null);
     setBlitzPhase("idle");
-    setScreen("dashboard");
+    if (wasChallenge) openFriends();
+    else setScreen("dashboard");
   }
 
   // Keep the XP-Boost countdown fresh while one is running.
@@ -6574,26 +6656,59 @@ export default function MathsUnlockedBN() {
   const prevScreenRef = useRef("login");
   useEffect(() => {
     if (prevScreenRef.current === "friends" && screen !== "friends") {
-      const seen = friendGraph.friends;
-      if (seen.some((u) => !(profileRef.current.seenFriends || []).includes(u))) {
-        patchProfile(() => ({ seenFriends: seen }));
+      const seenF = friendGraph.friends;
+      const doneCh = blitzChallenges
+        .filter((c) => c.score_a != null && c.score_b != null)
+        .map((c) => c.id);
+      const patch = {};
+      if (seenF.some((u) => !(profileRef.current.seenFriends || []).includes(u))) patch.seenFriends = seenF;
+      if (doneCh.some((id) => !(profileRef.current.seenChallenges || []).includes(id))) {
+        patch.seenChallenges = [...new Set([...(profileRef.current.seenChallenges || []), ...doneCh])];
       }
+      if (Object.keys(patch).length) patchProfile(() => patch);
     }
     prevScreenRef.current = screen;
-  }, [screen, friendGraph]);
+  }, [screen, friendGraph, blitzChallenges]);
+
+  const myChallenges = blitzChallenges.map(challengeInfo);
+  const challengeAlert = myChallenges.some((c) => c.needsMe || c.unseen);
 
   const friendAlert =
     (friendGraph.incoming || []).length > 0 ||
-    (friendGraph.friends || []).some((u) => !(profile.seenFriends || []).includes(u));
+    (friendGraph.friends || []).some((u) => !(profile.seenFriends || []).includes(u)) ||
+    challengeAlert;
 
   async function refreshFriends() {
     try {
-      const [graph, all] = await Promise.all([loadFriendGraph(), getLeaderboard()]);
+      const [graph, all, challenges] = await Promise.all([
+        loadFriendGraph(), getLeaderboard(), loadBlitzChallenges(),
+      ]);
       setFriendGraph(graph);
       const map = {};
       for (const p of all) if (p && p.uid) map[p.uid] = p;
       setFriendPeople(map);
+      setBlitzChallenges(challenges);
     } catch (e) { /* offline */ }
+  }
+
+  // My side of a challenge row + a derived status. (hoisted; used above)
+  function challengeInfo(c) {
+    const iAmA = c.a === authUid;
+    const oppUid = iAmA ? c.b : c.a;
+    const myScore = iAmA ? c.score_a : c.score_b;
+    const oppScore = iAmA ? c.score_b : c.score_a;
+    const complete = c.score_a != null && c.score_b != null;
+    const seen = (profile.seenChallenges || []).includes(c.id);
+    const opp = friendPeople[oppUid] || null;
+    return {
+      id: c.id, iAmA, oppUid, opp, myScore, oppScore, complete,
+      needsMe: !iAmA && c.score_b == null,       // they challenged me, unplayed
+      waiting: iAmA && c.score_b == null,        // I challenged, awaiting them
+      unseen: complete && !seen,
+      won: complete && myScore > oppScore,
+      lost: complete && myScore < oppScore,
+      tie: complete && myScore === oppScore,
+    };
   }
 
   async function doFriendAction(kind, uid) {
@@ -7845,12 +7960,39 @@ export default function MathsUnlockedBN() {
                   const st = friendState(friendView.uid);
                   if (st === "self" || !friendView.uid) return null;
                   const busy = friendBusy === friendView.uid;
-                  if (st === "friend") return (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>✓ Friends</span>
-                      <button onClick={() => doFriendAction("remove", friendView.uid)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Remove</button>
-                    </div>
-                  );
+                  if (st === "friend") {
+                    const myLv = levelFromExp(totalExp(profile));
+                    const theirLv = levelFromExp(totalExp(friendView));
+                    const canChallenge = myLv >= BLITZ_UNLOCK_LEVEL && theirLv >= BLITZ_UNLOCK_LEVEL;
+                    const pend = myChallenges.find(
+                      (c) => c.oppUid === friendView.uid && (c.needsMe || c.waiting || c.unseen)
+                    );
+                    return (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>✓ Friends</span>
+                          <button onClick={() => doFriendAction("remove", friendView.uid)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Remove</button>
+                        </div>
+                        {pend && pend.needsMe ? (
+                          <button onClick={() => playChallenge(blitzChallenges.find((r) => r.id === pend.id))} style={{ fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 9, padding: "9px 16px", cursor: "pointer" }}>
+                            ⚡ Play their challenge · beat {pend.oppScore}
+                          </button>
+                        ) : pend && pend.waiting ? (
+                          <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>⚡ Challenge sent — you scored {pend.myScore}, waiting for {friendView.name}.</div>
+                        ) : pend && pend.unseen ? (
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: pend.won ? "var(--green)" : pend.lost ? "var(--red)" : "var(--muted)" }}>
+                            ⚡ {pend.won ? "You won" : pend.lost ? "You lost" : "Tie"} {pend.myScore}–{pend.oppScore}
+                          </div>
+                        ) : canChallenge ? (
+                          <button onClick={() => startChallenge(friendView)} style={{ fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 9, padding: "9px 16px", cursor: "pointer" }}>
+                            ⚡ Challenge to Blitz
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Blitz challenges unlock at Level {BLITZ_UNLOCK_LEVEL} for both players.</div>
+                        )}
+                      </div>
+                    );
+                  }
                   if (st === "incoming") return (
                     <button onClick={() => doFriendAction("accept", friendView.uid)} disabled={busy} style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}>Accept friend request</button>
                   );
@@ -7895,6 +8037,35 @@ export default function MathsUnlockedBN() {
                         ), true))}
                       </div>
                     </>)}
+                    {(() => {
+                      const active = myChallenges.filter((c) => c.needsMe || c.waiting || c.unseen);
+                      if (!active.length) return null;
+                      const nameOf = (c) => (c.opp && c.opp.name) || "Friend";
+                      return (<>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Blitz challenges</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                          {active.map((c) => (
+                            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--grid)", borderRadius: 10, position: "relative" }}>
+                              {(c.needsMe || c.unseen) && <span style={{ position: "absolute", top: -4, left: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--paper)", boxSizing: "border-box" }} />}
+                              {c.opp ? <MiniAvatar profile={c.opp} size={30} /> : <span style={{ width: 30, flexShrink: 0 }} />}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{nameOf(c)}</div>
+                                <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                                  {c.needsMe ? `Challenged you — beat ${c.oppScore}`
+                                    : c.waiting ? `You scored ${c.myScore} — waiting for them`
+                                    : c.won ? `You won ${c.myScore}–${c.oppScore} 🏆`
+                                    : c.lost ? `You lost ${c.myScore}–${c.oppScore}`
+                                    : `Tie ${c.myScore}–${c.oppScore}`}
+                                </div>
+                              </div>
+                              {c.needsMe && (
+                                <button onClick={() => playChallenge(blitzChallenges.find((r) => r.id === c.id))} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>Play</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>);
+                    })()}
                     {friendGraph.friends.length === 0 ? (
                       <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 20 }}>No friends yet. Tap <b>Find friends</b> to search and send a request.</div>
                     ) : (
@@ -7960,21 +8131,33 @@ export default function MathsUnlockedBN() {
               <ArrowLeft size={14} /> {blitzPhase === "playing" ? "end run" : "back"}
             </button>
 
-            {blitzPhase === "intro" && (
+            {blitzPhase === "intro" && (() => {
+              const ch = challengeRef.current;
+              return (
               <div style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: "28px 22px" }}>
                 <div style={{ fontSize: 44 }}>⚡</div>
-                <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 10px" }}>Blitz</div>
+                <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 10px" }}>
+                  {ch ? `Blitz vs ${ch.opponentName}` : "Blitz"}
+                </div>
+                {ch && ch.mode === "play" && (
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>
+                    {ch.opponentName} scored {ch.opponentScore} — beat it!
+                  </div>
+                )}
                 <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 6 }}>
-                  {BLITZ_SECONDS} seconds. Questions from any topic, all answered with one tap. Your answer locks in and jumps straight to the next.
+                  {ch
+                    ? `Same ${BLITZ_SECONDS} seconds, same questions for both of you. One tap each, locks straight in.`
+                    : `${BLITZ_SECONDS} seconds. Questions from any topic, all answered with one tap. Your answer locks in and jumps straight to the next.`}
                 </div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
                   Every correct answer is still worth +{CORRECT_XP} XP. Your best score: <b style={{ color: "var(--ink)" }}>{profile.blitzBest || 0}</b>
                 </div>
                 <button onClick={beginBlitzRun} style={{ padding: "12px 28px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
-                  Start
+                  {ch && ch.mode === "create" ? "Play your run" : "Start"}
                 </button>
               </div>
-            )}
+              );
+            })()}
 
             {blitzPhase === "playing" && blitzQ && (
               <div style={{ maxWidth: 480, margin: "0 auto" }}>
@@ -8025,23 +8208,48 @@ export default function MathsUnlockedBN() {
 
             {blitzPhase === "over" && blitzResult && (
               <div style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: "28px 22px" }}>
-                <div style={{ fontSize: 40 }}>⏱️</div>
+                <div style={{ fontSize: 40 }}>{challengeResult ? "⚡" : "⏱️"}</div>
                 <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, margin: "4px 0 14px" }}>Time&rsquo;s up!</div>
                 <div className="mub-display" style={{ fontSize: 48, fontWeight: 800, color: "var(--blue)", lineHeight: 1 }}>{blitzResult.score}</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>correct in {BLITZ_SECONDS}s</div>
-                {blitzResult.newBest ? (
+
+                {challengeResult ? (
+                  challengeBusy ? (
+                    <div style={{ fontSize: 13, color: "var(--muted)", margin: "14px 0" }}>Saving your challenge…</div>
+                  ) : challengeResult.mode === "create" ? (
+                    <div style={{ fontSize: 13, color: "var(--muted)", margin: "14px 0", lineHeight: 1.6 }}>
+                      Challenge {challengeResult.failed ? "couldn't be sent — try again from their profile." : <>sent to <b style={{ color: "var(--ink)" }}>{challengeResult.opponentName}</b>. They&rsquo;ll play the same questions and try to beat <b style={{ color: "var(--ink)" }}>{challengeResult.myScore}</b>.</>}
+                    </div>
+                  ) : (() => {
+                    const me = challengeResult.myScore, them = challengeResult.opponentScore;
+                    const win = me > them, tie = me === them;
+                    return (
+                      <div style={{ margin: "14px 0" }}>
+                        <div className="mub-stamp" style={{ fontSize: 18, fontWeight: 800, color: win ? "var(--green)" : tie ? "var(--muted)" : "var(--red)" }}>
+                          {win ? "You win! 🏆" : tie ? "It's a tie" : "You lost"}
+                        </div>
+                        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>
+                          You <b style={{ color: "var(--ink)" }}>{me}</b> &nbsp;·&nbsp; {challengeResult.opponentName} <b style={{ color: "var(--ink)" }}>{them}</b>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : blitzResult.newBest ? (
                   <div className="mub-stamp" style={{ fontSize: 14, fontWeight: 800, color: "var(--green)", margin: "12px 0" }}>🎉 New best!</div>
                 ) : (
                   <div style={{ fontSize: 13, color: "var(--muted)", margin: "12px 0" }}>Your best: <b style={{ color: "var(--ink)" }}>{blitzResult.best}</b></div>
                 )}
+
                 {blitzResult.unlocked.length > 0 && (
                   <div style={{ fontSize: 12.5, color: "var(--amber)", fontWeight: 700, marginBottom: 12 }}>
                     🏆 {blitzResult.unlocked.map((a) => `${a.name} (${a.tier})`).join(", ")}
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 8 }}>
-                  <button onClick={beginBlitzRun} style={{ padding: "10px 22px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Play again</button>
-                  <button onClick={leaveBlitz} style={{ padding: "10px 22px", background: "none", border: "1px solid var(--grid)", borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>Back</button>
+                  {!challengeResult && (
+                    <button onClick={beginBlitzRun} style={{ padding: "10px 22px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Play again</button>
+                  )}
+                  <button onClick={leaveBlitz} style={{ padding: "10px 22px", background: "none", border: "1px solid var(--grid)", borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>{challengeResult ? "Done" : "Back"}</button>
                 </div>
               </div>
             )}

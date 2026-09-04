@@ -215,3 +215,42 @@ create policy fr_accept on friendships for update to authenticated
 drop policy if exists fr_delete on friendships;
 create policy fr_delete on friendships for delete to authenticated
   using (a = auth.uid() or b = auth.uid());
+
+-- ============================================================
+--  9. BLITZ CHALLENGES  (async PvP)
+--     a = the challenger, b = the opponent. `a` plays first, so
+--     the shared question set and a's score are written on insert;
+--     `b` later plays the same questions and writes score_b.
+--     Higher score wins. Nothing realtime.
+--     RLS: either party reads/deletes; only a can insert (as
+--     themselves, before b has played); either party may update
+--     (the client only ever writes its own score).
+-- ============================================================
+create extension if not exists pgcrypto;
+create table if not exists blitz_challenges (
+  id uuid primary key default gen_random_uuid(),
+  a uuid not null,
+  b uuid not null,
+  questions jsonb not null,
+  score_a integer,
+  score_b integer,
+  created_at timestamptz not null default now()
+);
+alter table blitz_challenges enable row level security;
+
+drop policy if exists bc_select on blitz_challenges;
+create policy bc_select on blitz_challenges for select to authenticated
+  using (a = auth.uid() or b = auth.uid());
+
+drop policy if exists bc_insert on blitz_challenges;
+create policy bc_insert on blitz_challenges for insert to authenticated
+  with check (a = auth.uid() and score_b is null);
+
+drop policy if exists bc_update on blitz_challenges;
+create policy bc_update on blitz_challenges for update to authenticated
+  using (a = auth.uid() or b = auth.uid())
+  with check (a = auth.uid() or b = auth.uid());
+
+drop policy if exists bc_delete on blitz_challenges;
+create policy bc_delete on blitz_challenges for delete to authenticated
+  using (a = auth.uid() or b = auth.uid());
