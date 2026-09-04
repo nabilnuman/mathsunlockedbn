@@ -4524,19 +4524,36 @@ function LevelBar({ profile, onPrestige, onOpenUnlocks }) {
   );
 }
 
-/* Rank titles shown under the student's name and on the profile card.
-   Past Level 20 the extra flex comes from Prestige. */
+/* Titles shown under the student's name. Level titles unlock as you climb;
+   prestige titles on top. The student picks which unlocked one to show
+   (profile.title); it falls back to the highest one earned by level. */
 const TITLES = [
-  { level: 1, name: "Novice" },
-  { level: 5, name: "Apprentice" },
-  { level: 10, name: "Scholar" },
-  { level: 15, name: "Maths Specialist" },
-  { level: 20, name: "Maths Master" },
+  { level: 1, name: "Novice" }, { level: 3, name: "Learner" }, { level: 5, name: "Student" },
+  { level: 7, name: "Apprentice" }, { level: 9, name: "Practitioner" }, { level: 11, name: "Analyst" },
+  { level: 13, name: "Scholar" }, { level: 15, name: "Specialist" }, { level: 17, name: "Expert" },
+  { level: 19, name: "Virtuoso" }, { level: 20, name: "Maths Master" },
+];
+const PRESTIGE_TITLES = [
+  { prestige: 1, name: "Veteran" }, { prestige: 3, name: "Champion" },
+  { prestige: 5, name: "Elite" }, { prestige: 8, name: "Prodigy" }, { prestige: 10, name: "Legend" },
 ];
 function titleForLevel(level) {
   let name = TITLES[0].name;
   for (const t of TITLES) if (level >= t.level) name = t.name;
   return name;
+}
+function unlockedTitles(profile) {
+  const lv = levelFromExp(totalExp(profile));
+  const pr = profile.prestige || 0;
+  return [
+    ...TITLES.filter((t) => lv >= t.level).map((t) => t.name),
+    ...PRESTIGE_TITLES.filter((t) => pr >= t.prestige).map((t) => t.name),
+  ];
+}
+function titleFor(profile) {
+  const chosen = profile && profile.title;
+  if (chosen && unlockedTitles(profile).includes(chosen)) return chosen;
+  return titleForLevel(levelFromExp(totalExp(profile)));
 }
 
 /* Prestige — up to 10 resets. Each one wipes topic progress and level
@@ -4773,6 +4790,55 @@ const avatarChar = (p) => {
   return AVATARS[id] || AVATARS.grad;
 };
 const frameStyle = (p) => FRAMES[(p && p.avatarFrame)] || FRAMES.plain;
+
+/* ---- Phase 4 cosmetics --------------------------------------------- */
+
+// Icon-border colours, reused for the banner accent. Same ids + unlock
+// levels as FRAMES / FRAME_LV.
+const FRAME_COLOR = {
+  plain: "var(--grid)", blue: "var(--blue)", green: "var(--green)", gold: "#C99A1E",
+  violet: "#7C5CFF", rose: "#E0567A", dashed: "var(--blue)", double: "var(--ink)", glow: "#E8A82D",
+};
+const bannerColorOf = (p) => FRAME_COLOR[(p && p.bannerColor)] || FRAME_COLOR.plain;
+
+// Sound packs — {correct, wrong} note sets + waveform. Unlocked via SOUND_PACKS.lv.
+const SOUND_PACK_DATA = {
+  default: { wave: "triangle", correct: [659.25, 783.99, 1046.5, 1318.5], wrong: [391.995, 329.63, 261.63] },
+  arcade:  { wave: "square",   correct: [523.25, 659.25, 880.0, 1174.66], wrong: [220.0, 174.61, 138.59] },
+  chime:   { wave: "sine",     correct: [587.33, 880.0, 1174.66, 1567.98], wrong: [440.0, 349.23, 277.18] },
+  retro:   { wave: "square",   correct: [880.0, 1174.66, 1760.0, 2349.32], wrong: [329.63, 246.94, 174.61] },
+  bell:    { wave: "sine",     correct: [1046.5, 1318.5, 1567.98, 2093.0], wrong: [523.25, 415.3, 311.13] },
+};
+const soundPackOf = (p) => SOUND_PACK_DATA[(p && p.soundPack)] || SOUND_PACK_DATA.default;
+
+// Name text styles. Unlocked one per prestige (index = prestige needed).
+const NAME_STYLES = {
+  plain:    { name: "Plain",    prestige: 0, style: {} },
+  gold:     { name: "Gold",     prestige: 1, style: { color: "#C99A1E" } },
+  glow:     { name: "Glow",     prestige: 2, style: { textShadow: "0 0 10px currentColor" } },
+  ocean:    { name: "Ocean",    prestige: 3, style: { background: "linear-gradient(90deg,var(--blue),#4FC3C7)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
+  violetite:{ name: "Amethyst", prestige: 5, style: { background: "linear-gradient(90deg,#7C5CFF,#E0567A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
+  ember:    { name: "Ember",    prestige: 8, style: { background: "linear-gradient(90deg,#E0567A,#C99A1E)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
+};
+const NAME_STYLE_IDS = Object.keys(NAME_STYLES);
+const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain).style;
+
+// Profile-card backgrounds. One unlocked per prestige (order = prestige needed).
+const CARD_BGS = {
+  graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
+  plain:     { name: "Clean",       bg: "var(--card)" },
+  mint:      { name: "Mint",        bg: "linear-gradient(135deg,#EAF7F0,#DDF0E8)" },
+  sky:       { name: "Sky",         bg: "linear-gradient(135deg,#E9F1FB,#DCEAF7)" },
+  dots:      { name: "Dotted",      bg: "var(--paper)", img: "radial-gradient(var(--grid) 1px, transparent 1px)", size: "12px 12px" },
+  blueprint: { name: "Blueprint",   bg: "#12335A", img: "linear-gradient(rgba(255,255,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.14) 1px,transparent 1px)", size: "20px 20px", dark: true },
+  sunset:    { name: "Sunset",      bg: "linear-gradient(135deg,#FBE7D6,#F7D9E0)" },
+  slate:     { name: "Slate",       bg: "#2A3644", dark: true },
+  stripes:   { name: "Stripes",     bg: "var(--paper)", img: "repeating-linear-gradient(45deg,var(--grid) 0 1px,transparent 1px 11px)" },
+  aurora:    { name: "Aurora",      bg: "linear-gradient(135deg,#E7E9FB,#DCF0EE)" },
+  gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#FBF3DE,#F6E7C8)" },
+};
+const CARD_BG_IDS = Object.keys(CARD_BGS);
+const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
   return (
@@ -4811,8 +4877,11 @@ function BadgeChip({ a, size = 40, on = true }) {
    the banner are tappable to open their pickers. */
 function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   const level = levelFromExp(totalExp(profile));
-  const title = titleForLevel(level);
+  const title = titleFor(profile);
   const prestige = profile.prestige || 0;
+  const cardBg = cardBgOf(profile);
+  const nameSty = nameStyleOf(profile);
+  const bannerCol = bannerColorOf(profile);
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
   const badges = bannerBadges(profile);
   const showBanner = badges.length > 0 || !!onEditBanner; // header slot: banner if there's one to show, else name
@@ -4824,7 +4893,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   );
   const nameBlock = (
     <div style={{ minWidth: 0 }}>
-      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word" }}>{profile.name || "Student"}</div>
+      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty }}>{profile.name || "Student"}</div>
       <div style={{ fontSize: 12, color: "var(--blue)", fontWeight: 600, marginTop: 2 }}>
         {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
       </div>
@@ -4838,7 +4907,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
       onClick={onEditBanner}
       style={{
         flex: 1, minWidth: 0, alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 8,
-        background: "var(--card)", border: `1px ${badges.length ? "solid" : "dashed"} var(--grid)`, borderRadius: 12,
+        background: "var(--card)", border: `${badges.length ? "2px solid" : "1px dashed"} ${badges.length ? bannerCol : "var(--grid)"}`, borderRadius: 12,
         padding: "8px 10px", cursor: onEditBanner ? "pointer" : "default",
         WebkitTapHighlightColor: "transparent", outline: "none",
       }}
@@ -4849,10 +4918,14 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
     </div>
   );
   return (
-    <div className="mub-grid" style={{ width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22, color: "var(--ink)" }}>
+    <div className={cardBg.grid ? "mub-grid" : undefined} style={{
+      width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22,
+      color: cardBg.dark ? "#F2F5F8" : "var(--ink)",
+      ...(cardBg.grid ? {} : { background: cardBg.bg, backgroundImage: cardBg.img, backgroundSize: cardBg.size }),
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>MathsUnlocked</span>
-        <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
+        <span style={{ fontSize: 10, color: cardBg.dark ? "rgba(255,255,255,.6)" : "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "20px 0 14px" }}>
@@ -4979,7 +5052,8 @@ function IconPickerModal({ profile, onChange, onClose }) {
 }
 
 function BannerPickerModal({ profile, onChange, onClose }) {
-  const slots = bannerSlots(levelFromExp(totalExp(profile)));
+  const level = levelFromExp(totalExp(profile));
+  const slots = bannerSlots(level);
   const earned = ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id));
   const banner = (profile.banner || []).filter((id) => earned.some((a) => a.id === id));
   const toggle = (id) => onChange((p) => {
@@ -4987,26 +5061,128 @@ function BannerPickerModal({ profile, onChange, onClose }) {
     if (b.includes(id)) return { banner: b.filter((x) => x !== id) };
     return b.length < slots ? { banner: [...b, id] } : {};
   });
+  const Head = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>{children}</div>
+  );
   return (
     <EditSheet title={`Banner · ${banner.length}/${slots}`} onClose={onClose}>
       {slots === 0 ? (
         <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Banner slots unlock at Level 2. Keep going!</div>
-      ) : earned.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Earn badges and they&rsquo;ll show up here to choose from.</div>
-      ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
-          {earned.map((a) => {
-            const on = banner.includes(a.id);
-            const col = TIER_COLOR[a.tier];
+      ) : (<>
+        <Head>Badges</Head>
+        {earned.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>Earn badges and they&rsquo;ll show up here to choose from.</div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 9, marginBottom: 18 }}>
+            {earned.map((a) => {
+              const on = banner.includes(a.id);
+              const col = TIER_COLOR[a.tier];
+              return (
+                <button key={a.id} type="button" title={a.name} onClick={() => toggle(a.id)} style={{
+                  width: 46, height: 46, borderRadius: 11, fontSize: 22, lineHeight: 1, cursor: "pointer",
+                  border: `2px solid ${col}`, background: on ? col : "var(--paper)", opacity: on ? 1 : 0.9,
+                }}>{a.icon}</button>
+              );
+            })}
+          </div>
+        )}
+        <Head>Banner colour</Head>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {FRAME_IDS.map((id) => {
+            const lv = frameLevel(id);
+            const locked = level < lv;
+            const on = (profile.bannerColor || "plain") === id;
             return (
-              <button key={a.id} type="button" title={a.name} onClick={() => toggle(a.id)} style={{
-                width: 46, height: 46, borderRadius: 11, fontSize: 22, lineHeight: 1, cursor: "pointer",
-                border: `2px solid ${col}`, background: on ? col : "var(--paper)", opacity: on ? 1 : 0.9,
-              }}>{a.icon}</button>
+              <div key={id} style={{ position: "relative" }}>
+                <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ bannerColor: id }))} style={{
+                  width: 40, height: 40, borderRadius: 10, cursor: locked ? "default" : "pointer",
+                  background: "var(--paper)", border: `3px solid ${FRAME_COLOR[id]}`,
+                  outline: on ? "2px solid var(--blue)" : "none", outlineOffset: 3,
+                  filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
+                }} />
+                {locked && (
+                  <span style={{ position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)", fontSize: 8, fontWeight: 800, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "0 4px", whiteSpace: "nowrap" }}>Lv {lv}</span>
+                )}
+              </div>
             );
           })}
         </div>
-      )}
+      </>)}
+    </EditSheet>
+  );
+}
+
+/* Sound pack / title / name style / card background picker. */
+function StyleModal({ profile, onChange, onClose, previewPack }) {
+  const level = levelFromExp(totalExp(profile));
+  const prestige = profile.prestige || 0;
+  const Head = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>{children}</div>
+  );
+  const pill = (on, locked) => ({
+    fontSize: 12.5, fontWeight: 600, padding: "7px 12px", borderRadius: 999, cursor: locked ? "default" : "pointer",
+    border: `1.5px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: on ? "var(--blue)" : "var(--paper)",
+    color: on ? "var(--on-accent)" : locked ? "var(--muted)" : "var(--ink)", opacity: locked ? 0.55 : 1,
+  });
+  return (
+    <EditSheet title="Style" onClose={onClose}>
+      <div style={{ marginTop: -8 }} />
+      <Head>Sound pack</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {Object.entries(SOUND_PACKS).map(([id, p]) => {
+          const locked = level < p.lv;
+          const on = (profile.soundPack || "default") === id;
+          return (
+            <button key={id} type="button" disabled={locked} style={pill(on, locked)}
+              onClick={() => { if (locked) return; onChange(() => ({ soundPack: id })); previewPack && previewPack(id); }}>
+              {p.name}{locked ? ` · Lv ${p.lv}` : ""}
+            </button>
+          );
+        })}
+      </div>
+
+      <Head>Title</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button type="button" style={pill(!profile.title, false)} onClick={() => onChange(() => ({ title: "" }))}>Auto (by level)</button>
+        {unlockedTitles(profile).map((name) => (
+          <button key={name} type="button" style={pill(profile.title === name, false)} onClick={() => onChange(() => ({ title: name }))}>{name}</button>
+        ))}
+      </div>
+
+      <Head>Name style {prestige === 0 ? "· unlock with Prestige" : ""}</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {NAME_STYLE_IDS.map((id) => {
+          const s = NAME_STYLES[id];
+          const locked = prestige < s.prestige;
+          const on = (profile.nameStyle || "plain") === id;
+          return (
+            <button key={id} type="button" disabled={locked} style={{ ...pill(on, locked), ...(locked ? {} : s.style) }}
+              onClick={() => !locked && onChange(() => ({ nameStyle: id }))}>
+              {s.name}{locked ? ` · P${s.prestige}` : ""}
+            </button>
+          );
+        })}
+      </div>
+
+      <Head>Card background {prestige === 0 ? "· unlock with Prestige" : ""}</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {CARD_BG_IDS.map((id, i) => {
+          const b = CARD_BGS[id];
+          const locked = prestige < i;
+          const on = (profile.cardBg || "graph") === id;
+          return (
+            <div key={id} style={{ position: "relative", width: 66 }}>
+              <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ cardBg: id }))} style={{
+                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer",
+                border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+                background: b.bg, backgroundImage: b.img, backgroundSize: b.size,
+                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
+              }} />
+              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `P${i}` : b.name}</div>
+            </div>
+          );
+        })}
+      </div>
     </EditSheet>
   );
 }
@@ -5171,7 +5347,8 @@ const emptyProfile = () => ({
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
-  avatar: "grad", avatarFrame: "plain", banner: [], seenIconUnlocks: [],
+  avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
+  cardBg: "graph", nameStyle: "plain", title: "", seenIconUnlocks: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -5242,6 +5419,7 @@ export default function MathsUnlockedBN() {
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
+  const [stylePickerOpen, setStylePickerOpen] = useState(false); // sound/title/name/card-bg picker
   const [shieldOffer, setShieldOffer] = useState(false);   // wrong answer, offering a Streak Shield
   const [shieldDeclined, setShieldDeclined] = useState(false); // said no to the shield this question
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
@@ -5508,20 +5686,21 @@ export default function MathsUnlockedBN() {
     } catch (e) { /* audio unavailable — no problem */ }
   }
 
-  // Achievement (short) / level-up (long) arpeggios.
+  // Achievement (short) / level-up (long) arpeggios — waveform follows the pack.
   function playJingle(big) {
-    playSeq(big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5], { step: 0.1, dur: 0.36 });
+    playSeq(big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5], { step: 0.1, dur: 0.36, wave: soundPackOf(profile).wave });
   }
 
-  // Per-answer feedback. Correct = a bright rising C-major arpeggio;
-  // wrong = the same shape mirrored downward an octave lower, softer and
-  // a touch flat on the last note — a matched "not quite" pair.
-  //   TODO: swap CORRECT_NOTES for the melody from the reference clip once
-  //   confirmed (https://youtu.be/oOONL4lR8_U, ~3–6s).
-  const CORRECT_NOTES = [659.25, 783.99, 1046.5, 1318.5]; // E5 G5 C6 E6
-  const WRONG_NOTES = [391.995, 329.63, 261.63];          // G4 E4 C4
-  function playCorrect() { playSeq(CORRECT_NOTES, { step: 0.075, dur: 0.22, attack: 0.008, vol: 0.12 }); }
-  function playWrong() { playSeq(WRONG_NOTES, { step: 0.1, dur: 0.34, attack: 0.015, vol: 0.1, detune: -18 }); }
+  // Per-answer feedback — rising for correct, mirrored/softer for wrong.
+  // Notes + waveform come from the student's chosen sound pack.
+  function playCorrect() {
+    const p = soundPackOf(profile);
+    playSeq(p.correct, { step: 0.075, dur: 0.22, attack: 0.008, vol: 0.12, wave: p.wave });
+  }
+  function playWrong() {
+    const p = soundPackOf(profile);
+    playSeq(p.wrong, { step: 0.1, dur: 0.34, attack: 0.015, vol: 0.1, detune: -18, wave: p.wave });
+  }
 
   // Action sounds. Skeleton Key = a low "turn" then a bright reveal;
   // XP Boost = a fast rising sawtooth whoosh; claiming = quick coin blips.
@@ -5531,6 +5710,10 @@ export default function MathsUnlockedBN() {
   }
   function playBoost() {
     playSeq([440, 587.33, 783.99, 1046.5, 1396.91], { wave: "sawtooth", step: 0.045, dur: 0.16, attack: 0.004, vol: 0.085, detune: 14 });
+  }
+  function previewPack(id) {
+    const p = SOUND_PACK_DATA[id] || SOUND_PACK_DATA.default;
+    playSeq(p.correct, { step: 0.075, dur: 0.22, attack: 0.008, vol: 0.12, wave: p.wave });
   }
   function playCoins() {
     playSeq([1046.5, 1396.91, 1046.5, 1567.98, 2093.0], { wave: "square", step: 0.055, dur: 0.11, attack: 0.003, vol: 0.08 });
@@ -6331,7 +6514,7 @@ export default function MathsUnlockedBN() {
           score: leaderboardScore(m),
           prestige: m.prestige || 0,
           level: levelFromExp(totalExp(m)),
-          title: titleForLevel(levelFromExp(totalExp(m))),
+          title: titleFor(m),
           correct: m.totalCorrect || 0,
           achievements: (m.achievements || []).length,
           bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
@@ -6382,7 +6565,7 @@ export default function MathsUnlockedBN() {
         score: leaderboardScore(m),
         prestige: m.prestige || 0,
         level: levelFromExp(totalExp(m)),
-        title: titleForLevel(levelFromExp(totalExp(m))),
+        title: titleFor(m),
         correct: m.totalCorrect || 0,
         achievements: (m.achievements || []).length,
         bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
@@ -6680,10 +6863,10 @@ export default function MathsUnlockedBN() {
             <div style={{ marginBottom: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
                 <div>
-                  <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, {profile.name}</div>
+                  <div className="mub-display" style={{ fontSize: 22, fontWeight: 700 }}>Hi, <span style={nameStyleOf(profile)}>{profile.name}</span></div>
                   <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <PrestigeBadge prestige={profile.prestige} size={15} />
-                    <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleForLevel(levelFromExp(totalExp(profile)))}</span>
+                    <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
                     <span>· Current streak: {profile.streak || 0} 🔥 · Best: {profile.bestStreak || 0}</span>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0 16px", marginBottom: 12 }}>
@@ -7874,12 +8057,14 @@ export default function MathsUnlockedBN() {
         >
           <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <ProfileCard profile={profile} onEditIcon={() => setPickIcon(true)} onEditBanner={() => setPickBanner(true)} newIcons={newIconCount > 0} />
+            <button onClick={() => setStylePickerOpen(true)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}>🎨 Style — sound, title, background</button>
             <div style={{ fontSize: 11, color: "#fff", opacity: 0.8 }}>Tap your icon or banner to customise · screenshot to share · tap outside to close</div>
           </div>
         </div>
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
+      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} />}
       {writePad && question && (
         <WritePad
           mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
@@ -8078,6 +8263,7 @@ export default function MathsUnlockedBN() {
             {[
               { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
               { icon: theme === "dark" ? "🌙" : "☀️", label: "Appearance", value: theme === "dark" ? "Dark" : "Light", onClick: toggleTheme },
+              { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
             ].map((it, i) => (
