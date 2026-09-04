@@ -246,6 +246,14 @@ function checkSimplifiedSurd(input, answer) {
   }
   return checkEquivalent(input, answer);
 }
+// Answer left in index form: must be "<base>^<exp>" (or the superscript
+// form) — not the evaluated number and not a rewritten base.
+function checkIndexForm(input, base, exp) {
+  let s = String(input).replace(/\s|\*|·/g, "");
+  s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (mm) => "^" + mm.replace(/./g, (c) => (c === "⁻" ? "-" : "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))));
+  const m = s.match(/^(-?\d+)\^\(?(-?\d+)\)?$/);
+  return !!m && Number(m[1]) === base && Number(m[2]) === exp;
+}
 // Standard form helpers. Accepts a*10^b, a×10^b, a x 10^b, aEb.
 function parseSF(s) {
   const t = String(s).replace(/\s|,/g, "").replace(/×/g, "*").replace(/x10/gi, "*10");
@@ -354,7 +362,7 @@ function MathText({ text, style }) {
   while ((m = raiseRe.exec(s))) {
     if (m.index > last) nodes.push(...fracNodes(s.slice(last, m.index), `p${i++}`, false));
     nodes.push(
-      <sup key={`r${i++}`} style={{ display: "inline-flex", alignItems: "center", fontSize: "0.68em", lineHeight: 1, verticalAlign: "super" }}>
+      <sup key={`r${i++}`} style={{ display: "inline-flex", alignItems: "center", alignSelf: "flex-start", marginTop: "-0.35em", fontSize: "0.62em", lineHeight: 1, verticalAlign: "super" }}>
         {fracNodes(m[1], `s${i}`, true)}
       </sup>
     );
@@ -1720,6 +1728,27 @@ const TOPICS = [
           const base = randInt(2, 4), k = randInt(2, 5);
           return { prompt: `Solve for x:   ${base}${sup("x")} = ${base ** k}`, answer: `${k}`, hint: num,
             steps: [`Write the right side as a power of ${base}: ${base ** k} = ${base}${sup(k)}`, `Equal bases means equal powers: x = ${k}`] };
+        },
+        () => { // b^m × b^n → b^(m+n), leave in index form
+          const b = [2, 3, 5, 7][randInt(0, 3)], m = randInt(2, 6), n = randInt(2, 4);
+          return { prompt: `Write as a single power:   ${b}${sup(m)} × ${b}${sup(n)}`,
+            answer: `${b}^${m + n}`, answerDisplay: `${b}${sup(m + n)}`, hint: `Leave it as a power, e.g. ${b}^${m + n + 1}`,
+            check: (inp) => checkIndexForm(inp, b, m + n),
+            steps: [`Same base — add the powers: ${m} + ${n} = ${m + n}`, `Answer: ${b}${sup(m + n)}`] };
+        },
+        () => { // b^m ÷ b^n → b^(m−n), leave in index form
+          const b = [2, 3, 5, 7][randInt(0, 3)], n = randInt(1, 4), m = n + randInt(2, 6);
+          return { prompt: `Write as a single power:   ${frac(`${b}${sup(m)}`, `${b}${sup(n)}`)}`,
+            answer: `${b}^${m - n}`, answerDisplay: `${b}${sup(m - n)}`, hint: `Leave it as a power, e.g. ${b}^${m - n + 1}`,
+            check: (inp) => checkIndexForm(inp, b, m - n),
+            steps: [`Same base — subtract the powers: ${m} − ${n} = ${m - n}`, `Answer: ${b}${sup(m - n)}`] };
+        },
+        () => { // (b^m)^n → b^(mn), leave in index form
+          const b = [2, 3, 5][randInt(0, 2)], m = randInt(2, 4), n = randInt(2, 3);
+          return { prompt: `Write as a single power:   (${b}${sup(m)})${sup(n)}`,
+            answer: `${b}^${m * n}`, answerDisplay: `${b}${sup(m * n)}`, hint: `Leave it as a power, e.g. ${b}^${m * n + 1}`,
+            check: (inp) => checkIndexForm(inp, b, m * n),
+            steps: [`Power of a power — multiply the powers: ${m} × ${n} = ${m * n}`, `Answer: ${b}${sup(m * n)}`] };
         },
       ];
       return forms[randInt(0, forms.length - 1)]();
