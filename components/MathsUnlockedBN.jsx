@@ -3937,9 +3937,160 @@ const TOPICS = [
     } },
   { id: "probability", name: "Probability", icon: "🎲", prereqs: [],
     generate() {
-      const a = randInt(2, 9), b = randInt(2, 9);
-      return { prompt: `A bag has ${a} red balls and ${b} blue balls. Find the probability of picking a red ball`, answer: `${a}/(${a + b})`, hint: "Fraction or decimal.",
-        steps: [`P(red) = number of red ÷ total balls`, `= ${a} ÷ (${a} + ${b}) = ${a}/${a + b}`] };
+      const pick = (arr) => arr[randInt(0, arr.length - 1)];
+      const shuffle = (arr) => { const c = [...arr]; for (let i = c.length - 1; i > 0; i--) { const j = randInt(0, i); [c[i], c[j]] = [c[j], c[i]]; } return c; };
+      const simp = (n, d) => { const g = gcd(n, d) || 1; return [n / g, d / g]; };
+      const COLORS = ["red", "blue", "green", "yellow", "white", "black"];
+      const joinAnd = (arr) => arr.length <= 1 ? (arr[0] || "") : `${arr.slice(0, -1).join(", ")} and ${arr[arr.length - 1]}`;
+      const r = Math.random();
+
+      // 1. Single pick from a two-colour bag — P(one colour)
+      if (r < 0.11) {
+        const a = randInt(2, 9), b = randInt(2, 9);
+        return { prompt: `A bag has ${a} red balls and ${b} blue balls. Find the probability of picking a red ball`, answer: `${a}/(${a + b})`, hint: "Fraction or decimal.",
+          steps: [`P(red) = number of red ÷ total balls`, `= ${a} ÷ (${a} + ${b}) = ${a}/${a + b}`] };
+      }
+
+      // 2. Single pick from a 2-3 colour bag — P(a colour) or P(not a colour)
+      if (r < 0.22) {
+        const names = shuffle(COLORS).slice(0, pick([2, 3]));
+        const counts = names.map(() => randInt(2, 9));
+        const total = counts.reduce((s, n) => s + n, 0);
+        const idx = randInt(0, names.length - 1);
+        const c = names[idx], n = counts[idx];
+        const bagDesc = joinAnd(names.map((nm, i) => `${counts[i]} ${nm}`));
+        if (Math.random() < 0.5) {
+          const [sn, sd] = simp(n, total);
+          return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is ${c}. Give your answer as a fraction in its lowest terms.`,
+            answer: `${n}/${total}`, hint: "favourable ÷ total, then simplify.",
+            steps: [`P(${c}) = ${n} ÷ ${total} = ${sn}/${sd}`] };
+        }
+        const [sn, sd] = simp(total - n, total);
+        return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is NOT ${c}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${total - n}/${total}`, hint: "P(not X) = 1 − P(X).",
+          steps: [`P(${c}) = ${n}/${total}`, `P(not ${c}) = 1 − ${n}/${total} = ${sn}/${sd}`] };
+      }
+
+      // 3. Two fair spinners — sum-based possibility diagram
+      if (r < 0.35) {
+        const sides = pick([4, 5, 6, 8]);
+        const total = sides * sides;
+        const kind = pick(["equals", "odd", "atleast", "atmost"]);
+        let fav = 0, desc, k;
+        if (kind === "equals") {
+          k = randInt(3, sides * 2 - 1);
+          for (let i = 1; i <= sides; i++) for (let j = 1; j <= sides; j++) if (i + j === k) fav++;
+          desc = `the sum of the two numbers is ${k}`;
+        } else if (kind === "odd") {
+          for (let i = 1; i <= sides; i++) for (let j = 1; j <= sides; j++) if ((i + j) % 2 === 1) fav++;
+          desc = "the sum of the two numbers is odd";
+        } else if (kind === "atleast") {
+          k = randInt(sides, sides * 2 - 1);
+          for (let i = 1; i <= sides; i++) for (let j = 1; j <= sides; j++) if (i + j >= k) fav++;
+          desc = `the sum of the two numbers is at least ${k}`;
+        } else {
+          k = randInt(3, sides + 1);
+          for (let i = 1; i <= sides; i++) for (let j = 1; j <= sides; j++) if (i + j <= k) fav++;
+          desc = `the sum of the two numbers is at most ${k}`;
+        }
+        const [sn, sd] = simp(fav, total);
+        return { prompt: `Two fair ${sides}-sided spinners, each numbered 1 to ${sides}, are spun together. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${fav}/${total}`, hint: "A possibility diagram (grid of all outcomes) helps — count how many fit.",
+          steps: [`There are ${sides} × ${sides} = ${total} equally likely outcomes.`, `${fav} of them fit.`, `P = ${fav}/${total} = ${sn}/${sd}`] };
+      }
+
+      // 4. Without replacement, 2 picks from a two-colour bag
+      if (r < 0.47) {
+        const rr = randInt(3, 9), b = randInt(3, 9), tt = rr + b;
+        const kind = pick(["bothA", "bothB", "different", "atLeastOneA"]);
+        let num, desc, workLines;
+        const den = tt * (tt - 1);
+        if (kind === "bothA") { num = rr * (rr - 1); desc = "both counters are red";
+          workLines = [`P(both red) = (${rr}/${tt}) × (${rr - 1}/${tt - 1})`]; }
+        else if (kind === "bothB") { num = b * (b - 1); desc = "both counters are blue";
+          workLines = [`P(both blue) = (${b}/${tt}) × (${b - 1}/${tt - 1})`]; }
+        else if (kind === "different") { num = 2 * rr * b; desc = "the two counters are different colours";
+          workLines = [`P(different) = 2 × (${rr}/${tt}) × (${b}/${tt - 1})`]; }
+        else { num = den - b * (b - 1); desc = "at least one counter is red";
+          workLines = [`P(no red) = (${b}/${tt}) × (${b - 1}/${tt - 1})`, `P(at least one red) = 1 − P(no red)`]; }
+        const [sn, sd] = simp(num, den);
+        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Two counters are taken at random, without replacement. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${num}/${den}`, hint: "Draw a tree diagram — multiply along the branches, add if there's more than one way.",
+          steps: [...workLines, `= ${num}/${den} = ${sn}/${sd}`] };
+      }
+
+      // 5. Without replacement, 3 picks, all the same colour
+      if (r < 0.56) {
+        const rr = randInt(3, 8), b = randInt(2, 7), tt = rr + b;
+        const useRed = b < 3 || Math.random() < 0.5;
+        const cnt = useRed ? rr : b, name = useRed ? "red" : "blue";
+        const num = cnt * (cnt - 1) * (cnt - 2), den = tt * (tt - 1) * (tt - 2);
+        const [sn, sd] = simp(num, den);
+        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Three counters are taken at random, without replacement. Find the probability that all three are ${name}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${num}/${den}`, hint: "Multiply three fractions, one fewer each time.",
+          steps: [`P(all ${name}) = (${cnt}/${tt}) × (${cnt - 1}/${tt - 1}) × (${cnt - 2}/${tt - 2})`, `= ${num}/${den} = ${sn}/${sd}`] };
+      }
+
+      // 6. With replacement — independent repeats on numbered balls
+      if (r < 0.66) {
+        const n = randInt(6, 14);
+        const oddCount = Math.ceil(n / 2), evenCount = n - oddCount;
+        const both = Math.random() < 0.5;
+        const num = both ? oddCount * oddCount : 2 * oddCount * evenCount;
+        const den = n * n;
+        const [sn, sd] = simp(num, den);
+        const desc = both ? "both numbers are odd" : "one number is odd and the other is even";
+        return { prompt: `A bag contains ${n} balls numbered 1 to ${n}. A ball is taken at random, its number noted, and replaced. A second ball is then taken at random. Find the probability that ${desc}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${num}/${den}`, hint: `${oddCount} of the ${n} numbers are odd.`,
+          steps: both
+            ? [`P(odd) = ${oddCount}/${n}`, `P(both odd) = (${oddCount}/${n})² = ${num}/${den} = ${sn}/${sd}`]
+            : [`P(odd) = ${oddCount}/${n}, P(even) = ${evenCount}/${n}`, `P(one odd, one even) = 2 × (${oddCount}/${n}) × (${evenCount}/${n})`, `= ${num}/${den} = ${sn}/${sd}`] };
+      }
+
+      // 7. Two independent events with different probabilities
+      if (r < 0.78) {
+        const pA = pick([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]);
+        const pB = pick([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]);
+        const subjA = pick(["Maths", "English", "Science", "Art"]);
+        const subjB = pick(["Physics", "History", "Music", "Geography"]);
+        const kind = pick(["both", "AnotB", "neither"]);
+        const rnd = (x) => Math.round(x * 1000) / 1000;
+        let ans, desc;
+        if (kind === "both") { ans = rnd(pA * pB); desc = `passes both ${subjA} and ${subjB}`; }
+        else if (kind === "AnotB") { ans = rnd(pA * (1 - pB)); desc = `passes ${subjA} but does not pass ${subjB}`; }
+        else { ans = rnd((1 - pA) * (1 - pB)); desc = "does not pass either subject"; }
+        return { prompt: `Sam takes exams in ${subjA} and ${subjB}. The probability that Sam passes ${subjA} is ${pA} and the probability that Sam passes ${subjB} is ${pB}. The results are independent. Find the probability that Sam ${desc}.`,
+          answer: `${ans}`, hint: "Multiply the two probabilities (use 1 − p for 'does not pass').",
+          steps: [`P(pass ${subjA}) = ${pA}`, `P(pass ${subjB}) = ${pB}`, `P(${desc}) = ${ans}`] };
+      }
+
+      // 8. Two-digit number formed from number cards, without replacement
+      if (r < 0.9) {
+        const pool = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, pick([4, 5]));
+        const nums = [];
+        for (const x of pool) for (const y of pool) if (x !== y) nums.push(x * 10 + y);
+        const isPrime = (x) => { if (x < 2) return false; for (let d = 2; d * d <= x; d++) if (x % d === 0) return false; return true; };
+        const kind = pick(["lessThan", "even", "multiple", "prime"]);
+        let fav, desc;
+        if (kind === "lessThan") { const k = pick([30, 40, 50]); fav = nums.filter((v) => v < k).length; desc = `less than ${k}`; }
+        else if (kind === "even") { fav = nums.filter((v) => v % 2 === 0).length; desc = "an even number"; }
+        else if (kind === "multiple") { const mm = pick([3, 4, 5]); fav = nums.filter((v) => v % mm === 0).length; desc = `a multiple of ${mm}`; }
+        else { fav = nums.filter(isPrime).length; desc = "a prime number"; }
+        const [sn, sd] = simp(fav, nums.length);
+        return { prompt: `The cards ${pool.join(", ")} are shuffled. Two of them are chosen at random and placed next to each other to make a two-digit number. Find the probability that the two-digit number is ${desc}. Give your answer as a fraction in its lowest terms.`,
+          answer: `${fav}/${nums.length}`, hint: "List all the possible two-digit numbers, then count.",
+          steps: [`There are ${nums.length} possible two-digit numbers.`, `${fav} of them are ${desc}.`, `P = ${fav}/${nums.length} = ${sn}/${sd}`] };
+      }
+
+      // 9. Reverse: given a probability and a count, find the total
+      const mRaw = pick([4, 5, 8, 10, 20]);
+      const [k, m] = simp(randInt(1, mRaw - 1), mRaw);
+      const t = randInt(2, 6);
+      const count = k * t, tot = m * t;
+      const colourKnown = pick(["green", "red", "blue", "yellow"]);
+      return { prompt: `A bag contains ${colourKnown} pegs and other coloured pegs only. The probability that a peg taken at random from the bag is ${colourKnown} is ${k}/${m}. There are ${count} ${colourKnown} pegs in the bag. Find the total number of pegs in the bag.`,
+        answer: `${tot}`, hint: "total = count ÷ probability.",
+        steps: [`${colourKnown}/total = ${k}/${m}`, `${count}/total = ${k}/${m}`, `total = ${count} × ${m}/${k} = ${tot}`] };
     } },
   { id: "statistics", name: "Statistics", icon: "📊", prereqs: ["probability"],
     generate() {
