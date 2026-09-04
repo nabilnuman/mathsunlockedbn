@@ -4736,6 +4736,7 @@ const PERKS = {
 const PERK_IDS = Object.keys(PERKS);
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
+const SHIELD_LEVELS = [6, 13]; // levels that grant a Streak Shield
 
 const avatarLevel = (id) => AVATAR_LV[id] || 1;
 const frameLevel = (id) => FRAME_LV[id] || 1;
@@ -4754,6 +4755,7 @@ function unlocksAtLevel(L) {
   if (L === SKETCH_LV) out.push("Rough-working pad");
   if (L === WRITE_LV) out.push("Handwriting input");
   Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
+  if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
   if (L % 5 === 0) out.push("🔑 Skeleton Key");
   if (L % 4 === 0) out.push("⚡ ×2 XP Boost");
   out.push("💡 +1 Hint coin");
@@ -5154,6 +5156,7 @@ function creditLevelUps(next, expBefore) {
       if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
       if (L % 5 === 0) next.keys = (next.keys || 0) + 1;
       if (L % 4 === 0) next.boosts = (next.boosts || 0) + 1;
+      if (SHIELD_LEVELS.includes(L)) next.shields = (next.shields || 0) + 1;
       next.hints = (next.hints || 0) + 1; // one Hint coin per level
     }
   }
@@ -5167,7 +5170,7 @@ const emptyProfile = () => ({
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
-  boosts: 0, boostUntil: 0, hints: 0, perks: [], soundPack: "default",
+  boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], seenIconUnlocks: [],
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
@@ -5239,6 +5242,8 @@ export default function MathsUnlockedBN() {
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
+  const [shieldOffer, setShieldOffer] = useState(false);   // wrong answer, offering a Streak Shield
+  const [shieldDeclined, setShieldDeclined] = useState(false); // said no to the shield this question
   const [resetPin, setResetPin] = useState(""); // new PIN on the reset screen
   const [resetBusy, setResetBusy] = useState(false);
   const [showSchool, setShowSchool] = useState(false);
@@ -5588,6 +5593,8 @@ export default function MathsUnlockedBN() {
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
+    setShieldOffer(false);
+    setShieldDeclined(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -5928,6 +5935,8 @@ export default function MathsUnlockedBN() {
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
+    setShieldOffer(false);
+    setShieldDeclined(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
     setScreen("quiz");
@@ -5946,6 +5955,8 @@ export default function MathsUnlockedBN() {
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
+    setShieldOffer(false);
+    setShieldDeclined(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
   }
@@ -5960,6 +5971,25 @@ export default function MathsUnlockedBN() {
       if (cur.length >= 2) return {};
       return { perks: [...cur, id] };
     });
+  }
+
+  // Spend a Streak Shield: the wrong answer is wiped, streak stays, retry.
+  function useShield() {
+    if (!shieldOffer || (profile.shields || 0) <= 0) return;
+    patchProfile((p) => ({ shields: Math.max(0, (p.shields || 0) - 1) }));
+    setShieldOffer(false);
+    setAnswerInput("");
+    setMultiInput({});
+    setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setMcPick(null); setDrawTri([]);
+    startTimeRef.current = Date.now();
+    setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
+    flash("🛟 Streak Shield used — your streak is safe. Try again.");
+  }
+  // Decline the shield: commit the wrong answer normally.
+  function declineShield() {
+    setShieldOffer(false);
+    setShieldDeclined(true);
+    setTimeout(() => submitAnswer(), 0);
   }
 
   // Spend a Hint coin to reveal the first working step for this question.
@@ -6068,6 +6098,15 @@ export default function MathsUnlockedBN() {
     const next = JSON.parse(JSON.stringify(profile));
     const d = ensureDay(next);
     const perks = (profile.perks || []).filter((p) => PERKS[p]);
+
+    // Wrong, holding a Streak Shield, and the Error Correction perk didn't
+    // already cover it — pause and offer to spend the shield before the
+    // streak breaks. Nothing is committed yet; they retry the same question.
+    const forgiveCovers = perks.includes("forgive") && !(d.forgiven || []).includes(scoredId);
+    if (!correct && !forgiveCovers && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
+      setShieldOffer(true);
+      return;
+    }
 
     // Error Correction perk: the first wrong answer in each topic per day
     // is forgiven — streak, topic history and consec-wrong stay untouched.
@@ -6674,6 +6713,7 @@ export default function MathsUnlockedBN() {
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, fontSize: 12, color: "var(--muted)", flexWrap: "wrap" }}>
                 <span><span style={{ fontSize: 15 }}>🔑</span> <b style={{ color: "var(--ink)" }}>{profile.keys || 0}</b> Skeleton Key{(profile.keys || 0) === 1 ? "" : "s"}</span>
                 <span><span style={{ fontSize: 15 }}>💡</span> <b style={{ color: "var(--ink)" }}>{profile.hints || 0}</b> Hint coin{(profile.hints || 0) === 1 ? "" : "s"}</span>
+                {(profile.shields || 0) > 0 && <span><span style={{ fontSize: 15 }}>🛟</span> <b style={{ color: "var(--ink)" }}>{profile.shields}</b> Streak Shield{profile.shields === 1 ? "" : "s"}</span>}
                 {myLevel >= PERKS.compound.lv && (
                   <button onClick={() => setPerksOpen(true)} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
                     🎖 Perks
@@ -6721,6 +6761,7 @@ export default function MathsUnlockedBN() {
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
                           <button onClick={() => saveProfile({ ...profile, hints: (profile.hints || 0) + 5 })} style={b}>+5 Hint coins</button>
+                          <button onClick={() => saveProfile({ ...profile, shields: (profile.shields || 0) + 3 })} style={b}>+3 Streak Shields</button>
                           <select value={devJingle} onChange={(e) => setDevJingle(e.target.value)} style={{ fontSize: 12, border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 8px" }}>
                             <option value="achievement">Jingle · achievement</option>
                             <option value="levelup">Jingle · level-up</option>
@@ -7278,7 +7319,7 @@ export default function MathsUnlockedBN() {
                         onChange={(e) => setMultiInput((m) => ({ ...m, [k]: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                         placeholder="?"
-                        disabled={!!feedback}
+                        disabled={!!feedback || shieldOffer}
                         style={{ width: 74, padding: "8px 10px", fontSize: 17, textAlign: "center", border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                       />
                     ))}
@@ -7299,7 +7340,7 @@ export default function MathsUnlockedBN() {
                         onChange={(e) => setMultiInput((m) => ({ ...m, [f.key]: e.target.value }))}
                         onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                         placeholder={f.placeholder || "?"}
-                        disabled={!!feedback}
+                        disabled={!!feedback || shieldOffer}
                         style={{ width: 96, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                       />
                     </div>
@@ -7314,7 +7355,7 @@ export default function MathsUnlockedBN() {
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                     placeholder={question.hint}
-                    disabled={!!feedback}
+                    disabled={!!feedback || shieldOffer}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
                   {!feedback && myLevel >= WRITE_LV && (
@@ -7345,7 +7386,7 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              {!feedback && question.steps && question.steps.length > 0 && (
+              {!feedback && !shieldOffer && question.steps && question.steps.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
                   {hintShown ? (
                     <div style={{ fontSize: 12.5, background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 8, padding: "9px 12px", color: "var(--ink)" }}>
@@ -7363,7 +7404,18 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {!feedback && (() => {
+              {shieldOffer && (
+                <div style={{ marginBottom: 12, background: "var(--paper)", border: "1.5px solid var(--blue)", borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Not quite — but your streak of {profile.streak || 0} isn&rsquo;t gone yet.</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Spend a 🛟 Streak Shield (you have {profile.shields || 0}) to keep the streak and try this question again?</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={useShield} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>🛟 Use Shield &amp; retry</button>
+                    <button onClick={declineShield} style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Show solution</button>
+                  </div>
+                </div>
+              )}
+
+              {!feedback && !shieldOffer && (() => {
                 const notReady = (question.drawGraph && drawPts.length < 2)
                   || (question.region && !regionPick)
                   || (question.venn && vennPressed.length === 0)
