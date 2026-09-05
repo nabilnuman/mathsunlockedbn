@@ -1405,6 +1405,126 @@ function VennShade({ venn, pressed, onToggle, showAnswer }) {
   );
 }
 
+// Circle layout + region hit-test shared with VennShade — factored out
+// so the drag-to-place board below can use the exact same geometry.
+function vennCircles(sets) {
+  return sets === 2
+    ? { A: [92, 102, 60], B: [148, 102, 60] }
+    : { A: [92, 86, 52], B: [148, 86, 52], C: [120, 134, 52] };
+}
+function vennRegionAt(sets, cir, px, py) {
+  const inC = (c) => (px - c[0]) ** 2 + (py - c[1]) ** 2 < c[2] ** 2;
+  const iA = inC(cir.A), iB = inC(cir.B), iC = sets === 2 ? false : inC(cir.C);
+  if (sets === 2) return iA && iB ? "ab" : iA ? "a" : iB ? "b" : "out";
+  if (iA && iB && iC) return "abc";
+  if (iA && iB) return "ab"; if (iA && iC) return "ac"; if (iB && iC) return "bc";
+  if (iA) return "a"; if (iB) return "b"; if (iC) return "c";
+  return "out";
+}
+// Where a region's cluster of placed chips is centred, in the same
+// 240×200 space as the circles above.
+const VENN_ANCHORS = {
+  2: { a: [65, 102], b: [175, 102], ab: [120, 102], out: [120, 22] },
+  3: { a: [70, 70], b: [170, 70], c: [120, 172], ab: [120, 64], ac: [82, 112], bc: [158, 112], abc: [120, 98], out: [120, 16] },
+};
+const VENN_CLUSTER_OFFSETS = [[0, 0], [-18, 0], [18, 0], [0, -18], [0, 18], [-18, -18], [18, -18], [-18, 18], [18, 18]];
+
+// "Drag the numbers in" — every element of a small universal set gets
+// dragged into whichever Venn region matches the rules that define A
+// (and B, and C). `placement` is a controlled { [element]: regionKey }
+// map; dropping outside the diagram (region === null) sends it back to
+// the tray below. `venn` = { sets, universe, correct }.
+function VennPlaceBoard({ venn, placement, onPlace, showAnswer }) {
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(280);
+  const [dragEl, setDragEl] = useState(null);
+  const [dragPos, setDragPos] = useState(null); // {x,y} in viewport (client) coords
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => setW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const cir = vennCircles(venn.sets);
+  const svgH = w * (200 / 240);
+  const trayH = 56;
+  const scaleX = w / 240, scaleY = svgH / 200;
+  const CHIP = 30;
+
+  const unplaced = venn.universe.filter((el) => placement[el] == null);
+  function restPos(el) {
+    const region = placement[el];
+    if (region == null) {
+      const idx = unplaced.indexOf(el);
+      const perRow = Math.max(1, Math.floor((w - 16) / 40));
+      return { x: 24 + (idx % perRow) * 40, y: svgH + 20 + Math.floor(idx / perRow) * 32 };
+    }
+    const anchor = VENN_ANCHORS[venn.sets][region] || VENN_ANCHORS[venn.sets].out;
+    const same = venn.universe.filter((u) => placement[u] === region);
+    const off = VENN_CLUSTER_OFFSETS[same.indexOf(el) % VENN_CLUSTER_OFFSETS.length] || [0, 0];
+    return { x: (anchor[0] + off[0]) * scaleX, y: (anchor[1] + off[1]) * scaleY };
+  }
+
+  function regionAtClient(clientX, clientY) {
+    const b = wrapRef.current.getBoundingClientRect();
+    const x = clientX - b.left, y = clientY - b.top;
+    if (x < 0 || x >= w || y < 0 || y >= svgH) return null; // tray, or off the board entirely
+    return vennRegionAt(venn.sets, cir, x / scaleX, y / scaleY);
+  }
+
+  const startDrag = (el) => (e) => {
+    if (showAnswer) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragEl(el);
+    setDragPos({ x: e.clientX, y: e.clientY });
+  };
+  const moveDrag = (e) => { if (dragEl != null) setDragPos({ x: e.clientX, y: e.clientY }); };
+  const endDrag = (e) => {
+    if (dragEl == null) return;
+    onPlace(dragEl, regionAtClient(e.clientX, e.clientY));
+    setDragEl(null);
+    setDragPos(null);
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", maxWidth: 330, margin: "0 auto", height: svgH + trayH, touchAction: "none" }}
+      onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      <svg viewBox="0 0 240 200" width="100%" height={svgH} style={{ display: "block" }}>
+        <rect x={8} y={8} width={224} height={184} fill="var(--card)" stroke="var(--grid)" />
+        <circle cx={cir.A[0]} cy={cir.A[1]} r={cir.A[2]} fill="none" stroke="var(--ink)" strokeWidth="1.6" />
+        <circle cx={cir.B[0]} cy={cir.B[1]} r={cir.B[2]} fill="none" stroke="var(--ink)" strokeWidth="1.6" />
+        {venn.sets === 3 && <circle cx={cir.C[0]} cy={cir.C[1]} r={cir.C[2]} fill="none" stroke="var(--ink)" strokeWidth="1.6" />}
+        <text x={cir.A[0] - cir.A[2] + 5} y={cir.A[1] - cir.A[2] + 14} fontSize="12" fontWeight="700" fill="var(--ink)">A</text>
+        <text x={cir.B[0] + cir.B[2] - 13} y={cir.B[1] - cir.B[2] + 14} fontSize="12" fontWeight="700" fill="var(--ink)">B</text>
+        {venn.sets === 3 && <text x={cir.C[0] - 4} y={cir.C[1] + cir.C[2] - 5} fontSize="12" fontWeight="700" fill="var(--ink)">C</text>}
+      </svg>
+      <div style={{ position: "absolute", left: 0, right: 0, top: svgH, height: trayH, borderTop: "1px dashed var(--grid)" }} />
+      {venn.universe.map((el) => {
+        const dragging = dragEl === el;
+        const b = wrapRef.current ? wrapRef.current.getBoundingClientRect() : { left: 0, top: 0 };
+        const pos = dragging ? { x: dragPos.x - b.left, y: dragPos.y - b.top } : restPos(el);
+        const right = showAnswer ? placement[el] === venn.correct[el] : null;
+        return (
+          <div key={el} onPointerDown={startDrag(el)} style={{
+            position: "absolute", left: pos.x - CHIP / 2, top: pos.y - CHIP / 2, width: CHIP, height: CHIP, borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800,
+            cursor: showAnswer ? "default" : "grab", background: "var(--card)",
+            border: `2px solid ${right === null ? "var(--blue)" : right ? "var(--green)" : "var(--red)"}`,
+            color: "var(--ink)", touchAction: "none", userSelect: "none", WebkitTapHighlightColor: "transparent",
+            zIndex: dragging ? 5 : 1, boxShadow: dragging ? "0 4px 10px var(--shadow)" : "none",
+            transition: dragging ? "none" : "left 0.15s, top 0.15s",
+          }}>{el}</div>
+        );
+      })}
+    </div>
+  );
+}
+
 // A fixed-height scratch pad in the quiz-card flow for rough working.
 // Strokes are normalised (0–1) so they survive resizes; the parent
 // clears them when the question changes.
@@ -4248,6 +4368,65 @@ const TOPICS = [
         };
       }
 
+      // drag every element of a small universal set into the region it belongs in
+      if (Math.random() < 0.55) {
+        const three = Math.random() < 0.25;
+        const RULES = [
+          { name: "even numbers", test: (x) => x % 2 === 0 },
+          { name: "odd numbers", test: (x) => x % 2 === 1 },
+          { name: "multiples of 3", test: (x) => x % 3 === 0 },
+          { name: "multiples of 4", test: (x) => x % 4 === 0 },
+          { name: "multiples of 5", test: (x) => x % 5 === 0 },
+          { name: "factors of 12", test: (x) => 12 % x === 0 },
+          { name: "prime numbers", test: (x) => x > 1 && Array.from({ length: Math.max(0, x - 2) }, (_, i) => i + 2).every((d) => x % d !== 0) },
+          { name: "square numbers", test: (x) => Number.isInteger(Math.sqrt(x)) },
+          { name: "numbers greater than 6", test: (x) => x > 6 },
+          { name: "numbers less than 5", test: (x) => x < 5 },
+        ];
+        const shuffle = (arr) => { const c = [...arr]; for (let i = c.length - 1; i > 0; i--) { const j = randInt(0, i); [c[i], c[j]] = [c[j], c[i]]; } return c; };
+        const n = randInt(8, 12);
+        const universe = Array.from({ length: n }, (_, i) => i + 1);
+
+        let rules = null;
+        for (let tries = 0; tries < 40 && !rules; tries++) {
+          const cand = shuffle(RULES).slice(0, three ? 3 : 2);
+          // every rule must actually split the universe (not match everything or nothing)
+          if (cand.every((rule) => { const c = universe.filter(rule.test).length; return c > 0 && c < universe.length; })) rules = cand;
+        }
+        if (!rules) rules = RULES.slice(0, 2);
+
+        const keyFor = (el) => {
+          const flags = rules.map((rule) => rule.test(el));
+          if (rules.length === 2) { const [inA, inB] = flags; return inA && inB ? "ab" : inA ? "a" : inB ? "b" : "out"; }
+          const [inA, inB, inC] = flags;
+          if (inA && inB && inC) return "abc";
+          if (inA && inB) return "ab"; if (inA && inC) return "ac"; if (inB && inC) return "bc";
+          if (inA) return "a"; if (inB) return "b"; if (inC) return "c";
+          return "out";
+        };
+        const correct = {};
+        universe.forEach((el) => { correct[el] = keyFor(el); });
+
+        const REGION_NAME = rules.length === 2
+          ? { a: "A only", b: "B only", ab: "A and B", out: "neither" }
+          : { a: "A only", b: "B only", c: "C only", ab: "A and B only", ac: "A and C only", bc: "B and C only", abc: "A, B and C", out: "none of them" };
+        const order = rules.length === 2 ? ["a", "b", "ab", "out"] : ["a", "b", "c", "ab", "ac", "bc", "abc", "out"];
+        const groups = {};
+        universe.forEach((el) => { (groups[correct[el]] = groups[correct[el]] || []).push(el); });
+        const filled = order.filter((k) => groups[k] && groups[k].length);
+
+        return {
+          prompt: `The universal set is {${universe.join(", ")}}.\n${rules.map((r, i) => `${"ABC"[i]} = ${r.name}`).join("\n")}\nDrag each number into the correct region of the Venn diagram.`,
+          placeVenn: { sets: three ? 3 : 2, universe, correct },
+          answer: filled.map((k) => `${REGION_NAME[k]}: ${groups[k].join(", ")}`).join(" · "),
+          hint: "Check every rule for one number at a time.",
+          steps: [
+            ...rules.map((r, i) => `${"ABC"[i]} = ${r.name}`),
+            ...filled.map((k) => `${groups[k].join(", ")} → ${REGION_NAME[k]}`),
+          ],
+        };
+      }
+
       const a = randInt(8, 20), b = randInt(8, 20), both = randInt(1, Math.min(a, b) - 1);
       const aOnly = a - both, bOnly = b - both, union = a + b - both;
       const ask = pick([
@@ -5764,6 +5943,7 @@ export default function MathsUnlockedBN() {
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
   const [cfPick, setCfPick] = useState([]);           // up to 2 guide lines on a cumulative-frequency graph
   const [vennPressed, setVennPressed] = useState([]); // region keys shaded on a Venn diagram question
+  const [vennPlace, setVennPlace] = useState({});     // { [element]: regionKey } on a "drag the numbers in" Venn question
   const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
   const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
@@ -6146,6 +6326,7 @@ export default function MathsUnlockedBN() {
     setRegionPick(null);
     setCfPick([]);
     setVennPressed([]);
+    setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
     setSketchStrokes([]);
@@ -6561,6 +6742,7 @@ export default function MathsUnlockedBN() {
     setRegionPick(null);
     setCfPick([]);
     setVennPressed([]);
+    setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
     setSketchStrokes([]);
@@ -6598,6 +6780,7 @@ export default function MathsUnlockedBN() {
     setRegionPick(null);
     setCfPick([]);
     setVennPressed([]);
+    setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
     setSketchStrokes([]);
@@ -6628,7 +6811,7 @@ export default function MathsUnlockedBN() {
     setShieldOffer(false);
     setAnswerInput("");
     setMultiInput({});
-    setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setMcPick(null); setDrawTri([]);
+    setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setVennPlace({}); setMcPick(null); setDrawTri([]);
     startTimeRef.current = Date.now();
     if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
@@ -6687,6 +6870,15 @@ export default function MathsUnlockedBN() {
     setVennPressed((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]));
   }
 
+  // Drop a number onto a Venn region (region === null puts it back in the tray).
+  function placeVennEl(el, region) {
+    if (feedback) return;
+    setVennPlace((prev) => {
+      if (region == null) { const n = { ...prev }; delete n[el]; return n; }
+      return { ...prev, [el]: region };
+    });
+  }
+
   // "Draw the image" transformation questions: tap 3 lattice points for the
   // image triangle; a 4th tap drops the oldest vertex (rolling buffer of 3).
   function toggleTriPoint(pt) {
@@ -6707,6 +6899,10 @@ export default function MathsUnlockedBN() {
       if (vennPressed.length === 0) return;
       const t = question.venn.target;
       correct = vennPressed.length === t.length && vennPressed.every((k) => t.includes(k));
+    } else if (question.placeVenn) {
+      const need = question.placeVenn.universe;
+      if (need.some((el) => !vennPlace[el])) return; // every number must be placed first
+      correct = need.every((el) => vennPlace[el] === question.placeVenn.correct[el]);
     } else if (question.region) {
       if (!regionPick) return;
       correct = regionSideCorrect(question.region, regionPick[0], regionPick[1]);
@@ -7953,6 +8149,16 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
+              {question.placeVenn && (
+                <div style={{ marginBottom: 12 }}>
+                  <VennPlaceBoard venn={question.placeVenn} placement={vennPlace} onPlace={placeVennEl} showAnswer={!!feedback} />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 4 }}>
+                    {feedback ? (feedback.correct ? "Every number is in the right region" : "Red rings show which numbers are in the wrong region")
+                      : "Drag each number from the tray into the correct region"}
+                  </div>
+                </div>
+              )}
+
               {question.transform && (
                 <div style={{ marginBottom: 12 }}>
                   <TransformFigure
@@ -8112,6 +8318,7 @@ export default function MathsUnlockedBN() {
                 const notReady = (question.drawGraph && drawPts.length < 2)
                   || (question.region && !regionPick)
                   || (question.venn && vennPressed.length === 0)
+                  || (question.placeVenn && question.placeVenn.universe.some((el) => vennPlace[el] == null))
                   || (question.choices && !mcPick)
                   || (question.drawMirror && drawPts.length < 2)
                   || (question.vector && (!(multiInput.vx || "").trim() || !(multiInput.vy || "").trim()))
