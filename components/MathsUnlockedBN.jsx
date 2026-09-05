@@ -439,11 +439,7 @@ function LineGraph({ data }) {
       <clipPath id="lg-clip"><rect x={X(-R)} y={Y(R)} width={2 * R * U} height={2 * R * U} /></clipPath>
       <line x1={X(-R)} y1={Y(m * -R + c)} x2={X(R)} y2={Y(m * R + c)} stroke="var(--blue)" strokeWidth="2.4" clipPath="url(#lg-clip)" />
       {marks.map(([mx, my], i) => (
-        <g key={i}>
-          <circle cx={X(mx)} cy={Y(my)} r="3.4" fill="var(--red)" />
-          <text x={X(mx) + (mx > 2 ? -6 : 6)} y={Y(my) + (my > 3 ? 12 : -6)} fontSize="9" fontWeight="700"
-            textAnchor={mx > 2 ? "end" : "start"} fill="var(--ink)">({mx}, {my})</text>
-        </g>
+        <circle key={i} cx={X(mx)} cy={Y(my)} r="3.4" fill="var(--red)" />
       ))}
     </svg>
   );
@@ -2853,20 +2849,31 @@ const TOPICS = [
       }
 
       if (r < 0.90) {
-        // read the equation of a line straight off a graph
+        // read the equation of a line straight off a graph — mark every
+        // whole-number point the grid can show (up to 4, spread out) so
+        // the student picks any two, rather than being handed the answer
+        // as a labelled pair of coordinates.
         const slopes = [[-3, 1], [-2, 1], [-1, 1], [1, 1], [2, 1], [3, 1], [1, 2], [-1, 2], [3, 2], [-3, 2]];
         const [sn, sd] = slopes[randInt(0, slopes.length - 1)];
         const m = sn / sd, c = randInt(-2, 2);
-        const p1 = [0, c];
-        let p2 = [sd, sn + c];
-        for (const kk of [3, -3, 2, -2, 1, -1]) { const x = sd * kk, y = sn * kk + c; if (Math.abs(x) <= 5 && Math.abs(y) <= 5) { p2 = [x, y]; break; } }
+        const pts = [];
+        for (let k = -6; k <= 6; k++) {
+          const x = sd * k, y = sn * k + c;
+          if (Math.abs(x) <= 5 && Math.abs(y) <= 5) pts.push([x, y]);
+        }
+        let marks = pts;
+        if (pts.length > 4) {
+          const idxs = [...new Set([0, Math.round((pts.length - 1) / 3), Math.round((2 * (pts.length - 1)) / 3), pts.length - 1])];
+          marks = idxs.map((i) => pts[i]);
+        }
+        const [p1, p2] = [marks[0], marks[marks.length - 1]];
         const mS = fr(sn, sd);
         const rhs = `${mxTerm(mS)}${plusC(c)}`, eq = `y = ${rhs}`;
         return {
           prompt: `The straight line is drawn on the grid. Find its equation`,
-          graph: { m, c, marks: [p1, p2] }, answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "read two points off the line",
+          graph: { m, c, marks }, answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "read two points off the line",
           steps: [
-            `Two points on the line: (${p1[0]}, ${p1[1]}) and (${p2[0]}, ${p2[1]})`,
+            `Pick any two marked points, e.g. (${p1[0]}, ${p1[1]}) and (${p2[0]}, ${p2[1]})`,
             `gradient = (${p2[1]} − ${p1[1]}) ÷ (${p2[0]} − ${p1[0]}) = ${mS}`,
             `crosses the y-axis at ${c}, so c = ${c}`,
             eq,
