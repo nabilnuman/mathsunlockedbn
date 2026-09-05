@@ -2596,6 +2596,47 @@ const TOPICS = [
   { id: "proportionality", name: "Proportionality", icon: "⚖️", prereqs: ["algebra"],
     generate() {
       const pick = (a) => a[randInt(0, a.length - 1)];
+      const shuffle = (arr) => { const c = [...arr]; for (let i = c.length - 1; i > 0; i--) { const j = randInt(0, i); [c[i], c[j]] = [c[j], c[i]]; } return c; };
+
+      // share a total between two people in a given ratio
+      if (Math.random() < 0.4) {
+        const [m, n] = pick([[1, 2], [1, 3], [1, 4], [2, 3], [3, 4], [2, 5], [3, 5], [4, 5], [1, 5], [2, 7], [3, 7], [3, 8], [5, 6]]);
+        const [nameA, nameB] = shuffle(["Sam", "Joe", "Ali", "Mia", "Tom", "Zara", "Liam", "Noor"]).slice(0, 2);
+        const noun = pick(["apples", "sweets", "marbles", "stickers", "pencils", "chocolates", "stamps", "dollars"]);
+        const u = randInt(2, 12);
+        const shareA = m * u, shareB = n * u, total = (m + n) * u;
+
+        const mode = pick(["totalToA", "totalToB", "aToTotal", "aToB", "bToTotal", "bToA"]);
+        const setup = `${nameA} and ${nameB} share ${noun} in the ratio ${m}:${n}.`;
+        let prompt, answer, steps;
+        if (mode === "totalToA") {
+          prompt = `${nameA} and ${nameB} share ${total} ${noun} in the ratio ${m}:${n}. How many ${noun} does ${nameA} get?`;
+          answer = `${shareA}`;
+          steps = [`Total parts = ${m} + ${n} = ${m + n}`, `1 part = ${total} ÷ ${m + n} = ${u}`, `${nameA}'s share = ${m} × ${u} = ${shareA}`];
+        } else if (mode === "totalToB") {
+          prompt = `${nameA} and ${nameB} share ${total} ${noun} in the ratio ${m}:${n}. How many ${noun} does ${nameB} get?`;
+          answer = `${shareB}`;
+          steps = [`Total parts = ${m} + ${n} = ${m + n}`, `1 part = ${total} ÷ ${m + n} = ${u}`, `${nameB}'s share = ${n} × ${u} = ${shareB}`];
+        } else if (mode === "aToTotal") {
+          prompt = `${setup} ${nameA} gets ${shareA} ${noun}. How many ${noun} do they share in total?`;
+          answer = `${total}`;
+          steps = [`${nameA}'s ${m} part(s) = ${shareA}, so 1 part = ${shareA} ÷ ${m} = ${u}`, `Total = ${u} × (${m} + ${n}) = ${total}`];
+        } else if (mode === "aToB") {
+          prompt = `${setup} ${nameA} gets ${shareA} ${noun}. How many ${noun} does ${nameB} get?`;
+          answer = `${shareB}`;
+          steps = [`${nameA}'s ${m} part(s) = ${shareA}, so 1 part = ${shareA} ÷ ${m} = ${u}`, `${nameB}'s share = ${n} × ${u} = ${shareB}`];
+        } else if (mode === "bToTotal") {
+          prompt = `${setup} ${nameB} gets ${shareB} ${noun}. How many ${noun} do they share in total?`;
+          answer = `${total}`;
+          steps = [`${nameB}'s ${n} part(s) = ${shareB}, so 1 part = ${shareB} ÷ ${n} = ${u}`, `Total = ${u} × (${m} + ${n}) = ${total}`];
+        } else {
+          prompt = `${setup} ${nameB} gets ${shareB} ${noun}. How many ${noun} does ${nameA} get?`;
+          answer = `${shareA}`;
+          steps = [`${nameB}'s ${n} part(s) = ${shareB}, so 1 part = ${shareB} ÷ ${n} = ${u}`, `${nameA}'s share = ${m} × ${u} = ${shareA}`];
+        }
+        return { prompt, answer, hint: "Enter a number.", steps };
+      }
+
       const rels = [
         { txt: "x",  disp: (x) => `${x}`,   f: (x) => x,             other: (b, t) => b * t,     R: (t) => t },
         { txt: "x",  disp: (x) => `${x}`,   f: (x) => x,             other: (b, t) => b * t,     R: (t) => t },
