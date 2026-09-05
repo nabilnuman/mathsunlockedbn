@@ -4419,7 +4419,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.56) {
+      if (r < 0.585) {
         // SOH CAH TOA — find an angle
         const th = pick([33, 37, 42, 46, 50, 54, 58]);
         const hyp = randInt(9, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
@@ -4440,7 +4440,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.655) {
+      if (r < 0.68) {
         // sine rule — find a side
         let A = pick([35, 40, 45, 50, 55, 60, 70, 80]), B = pick([35, 40, 45, 50, 55, 60, 70]);
         while (A + B > 150 || B === A) B = pick([35, 40, 45, 50, 55]);
@@ -4454,7 +4454,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.72) {
+      if (r < 0.76) {
         // sine rule — find an angle  (A + B ≤ 130 by construction)
         const A = pick([30, 40, 50, 60, 70]);
         let B = pick([35, 40, 45, 50, 55, 60]);
@@ -4468,7 +4468,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.825) {
+      if (r < 0.865) {
         // cosine rule — find a side
         const A = pick([35, 45, 55, 65, 75, 100, 110]);
         let b = randInt(5, 12), c = randInt(5, 12);
@@ -4482,7 +4482,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.89) {
+      if (r < 0.945) {
         // cosine rule — find an angle  (every angle ≥ ~25° so it's not a sliver)
         let b, c, a, A, B, C;
         for (let i = 0; i < 40; i++) {
@@ -4498,17 +4498,6 @@ const TOPICS = [
           tri: { verts: layout(c, b, A), sideLabels: [`${a} cm`, `${b} cm`, `${c} cm`], angleLabels: ["?", "", ""], vertLabels: ["A", "B", "C"] },
           answer: `${r1(A)}`, hint: "cos A = (b² + c² − a²) ÷ 2bc", check: approx(A),
           steps: [`cos A = (${b}² + ${c}² − ${a}²) ÷ (2 × ${b} × ${c})`, `= ${((b * b + c * c - a * a) / (2 * b * c)).toFixed(3)}`, `A = ${r1(A)}°`],
-        };
-      }
-
-      if (r < 0.945) {
-        // area of a right-angled triangle
-        const base = randInt(4, 16), h = randInt(3, 15), area = (base * h) / 2;
-        return {
-          prompt: `Find the area of the triangle, in cm²`,
-          tri: { verts: rlayout(base, h), sideLabels: [`${h} cm`, `${base} cm`, ""], rightAngle: 2 },
-          answer: `${area}`, hint: "area = ½ × base × height", check: approx(area),
-          steps: [`Area = ½ × base × height`, `= ½ × ${base} × ${h} = ${area} cm²`],
         };
       }
 
