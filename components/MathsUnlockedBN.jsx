@@ -8995,7 +8995,7 @@ export default function MathsUnlockedBN() {
                   {!feedback && myLevel >= WRITE_LV && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
-                      style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
+                      style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
                       <Pencil size={16} />
                     </button>
                   )}
