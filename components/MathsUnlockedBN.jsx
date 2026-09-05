@@ -5049,6 +5049,14 @@ function avgFromHistory(history) {
   const last = history.slice(-10);
   return last.reduce((s, v) => s + v, 0) * 10;
 }
+// How many of the most recent answers in a topic were wrong, in a row —
+// used to auto-give a free hint after 3 misses in a row so a student
+// isn't just stuck.
+function trailingWrongStreak(history) {
+  let n = 0;
+  for (let i = (history || []).length - 1; i >= 0 && history[i] === 0; i--) n++;
+  return n;
+}
 function rankIndexForAvg(avg) {
   let idx = -1;
   Object.keys(RANK_THRESHOLD).forEach((label) => {
@@ -5898,6 +5906,11 @@ function allTopicsRankAtLeast(profile, topics, label) {
 function topicHasCorrect(profile, topicId) {
   return ((((profile.topics || {})[topicId] || {}).history) || []).some((v) => v === 1);
 }
+// 3 wrong in a row on a topic — the next question's hint is given for
+// free (no coin spent) instead of making them ask for it.
+function autoHintDue(profile, topicId) {
+  return trailingWrongStreak(((profile.topics || {})[topicId] || {}).history) >= 3;
+}
 
 /* A topic unlocks once every prerequisite topic has reached at least
    rank C (50%) — a "basic competency" bar, not full mastery. */
@@ -6117,6 +6130,7 @@ export default function MathsUnlockedBN() {
   const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
+  const [hintFree, setHintFree] = useState(false);         // hint auto-given after 3 wrong in a row (no coin spent)
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
   const [stylePickerOpen, setStylePickerOpen] = useState(false); // sound/title/name/card-bg picker
   const [shieldOffer, setShieldOffer] = useState(false);   // wrong answer, offering a Streak Shield
@@ -6514,7 +6528,10 @@ export default function MathsUnlockedBN() {
     if (levelFromExp(totalExp(profile)) < MIXED_UNLOCK_LEVEL) return;
     recentQRef.current = [];
     setActiveTopic(MIXED_TOPIC);
-    setQuestion(freshQuestion(pickMixed));
+    const q = freshQuestion(pickMixed);
+    setQuestion(q);
+    const autoHint = autoHintDue(profile, q.topicId);
+    setHintFree(autoHint);
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6526,7 +6543,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(false);
+    setHintShown(autoHint);
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -6930,7 +6947,10 @@ export default function MathsUnlockedBN() {
     // Caught dodging before ("Nice Try") — a topic left unanswered follows
     // you back in instead of re-rolling, so ducking out no longer works.
     const stuck = profile.dodgeLocked && profile.dodgeStuck && profile.dodgeStuck[topic.id];
-    setQuestion(stuck || freshQuestion(() => pickQuestion(topic)));
+    const q = stuck || freshQuestion(() => pickQuestion(topic));
+    setQuestion(q);
+    const autoHint = autoHintDue(profile, q.topicId);
+    setHintFree(autoHint);
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6942,7 +6962,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(false);
+    setHintShown(autoHint);
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -6968,7 +6988,10 @@ export default function MathsUnlockedBN() {
   }
 
   function nextQuestion() {
-    setQuestion(freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic)));
+    const q = freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
+    setQuestion(q);
+    const autoHint = autoHintDue(profile, q.topicId);
+    setHintFree(autoHint);
     setAnswerInput(""); setWritePad(false);
     setMultiInput({});
     setDrawPts([]);
@@ -6980,7 +7003,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(false);
+    setHintShown(autoHint);
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -7018,15 +7041,16 @@ export default function MathsUnlockedBN() {
     setTimeout(() => submitAnswer(), 0);
   }
 
-  // Spend a Hint coin to reveal the first working step for this question.
+  // Spend a Hint coin to reveal the formula/approach for this question.
   function doHint() {
     if (hintShown || feedback || !question) return;
-    if (!(question.steps && question.steps.length > 0)) { flash("No hint for this one."); return; }
+    if (!question.hint) { flash("No hint for this one."); return; }
     if ((profile.hints || 0) <= 0) { flash("No Hint coins — you get one every level up."); return; }
     const next = JSON.parse(JSON.stringify(profile));
     next.hints = Math.max(0, (next.hints || 0) - 1);
     next.usedHint = true; // "Every Puzzle Has an Answer"
     const unlocked = awardAchievements(next);
+    setHintFree(false);
     setHintShown(true);
     saveProfile(next);
     if (unlocked.length) playJingle(true);
@@ -8455,7 +8479,7 @@ export default function MathsUnlockedBN() {
                     autoCapitalize="none" autoCorrect="off" spellCheck={false}
                     onChange={(e) => setAnswerInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
-                    placeholder={question.hint}
+                    placeholder="?"
                     disabled={!!feedback || shieldOffer}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
@@ -8488,12 +8512,12 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              {!feedback && !shieldOffer && question.steps && question.steps.length > 0 && (
+              {!feedback && !shieldOffer && question.hint && (
                 <div style={{ marginBottom: 12 }}>
                   {hintShown ? (
                     <div style={{ fontSize: 12.5, background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 8, padding: "9px 12px", color: "var(--ink)" }}>
-                      <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>🪙 Hint</span>
-                      <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.steps[0]} /></div>
+                      <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>{hintFree ? "🎁 Free hint" : "🪙 Hint"}</span>
+                      <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.hint} /></div>
                     </div>
                   ) : (
                     <button type="button" onClick={doHint} disabled={(profile.hints || 0) <= 0} style={{
