@@ -7044,7 +7044,7 @@ export default function MathsUnlockedBN() {
   // Spend a Hint coin to reveal the formula/approach for this question.
   function doHint() {
     if (hintShown || feedback || !question) return;
-    if (!question.hint) { flash("No hint for this one."); return; }
+    if (!question.hint && !(question.steps && question.steps.length > 0)) { flash("No hint for this one."); return; }
     if ((profile.hints || 0) <= 0) { flash("No Hint coins — you get one every level up."); return; }
     const next = JSON.parse(JSON.stringify(profile));
     next.hints = Math.max(0, (next.hints || 0) - 1);
@@ -8512,12 +8512,15 @@ export default function MathsUnlockedBN() {
                 );
               })()}
 
-              {!feedback && !shieldOffer && question.hint && (
+              {!feedback && !shieldOffer && (question.hint || (question.steps && question.steps.length > 0)) && (
                 <div style={{ marginBottom: 12 }}>
                   {hintShown ? (
                     <div style={{ fontSize: 12.5, background: "var(--amber-wash)", border: "1px solid var(--amber)", borderRadius: 8, padding: "9px 12px", color: "var(--ink)" }}>
                       <span style={{ fontWeight: 700, color: "var(--amber)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>{hintFree ? "🎁 Free hint" : "🪙 Hint"}</span>
-                      <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.hint} /></div>
+                      {question.hint && <div className="mub-mono" style={{ marginTop: 4, fontWeight: 700 }}><MathText text={question.hint} /></div>}
+                      {question.steps && question.steps.length > 0 && (
+                        <div className="mub-mono" style={{ marginTop: 4 }}><MathText text={question.steps[0]} /></div>
+                      )}
                     </div>
                   ) : (
                     <button type="button" onClick={doHint} disabled={(profile.hints || 0) <= 0} style={{
