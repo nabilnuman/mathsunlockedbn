@@ -8388,6 +8388,7 @@ export default function MathsUnlockedBN() {
                 if (/√|sqrt/i.test(ctx)) syms.push("√");
                 if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
                 else if (/\^|²/.test(ctx)) syms.push("^");
+                if (question.topicId === "factorization") syms.push("(", ")", "+", "-");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
