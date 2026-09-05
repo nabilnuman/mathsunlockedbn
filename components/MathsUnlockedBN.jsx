@@ -274,7 +274,8 @@ function isOrdinary(s, value) {
   return Number.isFinite(n) && Math.abs(n - value) <= 1e-6 * Math.max(1, Math.abs(value));
 }
 const sfString = (mant, exp) => `${Math.round(mant * 1e6) / 1e6}*10^${exp}`;
-const sfPretty = (mant, exp) => `${Math.round(mant * 1e6) / 1e6} × 10^${exp}`;
+const sfPretty = (mant, exp) => `${Math.round(mant * 1e6) / 1e6} × 10${sup(exp)}`;
+const pow10 = (exp) => `10${sup(exp)}`; // a bare power of 10, e.g. inside "3 × 10⁵ + 2 × 10³"
 
 // "Instruction: expression" → drop the expression onto its own line so it
 // doesn't wrap awkwardly mid-sum. No colon → the whole prompt is the lead.
@@ -2005,7 +2006,7 @@ const TOPICS = [
           const exp = [-5, -4, -3, -2, 3, 4, 5, 6, 7][randInt(0, 8)];
           const value = mant * Math.pow(10, exp);
           const shown = exp < 0 ? value.toFixed(-exp + 1) : String(Math.round(value));
-          return { prompt: `Write ${shown} in standard form`, answer: sfString(mant, exp), hint: sfHint,
+          return { prompt: `Write ${shown} in standard form`, answer: sfString(mant, exp), answerDisplay: sfPretty(mant, exp), hint: sfHint,
             check: (inp) => isStdForm(inp, value),
             steps: [`Put the decimal point after the first non-zero digit: ${mant}`,
               `Count the places moved: ${Math.abs(exp)}${exp < 0 ? " — the number is below 1, so the power is negative" : ""}`,
@@ -2026,10 +2027,10 @@ const TOPICS = [
           const e1 = [-3, -2, 2, 3, 4][randInt(0, 4)], e2 = [-2, 2, 3, 4, 5][randInt(0, 4)];
           const value = m1 * m2 * Math.pow(10, e1 + e2);
           const { mant, exp } = norm(value);
-          return { prompt: `Work out, in standard form:   (${m1} × 10^${e1}) × (${m2} × 10^${e2})`, answer: sfString(mant, exp), hint: sfHint,
+          return { prompt: `Work out, in standard form:   (${m1} × ${pow10(e1)}) × (${m2} × ${pow10(e2)})`, answer: sfString(mant, exp), answerDisplay: sfPretty(mant, exp), hint: sfHint,
             check: (inp) => isStdForm(inp, value),
-            steps: [`Multiply the numbers: ${m1} × ${m2} = ${m1 * m2}`, `Add the powers: 10^${e1} × 10^${e2} = 10^${e1 + e2}`,
-              m1 * m2 >= 10 ? `Adjust so the first part is 1–10: ${m1 * m2} × 10^${e1 + e2} = ${sfPretty(mant, exp)}` : `Answer: ${sfPretty(mant, exp)}`] };
+            steps: [`Multiply the numbers: ${m1} × ${m2} = ${m1 * m2}`, `Add the powers: ${pow10(e1)} × ${pow10(e2)} = ${pow10(e1 + e2)}`,
+              m1 * m2 >= 10 ? `Adjust so the first part is 1–10: ${m1 * m2} × ${pow10(e1 + e2)} = ${sfPretty(mant, exp)}` : `Answer: ${sfPretty(mant, exp)}`] };
         },
         () => { // add or subtract two standard-form numbers
           const exp = [-3, -2, 2, 3, 4, 5][randInt(0, 5)];
@@ -2038,18 +2039,18 @@ const TOPICS = [
           let prompt, value, matchStep;
           if (same) {
             const a = randInt(2, 9), b = plus ? randInt(2, 9) : randInt(1, a - 1);
-            prompt = `Work out, in standard form:   ${a} × 10^${exp} ${plus ? "+" : "−"} ${b} × 10^${exp}`;
+            prompt = `Work out, in standard form:   ${a} × ${pow10(exp)} ${plus ? "+" : "−"} ${b} × ${pow10(exp)}`;
             value = (plus ? a + b : a - b) * Math.pow(10, exp);
             matchStep = `Same power of 10 — just ${plus ? "add" : "subtract"} the front numbers: ${a} ${plus ? "+" : "−"} ${b} = ${plus ? a + b : a - b}`;
           } else {
             const diff = randInt(1, 2), e2 = exp - diff; // second number has the smaller power
             const a = randInt(2, 9), b = randInt(1, 9);
-            prompt = `Work out, in standard form:   ${a} × 10^${exp} ${plus ? "+" : "−"} ${b} × 10^${e2}`;
+            prompt = `Work out, in standard form:   ${a} × ${pow10(exp)} ${plus ? "+" : "−"} ${b} × ${pow10(e2)}`;
             value = a * Math.pow(10, exp) + (plus ? 1 : -1) * b * Math.pow(10, e2);
-            matchStep = `Give both the same power of 10:  ${b} × 10^${e2} = ${b / Math.pow(10, diff)} × 10^${exp},  then ${plus ? "add" : "subtract"}`;
+            matchStep = `Give both the same power of 10:  ${b} × ${pow10(e2)} = ${b / Math.pow(10, diff)} × ${pow10(exp)},  then ${plus ? "add" : "subtract"}`;
           }
           const { mant, exp: ex } = norm(value);
-          return { prompt, answer: sfString(mant, ex), hint: sfHint,
+          return { prompt, answer: sfString(mant, ex), answerDisplay: sfPretty(mant, ex), hint: sfHint,
             check: (inp) => isStdForm(inp, value),
             steps: [matchStep, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
         },
