@@ -8,6 +8,9 @@ import {
   teacherResetPin, changePin,
   sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
   createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
+  getMyTeacher, getMyEntitlement, createClass, myTeacherClasses, updateClass, deleteClass,
+  classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
+  loadAssignments, createAssignment, deleteAssignment, classLicensed,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 
@@ -6372,6 +6375,105 @@ function StudentProfileView({ profile }) {
   );
 }
 
+/* The read-only page a parent sees at /?p=<token>. Leads with a plain-
+   English summary (one grade, what's going well, what needs work), then
+   the profile card + full topic list. */
+function ParentProgressView({ profile }) {
+  const topics = profile.topics || {};
+  const started = TOPICS.map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 })).filter((x) => x.r >= 0);
+  const avgIdx = started.length ? started.reduce((s, x) => s + x.r, 0) / started.length : -1;
+  const overall = rankDisplay(avgIdx >= 0 ? Math.round(avgIdx) : -1);
+  const level = levelFromExp(totalExp(profile));
+  const weak = [...started].sort((a, b) => a.r - b.r).filter((x) => x.r < RANK_ORDER.indexOf("A")).slice(0, 3);
+  const strong = [...started].sort((a, b) => b.r - a.r).filter((x) => x.r >= RANK_ORDER.indexOf("A")).slice(0, 3);
+  const notStarted = TOPICS.filter((t) => isUnlocked(t, profile) && (topics[t.id] || {}).highestRank === undefined).length;
+  const recentAch = Object.entries(profile.achievedAt || {})
+    .map(([id, ts]) => ({ a: ACHIEVEMENTS.find((x) => x.id === id), ts }))
+    .filter((x) => x.a).sort((a, b) => b.ts - a.ts).slice(0, 3);
+  const weekXp = profile.week && profile.week.of === weekKey() && typeof profile.week.xp === "number" ? profile.week.xp : null;
+  const stat = (label, value) => (
+    <div style={{ textAlign: "center", flex: 1 }}>
+      <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>{value}</div>
+      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
+    </div>
+  );
+  const topicLine = (x) => (
+    <span key={x.t.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "3px 9px", margin: "2px 4px 2px 0" }}>
+      {x.t.icon} {x.t.name} <strong style={{ color: rankDisplay(x.r).color }}>{rankDisplay(x.r).label}</strong>
+    </span>
+  );
+  return (
+    <div>
+      <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Currently working at about</div>
+        <div className="mub-display" style={{ fontSize: 32, fontWeight: 800, color: overall.color, lineHeight: 1.1 }}>
+          Grade {overall.label === "—" ? "—" : overall.label}
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+          across {started.length} topic{started.length === 1 ? "" : "s"} practised · Level {level}
+          {profile.last_active ? ` · last practised ${timeAgo(profile.last_active)}` : ""}
+        </div>
+        <div style={{ display: "flex", gap: 4, marginTop: 14, borderTop: "1px solid var(--grid)", paddingTop: 12 }}>
+          {stat("Correct", profile.totalCorrect || 0)}
+          {stat("Best streak", profile.bestStreak || 0)}
+          {stat("Day streak", profile.playStreak || 0)}
+          {weekXp != null && stat("XP this wk", weekXp)}
+        </div>
+      </div>
+
+      {weak.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Needs work</div>
+          <div>{weak.map(topicLine)}</div>
+        </div>
+      )}
+      {strong.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Strong</div>
+          <div>{strong.map(topicLine)}</div>
+        </div>
+      )}
+      {notStarted > 0 && (
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>{notStarted} unlocked topic{notStarted === 1 ? "" : "s"} not started yet.</div>
+      )}
+
+      {recentAch.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Recent milestones</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {recentAch.map(({ a, ts }) => (
+              <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, background: "var(--card)", border: `1px solid ${TIER_COLOR[a.tier] || "var(--grid)"}`, borderRadius: 999, padding: "3px 10px" }}>
+                {a.icon} {a.name} <span style={{ color: "var(--muted)", fontSize: 10.5 }}>{timeAgo(new Date(ts).toISOString())}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+        <ProfileCard profile={profile} />
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Every topic · lowest grade first</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+        {[...TOPICS].map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 }))
+          .sort((a, b) => (a.r < 0 ? 99 : a.r) - (b.r < 0 ? 99 : b.r))
+          .map(({ t, r }) => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
+              <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
+              <span style={{ fontWeight: 700, fontSize: 12, color: rankDisplay(r).color, flexShrink: 0 }}>{rankDisplay(r).label}</span>
+            </div>
+          ))}
+      </div>
+
+      <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginTop: 22, lineHeight: 1.6 }}>
+        MathsUnlocked BN · O-Level Maths (4024) practice<br />
+        This page refreshes each time {profile.name || "your child"} next practises. Reload for the latest.
+      </div>
+    </div>
+  );
+}
+
 /* Achievement check helpers. A topic "counts" once its ratcheted
    highestRank reaches the given label; topicHasCorrect looks for any
    correct answer still in the rolling last-10 history. */
@@ -6388,6 +6490,26 @@ function topicHasCorrect(profile, topicId) {
 // free (no coin spent) instead of making them ask for it.
 function autoHintDue(profile, topicId) {
   return trailingWrongStreak(((profile.topics || {})[topicId] || {}).history) >= 3;
+}
+
+// "3 days ago" / "just now" from an ISO timestamp.
+function timeAgo(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? "yesterday" : `${d} days ago`;
+}
+
+// Progress toward a teacher's assignment: questions answered in its topic
+// since the student first saw it (asgSeen baseline).
+function assignmentProgress(profile, a) {
+  const attempts = ((profile.topicAttempts || {})[a.topic_id]) || 0;
+  const base = (profile.asgSeen || {})[a.id];
+  const done = Math.max(0, attempts - (base === undefined ? attempts : base));
+  return { done, total: a.count, complete: done >= a.count, overdue: a.due_at && Date.now() > new Date(a.due_at).getTime() };
 }
 
 /* A topic unlocks once every prerequisite topic has reached at least
@@ -6518,6 +6640,8 @@ const emptyProfile = () => ({
   seenChallenges: [],
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
+  bestTrigStreak: 0,
+  topicAttempts: {}, asgSeen: {}, // per-topic lifetime attempts + assignment baselines (homework tracking)
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -6689,6 +6813,25 @@ export default function MathsUnlockedBN() {
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
   const [teacherMode, setTeacherMode] = useState(false);
+  // ---- classes / licences / assignments (B2B) ----
+  const [teacherAccount, setTeacherAccount] = useState(null); // { uid, name } if this login is a teacher
+  const [entitlement, setEntitlement] = useState({ premium: false });
+  const [studentClasses, setStudentClasses] = useState([]);   // classes the student is in (my_classes)
+  const [assignments, setAssignments] = useState([]);         // assignment rows for those classes
+  const [teacherClasses, setTeacherClasses] = useState([]);   // classes this teacher owns
+  const [activeClass, setActiveClass] = useState(null);       // the class open on the classDetail screen
+  const [rosterRows, setRosterRows] = useState([]);           // class_roster() result for activeClass
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [classAsg, setClassAsg] = useState([]);               // assignments for activeClass
+  const [newClassName, setNewClassName] = useState("");
+  const [classBusy, setClassBusy] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinMsg, setJoinMsg] = useState(null);               // { ok, text }
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [asgForm, setAsgForm] = useState({ topicId: TOPICS[0].id, count: 15, days: 7 });
+  const [asgBusy, setAsgBusy] = useState(false);
+  const [classLic, setClassLic] = useState({ licensed: false });
+  const [joinClassOpen, setJoinClassOpen] = useState(false);
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
@@ -6770,6 +6913,7 @@ export default function MathsUnlockedBN() {
           }
           await loadCustomQuestions(); // shared reads need a session
           refreshFriends();
+          refreshClasses();
         }
       } catch (e) { /* not signed in, or no saved profile yet */ }
       setReady(true);
@@ -6796,12 +6940,16 @@ export default function MathsUnlockedBN() {
   }, [theme]);
 
 
-  // Teacher-only screens are unreachable without the ?teacher=1 unlock.
+  // Teacher-only screens are unreachable without the ?teacher=1 unlock
+  // (admin / question bank) or a real teacher account (classes).
   useEffect(() => {
     if (!teacherMode && (screen === "admin" || screen === "questions")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-  }, [teacherMode, screen, profile.name]);
+    if (!teacherAccount && ready && (screen === "classes" || screen === "classDetail")) {
+      setScreen(profile.name ? "dashboard" : "login");
+    }
+  }, [teacherMode, teacherAccount, ready, screen, profile.name]);
 
   // Roll over the daily tasks at (local) midnight / on a new day, and the
   // weekly-XP bucket on a new week.
@@ -7255,6 +7403,7 @@ export default function MathsUnlockedBN() {
       await saveProfile(prof);
       loadCustomQuestions(); // shared reads need a session
       refreshFriends();
+      refreshClasses();
       setScreen("dashboard");
     } catch (e) {
       setStartError(e && e.message ? e.message : "Could not sign in. Try again.");
@@ -7682,6 +7831,7 @@ export default function MathsUnlockedBN() {
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
     next.topics[scoredId] = t;
+    next.topicAttempts = { ...(next.topicAttempts || {}), [scoredId]: ((next.topicAttempts || {})[scoredId] || 0) + 1 }; // homework progress
     const rankedUp = t.highestRank > rankBefore
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
@@ -7814,6 +7964,124 @@ export default function MathsUnlockedBN() {
     loadStudents();
   }
 
+  /* ---- teacher: classes ---- */
+  async function openClasses() {
+    setActiveClass(null);
+    setScreen("classes");
+    setTeacherClasses(await myTeacherClasses());
+  }
+  async function doCreateClass() {
+    const nm = newClassName.trim();
+    if (!nm || classBusy) return;
+    setClassBusy(true);
+    const school = profile.school && profile.school !== SOLO_SCHOOL ? profile.school : null;
+    const res = await createClass(nm, school);
+    setClassBusy(false);
+    if (res.ok) { setNewClassName(""); setTeacherClasses(await myTeacherClasses()); }
+    else flash(res.error || "Couldn't create the class.");
+  }
+  async function openClassDetail(cls) {
+    setActiveClass(cls);
+    setScreen("classDetail");
+    setRosterRows([]);
+    setClassAsg([]);
+    await refreshRoster(cls.id);
+  }
+  async function refreshRoster(cid) {
+    setRosterLoading(true);
+    setClassLic({ licensed: false });
+    try {
+      const [roster, asg, lic] = await Promise.all([classRoster(cid), loadAssignments([cid]), classLicensed(cid)]);
+      roster.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      setRosterRows(roster);
+      setClassAsg(asg);
+      setClassLic(lic || { licensed: false });
+    } catch (e) { setRosterRows([]); }
+    setRosterLoading(false);
+  }
+  async function doArchiveClass(cls, archived) {
+    await updateClass(cls.id, { archived });
+    setActiveClass({ ...cls, archived });
+    setTeacherClasses(await myTeacherClasses());
+  }
+  async function doDeleteClass(cls) {
+    if (typeof window !== "undefined" && !window.confirm(`Delete "${cls.name}"? Students lose access to it and its homework. Their own progress is untouched.`)) return;
+    await deleteClass(cls.id);
+    setActiveClass(null);
+    setScreen("classes");
+    setTeacherClasses(await myTeacherClasses());
+  }
+  async function doRemoveMember(uid) {
+    if (!activeClass) return;
+    await removeClassMember(activeClass.id, uid);
+    setRosterRows((r) => r.filter((x) => x.uid !== uid));
+  }
+  async function doCreateAssignment() {
+    if (!activeClass || asgBusy) return;
+    const { topicId, count, days } = asgForm;
+    const n = Math.max(1, Math.min(200, parseInt(count, 10) || 10));
+    const due = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
+    const title = TOPIC_BY_ID[topicId] ? `${count} ${TOPIC_BY_ID[topicId].name} questions` : `${count} questions`;
+    setAsgBusy(true);
+    const res = await createAssignment(activeClass.id, topicId, n, due, title);
+    setAsgBusy(false);
+    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); }
+    else flash(res.error || "Couldn't set the homework.");
+  }
+  async function doDeleteAssignment(id) {
+    await deleteAssignment(id);
+    setClassAsg((a) => a.filter((x) => x.id !== id));
+  }
+  function exportClassCSV() {
+    if (!activeClass || !rosterRows.length) return;
+    const cols = ["Name", "Level", "Prestige", "Best streak", "Total correct", "Topics started", "Achievements", "Last active"];
+    const topicCols = TOPICS.map((t) => t.name);
+    const head = [...cols, ...topicCols, ...classAsg.map((a) => a.title || `Homework ${a.topic_id}`)];
+    const rows = rosterRows.map((s) => {
+      const started = TOPICS.filter((t) => ((s.topics || {})[t.id] || {}).history?.length > 0).length;
+      const base = [
+        s.name || "", levelFromExp(totalExp(s)), s.prestige || 0, s.bestStreak || 0,
+        s.totalCorrect || 0, `${started}/${TOPICS.length}`, (s.achievements || []).length,
+        s.joined_at ? new Date(s.joined_at).toLocaleDateString() : "",
+      ];
+      const ranks = TOPICS.map((t) => rankDisplay(((s.topics || {})[t.id] || {}).highestRank).label);
+      const hw = classAsg.map((a) => { const p = assignmentProgress(s, a); return `${p.done}/${p.total}`; });
+      return [...base, ...ranks, ...hw];
+    });
+    const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [head, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
+    try {
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(activeClass.name || "class").replace(/[^a-z0-9]+/gi, "-")}-progress.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { flash("Couldn't export — try a different browser."); }
+  }
+
+  /* ---- student: join a class ---- */
+  async function doJoinClass() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code || joinBusy) return;
+    setJoinBusy(true);
+    setJoinMsg(null);
+    const res = await joinClass(code);
+    setJoinBusy(false);
+    if (res.ok) {
+      setJoinMsg({ ok: true, text: `Joined ${res.name}${res.teacher_name ? ` (${res.teacher_name})` : ""}.` });
+      setJoinCode("");
+      await refreshClasses();
+    } else {
+      setJoinMsg({ ok: false, text: res.error || "Couldn't join." });
+    }
+  }
+  async function doLeaveClass(classId) {
+    await leaveClass(classId);
+    await refreshClasses();
+  }
+
   async function doPinReset(uid) {
     if (pinResetBusy) return;
     if (!/^\d{6}$/.test(pinResetVal)) { setPinResetMsg({ uid, ok: false, text: "Enter a 6-digit PIN." }); return; }
@@ -7873,6 +8141,39 @@ export default function MathsUnlockedBN() {
     (friendGraph.incoming || []).length > 0 ||
     (friendGraph.friends || []).some((u) => !(profile.seenFriends || []).includes(u)) ||
     challengeAlert;
+
+  // Teacher status, premium entitlement, and — for a student — the
+  // classes they're in plus any homework their teacher has set.
+  async function refreshClasses() {
+    try {
+      const [tch, ent] = await Promise.all([getMyTeacher(), getMyEntitlement()]);
+      setTeacherAccount(tch);
+      setEntitlement(ent || { premium: false });
+      if (tch) {
+        setTeacherClasses(await myTeacherClasses());
+        return;
+      }
+      const classes = await myStudentClasses();
+      setStudentClasses(classes);
+      const ids = classes.map((c) => c.class_id);
+      const asg = ids.length ? await loadAssignments(ids) : [];
+      setAssignments(asg);
+      // Snapshot the baseline attempt count the first time we see each
+      // assignment, so "do 15 questions" counts from now, not all-time.
+      // patchProfile's updater form is used so this can't clobber a
+      // profile still mid-restore.
+      const cur = profileRef.current || {};
+      if (asg.some((a) => (cur.asgSeen || {})[a.id] === undefined)) {
+        patchProfile((prev) => {
+          const seen = { ...(prev.asgSeen || {}) };
+          for (const a of asg) {
+            if (seen[a.id] === undefined) seen[a.id] = (prev.topicAttempts || {})[a.topic_id] || 0;
+          }
+          return { asgSeen: seen };
+        });
+      }
+    } catch (e) { /* offline */ }
+  }
 
   async function refreshFriends() {
     try {
@@ -8144,6 +8445,11 @@ export default function MathsUnlockedBN() {
                 Leaderboard
               </button>
             )}
+            {screen !== "login" && screen !== "parent" && teacherAccount && screen !== "classes" && screen !== "classDetail" && (
+              <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
+                🎓 Classes
+              </button>
+            )}
             {screen !== "login" && screen !== "parent" && teacherMode && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
@@ -8349,6 +8655,7 @@ export default function MathsUnlockedBN() {
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
                     <span>· Current streak: {profile.streak || 0} 🔥</span>
+                    {entitlement.premium && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--on-accent)", background: "var(--green)", borderRadius: 999, padding: "1px 7px" }}>✦ PREMIUM</span>}
                   </div>
                 </button>
               </div>
@@ -8437,6 +8744,56 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
             </div>
+
+            {teacherAccount && (
+              <button onClick={openClasses} className="mub-card" style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--blue)", background: "var(--card)", cursor: "pointer", marginBottom: 14 }}>
+                <span style={{ fontSize: 24 }}>🎓</span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Your classes</span>
+                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{teacherClasses.length} class{teacherClasses.length === 1 ? "" : "es"} — open the dashboard</span>
+                </span>
+                <span style={{ fontSize: 13, color: "var(--blue)", fontWeight: 700 }}>Open →</span>
+              </button>
+            )}
+
+            {(assignments.length > 0 || studentClasses.some((c) => !c.archived)) && (
+              <div style={{ border: "1px solid var(--blue)", borderRadius: 14, padding: 14, marginBottom: 16, background: "var(--card)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: assignments.length ? 10 : 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 0.5 }}>📋 From your teacher</span>
+                  {entitlement.premium && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--on-accent)", background: "var(--green)", borderRadius: 999, padding: "2px 8px" }}>✦ PREMIUM</span>}
+                </div>
+                {studentClasses.filter((c) => !c.archived).map((c) => (
+                  <div key={c.class_id} style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+                    {c.name}{c.teacher_name ? ` · ${c.teacher_name}` : ""}
+                  </div>
+                ))}
+                {assignments.filter((a) => !assignmentProgress(profile, a).complete).map((a) => {
+                  const p = assignmentProgress(profile, a);
+                  const topic = TOPIC_BY_ID[a.topic_id];
+                  const locked = topic && !isUnlocked(topic, profile);
+                  const pct = Math.min(100, Math.round((p.done / p.total) * 100));
+                  return (
+                    <button key={a.id} onClick={() => topic && !locked && startTopic(topic)} disabled={locked}
+                      style={{ width: "100%", textAlign: "left", background: "var(--paper)", border: `1px solid ${p.overdue ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, padding: "9px 11px", marginTop: 6, cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5 }}>
+                        <strong>{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
+                        <span style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", flexShrink: 0 }}>
+                          {locked ? "🔒 unlocks later" : `${p.done}/${p.total}${a.due_at ? ` · ${p.overdue ? "overdue" : `due ${new Date(a.due_at).toLocaleDateString()}`}` : ""}`}
+                        </span>
+                      </div>
+                      {!locked && (
+                        <div style={{ height: 5, borderRadius: 999, background: "var(--grid)", marginTop: 6, overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", background: "var(--blue)" }} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+                {assignments.length > 0 && assignments.every((a) => assignmentProgress(profile, a).complete) && (
+                  <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, marginTop: 6 }}>✓ All homework done — nice.</div>
+                )}
+              </div>
+            )}
 
             {(() => {
               const lvl = levelFromExp(totalExp(profile));
@@ -9157,6 +9514,176 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
+        {/* TEACHER — CLASS LIST */}
+        {screen === "classes" && (() => {
+          const back = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 };
+          const prim = { fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
+          return (
+            <div>
+              <button onClick={() => setScreen("dashboard")} style={back}><ArrowLeft size={14} /> back</button>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Classes</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
+                Create a class, share its code, and see everyone&rsquo;s progress in one place.
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+                <input value={newClassName} onChange={(e) => setNewClassName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") doCreateClass(); }}
+                  placeholder="New class name — e.g. 4B Maths"
+                  style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 14, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }} />
+                <button onClick={doCreateClass} disabled={classBusy || !newClassName.trim()} style={{ ...prim, opacity: classBusy || !newClassName.trim() ? 0.5 : 1 }}>Create</button>
+              </div>
+              {teacherClasses.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)" }}>No classes yet.</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {teacherClasses.map((c) => (
+                  <button key={c.id} onClick={() => openClassDetail(c)} style={{ textAlign: "left", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{c.name} {c.archived && <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>· archived</span>}</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                        {c.school ? `${c.school} · ` : ""}code <span className="mub-mono" style={{ fontWeight: 700, color: "var(--ink)", letterSpacing: 1 }}>{c.join_code}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 13, color: "var(--blue)", fontWeight: 700, flexShrink: 0 }}>Open →</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* TEACHER — CLASS DETAIL */}
+        {screen === "classDetail" && activeClass && (() => {
+          const back = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 };
+          const prim = { fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 12px", cursor: "pointer" };
+          const ghost = { fontSize: 12, fontWeight: 600, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 };
+          const inp = { fontSize: 13, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", background: "var(--card)", color: "var(--ink)" };
+          return (
+            <div>
+              <button onClick={() => setScreen("classes")} style={back}><ArrowLeft size={14} /> classes</button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                <div>
+                  <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>{activeClass.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>{activeClass.school || "No school set"} · {rosterRows.length} student{rosterRows.length === 1 ? "" : "s"}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button onClick={() => refreshRoster(activeClass.id)} style={ghost}><RotateCcw size={12} /> refresh</button>
+                  <button onClick={() => doArchiveClass(activeClass, !activeClass.archived)} style={ghost}>{activeClass.archived ? "Unarchive" : "Archive"}</button>
+                  <button onClick={() => doDeleteClass(activeClass)} style={{ ...ghost, color: "var(--red)", borderColor: "var(--red)" }}>Delete</button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 10, fontSize: 12.5,
+                background: "var(--paper)", border: `1px solid ${classLic.licensed ? "var(--green)" : "var(--amber)"}`, color: "var(--ink)" }}>
+                {classLic.licensed
+                  ? <>✓ <strong>Licensed</strong> — your students have the full app{classLic.expires_at ? ` until ${new Date(classLic.expires_at).toLocaleDateString()}` : ""}.</>
+                  : <>⚠ <strong>No licence</strong> — your students are on the free tier. A class or school licence unlocks everything for them.</>}
+              </div>
+
+              <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Join code</div>
+                <div className="mub-mono" style={{ fontSize: 30, fontWeight: 800, letterSpacing: 4, margin: "4px 0" }}>{activeClass.join_code}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>Students: open the app → ⚙ Settings → <strong>Join a class</strong> → enter this code.</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+                <button onClick={exportClassCSV} disabled={!rosterRows.length} style={{ ...prim, opacity: rosterRows.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+                <button onClick={() => { try { window.print(); } catch (e) { /* ignore */ } }} style={ghost}>🖨 Print</button>
+              </div>
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Homework</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value }))} style={{ ...inp, padding: "8px 8px", maxWidth: 160 }}>
+                  {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <input type="number" min={1} max={200} value={asgForm.count} onChange={(e) => setAsgForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 60, padding: "8px 6px" }} />
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>questions, in</span>
+                <input type="number" min={0} max={90} value={asgForm.days} onChange={(e) => setAsgForm((f) => ({ ...f, days: e.target.value }))} style={{ ...inp, width: 52, padding: "8px 6px" }} />
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>days</span>
+                <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1 }}>Set</button>
+              </div>
+              {classAsg.map((a) => {
+                const done = rosterRows.filter((s) => assignmentProgress(s, a).complete).length;
+                return (
+                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5 }}>
+                    <div>
+                      <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
+                      {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
+                      <div style={{ color: "var(--muted)", marginTop: 2 }}>{done}/{rosterRows.length} students done</div>
+                    </div>
+                    <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                  </div>
+                );
+              })}
+              {classAsg.length === 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>No homework set.</div>}
+
+              {rosterRows.length > 0 && (<>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>Where the class stands</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
+                  {TOPICS.map((t) => {
+                    const idxs = rosterRows.map((s) => ((s.topics || {})[t.id] || {}).highestRank ?? -1).filter((v) => v >= 0);
+                    if (!idxs.length) return null;
+                    const avg = idxs.reduce((s, v) => s + v, 0) / idxs.length;
+                    const rd = rankDisplay(Math.round(avg));
+                    return (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                        <span style={{ width: 118, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
+                        <div style={{ flex: 1, display: "flex", gap: 1, height: 12 }}>
+                          {rosterRows.map((s, i) => {
+                            const v = ((s.topics || {})[t.id] || {}).highestRank ?? -1;
+                            return <div key={i} style={{ flex: 1, background: v < 0 ? "var(--grid)" : rankDisplay(v).color, opacity: v < 0 ? 0.35 : 1, borderRadius: 1 }} />;
+                          })}
+                        </div>
+                        <span style={{ width: 24, textAlign: "right", fontWeight: 700, color: rd.color, flexShrink: 0 }}>{rd.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>)}
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Students</div>
+              {rosterLoading && <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>}
+              {!rosterLoading && rosterRows.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)" }}>Nobody has joined yet. Share the code above.</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {rosterRows.map((s) => {
+                  const started = TOPICS.filter((t) => ((s.topics || {})[t.id] || {}).history?.length > 0).length;
+                  const worst = TOPICS.map((t) => ({ t, r: ((s.topics || {})[t.id] || {}).highestRank ?? -1 }))
+                    .filter((x) => x.r >= 0).sort((a, b) => a.r - b.r).slice(0, 3);
+                  return (
+                    <div key={s.uid} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <button onClick={() => setRosterProfile(s)} style={{ fontWeight: 700, fontSize: 14, background: "none", border: "none", color: "var(--ink)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                          {s.name || "—"} <span style={{ fontSize: 10, color: "var(--blue)" }}>view →</span>
+                        </button>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                          LV {levelFromExp(totalExp(s))} · {started}/{TOPICS.length} · 🔥 {s.bestStreak || 0} · 🏆 {(s.achievements || []).length}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>
+                        {s.last_active ? `Last active ${timeAgo(s.last_active)}` : "Not started"}
+                        {worst.length > 0 && <> · weak: {worst.map((w) => `${w.t.name} (${rankDisplay(w.r).label})`).join(", ")}</>}
+                      </div>
+                      {classAsg.length > 0 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                          {classAsg.map((a) => {
+                            const p = assignmentProgress(s, a);
+                            return (
+                              <span key={a.id} title={a.title || ""} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
+                                background: p.complete ? "var(--green)" : "var(--paper)", color: p.complete ? "var(--on-accent)" : "var(--muted)",
+                                border: `1px solid ${p.complete ? "var(--green)" : "var(--grid)"}` }}>
+                                {TOPIC_BY_ID[a.topic_id]?.icon} {p.done}/{p.total}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <button onClick={() => doRemoveMember(s.uid)} style={{ fontSize: 10.5, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", marginTop: 6, padding: 0, textDecoration: "underline" }}>remove from class</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* PARENT LINK (read-only) */}
         {screen === "parent" && (
           <div>
@@ -9167,11 +9694,8 @@ export default function MathsUnlockedBN() {
               </div>
             ) : (
               <div>
-                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{parentView.name}&rsquo;s progress</div>
-                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
-                  A read-only summary of practice on MathsUnlocked BN. Reload the page for the latest.
-                </div>
-                <StudentProfileView profile={parentView} />
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>{parentView.name}&rsquo;s progress</div>
+                <ParentProgressView profile={parentView} />
               </div>
             )}
           </div>
@@ -10070,6 +10594,7 @@ export default function MathsUnlockedBN() {
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
               { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
+              ...(teacherAccount ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
             ].map((it, i) => (
               <button key={i} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 16px", background: "none", border: "none", borderTop: "1px solid var(--grid)", cursor: "pointer", color: it.danger ? "var(--red)" : "var(--ink)", textAlign: "left" }}>
@@ -10082,6 +10607,43 @@ export default function MathsUnlockedBN() {
                 {it.chevron && <span style={{ fontSize: 13, color: "var(--muted)" }}>›</span>}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {joinClassOpen && (
+        <div onClick={() => setJoinClassOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Join a class</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
+              Enter the 6-letter code from your teacher. Your progress stays yours — joining just lets your teacher see it and set homework.
+            </div>
+            <input
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
+              onKeyDown={(e) => { if (e.key === "Enter") doJoinClass(); }}
+              placeholder="ABC123" autoCapitalize="characters" autoCorrect="off" spellCheck={false}
+              className="mub-mono"
+              style={{ width: "100%", marginBottom: 12, padding: "12px 14px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 20, fontWeight: 800, letterSpacing: 6, textAlign: "center", boxSizing: "border-box", textTransform: "uppercase" }}
+            />
+            {joinMsg && <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 12, color: joinMsg.ok ? "var(--green)" : "var(--red)" }}>{joinMsg.text}</div>}
+            {studentClasses.filter((c) => !c.archived).length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Your classes</div>
+                {studentClasses.filter((c) => !c.archived).map((c) => (
+                  <div key={c.class_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12.5, padding: "6px 0" }}>
+                    <span>{c.name}{c.teacher_name ? ` · ${c.teacher_name}` : ""}</span>
+                    <button onClick={() => doLeaveClass(c.class_id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Leave</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setJoinClassOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Done</button>
+              <button onClick={doJoinClass} disabled={joinBusy || joinCode.length !== 6} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: joinBusy || joinCode.length !== 6 ? 0.6 : 1 }}>
+                {joinBusy ? "Joining…" : "Join"}
+              </button>
+            </div>
           </div>
         </div>
       )}
