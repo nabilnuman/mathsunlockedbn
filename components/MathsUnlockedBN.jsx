@@ -1422,12 +1422,23 @@ function vennRegionAt(sets, cir, px, py) {
   return "out";
 }
 // Where a region's cluster of placed chips is centred, in the same
-// 240×200 space as the circles above.
+// 240×200 space as the circles above. Only used as a fallback for the
+// (currently unreachable) 3-set case — the 2-set layout below computes
+// safe positions directly from the actual circle geometry instead.
 const VENN_ANCHORS = {
-  2: { a: [65, 102], b: [175, 102], ab: [120, 102], out: [120, 22] },
   3: { a: [70, 70], b: [170, 70], c: [120, 172], ab: [120, 64], ac: [82, 112], bc: [158, 112], abc: [120, 98], out: [120, 16] },
 };
 const VENN_CLUSTER_OFFSETS = [[0, 0], [-18, 0], [18, 0], [0, -18], [0, 18], [-18, -18], [18, -18], [-18, 18], [18, 18]];
+
+// Evenly-spaced offsets for `count` items along one axis, centred on 0,
+// capped to `maxSpan` total width so a long run of items compresses
+// instead of spilling past a safe boundary.
+function stackOffsets(count, maxSpan, maxStep) {
+  if (count <= 1) return [0];
+  const step = Math.min(maxStep, maxSpan / (count - 1));
+  const span = step * (count - 1);
+  return Array.from({ length: count }, (_, i) => -span / 2 + i * step);
+}
 
 // "Drag the numbers in" — every element of a small universal set gets
 // dragged into whichever Venn region matches the rules that define A
@@ -1464,9 +1475,24 @@ function VennPlaceBoard({ venn, placement, onPlace, showAnswer }) {
       const perRow = Math.max(1, Math.floor((w - 16) / 40));
       return { x: 24 + (idx % perRow) * 40, y: svgH + 20 + Math.floor(idx / perRow) * 32 };
     }
-    const anchor = VENN_ANCHORS[venn.sets][region] || VENN_ANCHORS[venn.sets].out;
     const same = venn.universe.filter((u) => placement[u] === region);
-    const off = VENN_CLUSTER_OFFSETS[same.indexOf(el) % VENN_CLUSTER_OFFSETS.length] || [0, 0];
+    const idx = same.indexOf(el);
+    if (venn.sets === 2) {
+      // Circles are [92,102,60] and [148,102,60] — x=70/170 sit deep inside
+      // A-only/B-only (safely clear of the other circle at any height in the
+      // ±39-unit vertical band used below), and x=120 sits in the middle of
+      // the lens both circles share. "out" has the whole strip above the
+      // circles to itself, so it spreads sideways instead of stacking.
+      if (region === "out") {
+        const off = stackOffsets(same.length, 190, 32);
+        return { x: (120 + off[idx]) * scaleX, y: 24 * scaleY };
+      }
+      const cx = region === "a" ? 70 : region === "b" ? 170 : 120; // "ab"
+      const off = stackOffsets(same.length, 78, 20);
+      return { x: cx * scaleX, y: (102 + off[idx]) * scaleY };
+    }
+    const anchor = VENN_ANCHORS[3][region] || VENN_ANCHORS[3].out;
+    const off = VENN_CLUSTER_OFFSETS[idx % VENN_CLUSTER_OFFSETS.length] || [0, 0];
     return { x: (anchor[0] + off[0]) * scaleX, y: (anchor[1] + off[1]) * scaleY };
   }
 
@@ -8197,7 +8223,7 @@ export default function MathsUnlockedBN() {
                 )
               )}
 
-              {(question.drawGraph || question.region || question.venn || question.choices || question.drawTransform || question.drawMirror) ? null : question.vector ? (
+              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror) ? null : question.vector ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>(</span>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
