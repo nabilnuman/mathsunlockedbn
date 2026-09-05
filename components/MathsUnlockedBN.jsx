@@ -1139,6 +1139,150 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
   );
 }
 
+// Two horizontal parallel lines cut by a transversal — shared by the
+// Trigonometry "angle rules" questions (generator) and <ParallelFigure>
+// (drawing), so the numbers asked about and the diagram always agree.
+// `theta` is the acute angle the transversal makes with the lines. Each
+// intersection (P1 top, P2 bottom) has 4 rays — L/R along its own line,
+// "in" toward the other intersection, "out" continuing away from it —
+// and the 4 wedges between consecutive rays are named by which side (L/R)
+// and position (in/out) bound them, e.g. "Lin" = between the left ray and
+// the inward ray.
+function parallelGeom(theta) {
+  const D = Math.PI / 180;
+  const topY = 35, botY = -35;
+  const run = (topY - botY) / Math.tan(theta * D);
+  const span = Math.max(95, run + 30);
+  const P1 = [0, topY], P2 = [run, botY];
+  const dx = P2[0] - P1[0], dy = P2[1] - P1[1];
+  const L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  const EXT = 30;
+  return {
+    P1, P2,
+    left1: [-span, topY], right1: [span, topY], in1: P2, out1: [P1[0] - ux * EXT, P1[1] - uy * EXT],
+    left2: [-span, botY], right2: [span, botY], in2: P1, out2: [P2[0] + ux * EXT, P2[1] + uy * EXT],
+  };
+}
+function angleBetween(v, a, b) {
+  const d1 = [a[0] - v[0], a[1] - v[1]], d2 = [b[0] - v[0], b[1] - v[1]];
+  let ang = ((Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0])) * 180) / Math.PI;
+  ang = ((ang % 360) + 360) % 360;
+  return ang > 180 ? 360 - ang : ang; // 0..180, the wedge's actual size
+}
+// vertex's 4 named rays, for both the value lookup and the drawing
+function parallelRays(g, vertex) {
+  return vertex === "P1"
+    ? { v: g.P1, L: g.left1, R: g.right1, in: g.in1, out: g.out1 }
+    : { v: g.P2, L: g.left2, R: g.right2, in: g.in2, out: g.out2 };
+}
+function parallelWedge(theta, vertex, key) {
+  const g = parallelGeom(theta);
+  const rays = parallelRays(g, vertex);
+  return angleBetween(rays.v, rays[key[0]], rays[key.slice(1)]);
+}
+// Every wedge-pair for each of the 4 angle-fact rules (verified
+// numerically for theta 20-85°: equal for the first three, sum to 180
+// for co-interior — see scratchpad/parallel_geom_check.js).
+const PARALLEL_RULES = {
+  "vertically opposite": [
+    ["P1", "Lin", "P1", "Rout"], ["P1", "Rin", "P1", "Lout"],
+    ["P2", "Lin", "P2", "Rout"], ["P2", "Rin", "P2", "Lout"],
+  ],
+  "corresponding": [
+    ["P1", "Lin", "P2", "Lout"], ["P1", "Rin", "P2", "Rout"],
+    ["P1", "Rout", "P2", "Rin"], ["P1", "Lout", "P2", "Lin"],
+  ],
+  "alternate": [
+    ["P1", "Lin", "P2", "Rin"], ["P1", "Rin", "P2", "Lin"],
+  ],
+  "co-interior": [
+    ["P1", "Lin", "P2", "Lin"], ["P1", "Rin", "P2", "Rin"],
+  ],
+};
+const PARALLEL_RULE_LABEL = {
+  "vertically opposite": "Vertically opposite angles",
+  "alternate": "Alternate angles",
+  "co-interior": "Co-interior angles",
+  "corresponding": "Corresponding angles",
+};
+const PARALLEL_RULE_EXPLAIN = {
+  "vertically opposite": "Vertically opposite angles (across an X) are equal.",
+  "alternate": "Alternate angles (a Z-shape, between the lines, opposite sides of the transversal) are equal.",
+  "co-interior": "Co-interior angles (a C-shape, between the lines, same side of the transversal) add up to 180°.",
+  "corresponding": "Corresponding angles (an F-shape, same side of the transversal, matching position at each line) are equal.",
+};
+
+// Draws the parallel-lines-and-transversal diagram: `marks` label specific
+// wedges with text (a value or "?"), `highlight` colours wedges with no
+// text (for the "which rule connects these?" MCQ).
+function ParallelFigure({ theta, marks = [], highlight = [] }) {
+  const g = parallelGeom(theta);
+  const W = 300, H = 210, m = 20;
+  const xs = [g.left1[0], g.right1[0], g.left2[0], g.right2[0], g.out1[0], g.out2[0]];
+  const ys = [g.left1[1], g.left2[1], g.out1[1], g.out2[1]];
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min((W - 2 * m) / (maxX - minX || 1), (H - 2 * m) / (maxY - minY || 1));
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const T = ([x, y]) => [W / 2 + (x - cx) * k, H / 2 - (y - cy) * k];
+  const F = (n) => n.toFixed(1);
+  const nrm = (p) => { const L = Math.hypot(p[0], p[1]) || 1; return [p[0] / L, p[1] / L]; };
+  const halo = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.2, strokeLinejoin: "round" };
+
+  const wedgeMark = (vertex, key, color, text) => {
+    const rays = parallelRays(g, vertex);
+    const side = key[0], pos = key.slice(1);
+    const v = T(rays.v), a = T(rays[side]), b = T(rays[pos]);
+    const d1 = nrm([a[0] - v[0], a[1] - v[1]]), d2 = nrm([b[0] - v[0], b[1] - v[1]]);
+    let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
+    while (ang <= -Math.PI) ang += 2 * Math.PI;
+    while (ang > Math.PI) ang -= 2 * Math.PI;
+    const deg = (Math.abs(ang) * 180) / Math.PI;
+    const rr = deg > 100 ? 20 : 27;
+    const a1 = [v[0] + d1[0] * rr, v[1] + d1[1] * rr], a2 = [v[0] + d2[0] * rr, v[1] + d2[1] * rr];
+    const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
+    const labGap = deg >= 110 ? 8 : deg >= 80 ? 11 : 14;
+    return {
+      path: `M ${F(a1[0])} ${F(a1[1])} A ${F(rr)} ${F(rr)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
+      lab: [v[0] + bis[0] * (rr + labGap), v[1] + bis[1] * (rr + labGap)],
+      color,
+    };
+  };
+
+  const p1 = T(g.P1), p2 = T(g.P2);
+  const tv1 = T(g.out1), tv2 = T(g.out2);
+  const arrow = (mid, dir) => { // small ">" chevron mid-line, showing the lines are parallel
+    const [x, y] = mid, [dx, dy] = dir, px = -dy, py = dx;
+    const p1a = [x - dx * 6 + px * 5, y - dy * 6 + py * 5], p2a = [x - dx * 6 - px * 5, y - dy * 6 - py * 5];
+    return `M ${F(p1a[0])} ${F(p1a[1])} L ${F(x)} ${F(y)} L ${F(p2a[0])} ${F(p2a[1])}`;
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="parallel lines cut by a transversal"
+      style={{ maxWidth: 320, display: "block", margin: "0 auto 8px" }}>
+      <line x1={F(T(g.left1)[0])} y1={F(T(g.left1)[1])} x2={F(T(g.right1)[0])} y2={F(T(g.right1)[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      <line x1={F(T(g.left2)[0])} y1={F(T(g.left2)[1])} x2={F(T(g.right2)[0])} y2={F(T(g.right2)[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      <path d={arrow(T([0, g.P1[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      <path d={arrow(T([0, g.P2[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      <line x1={F(tv1[0])} y1={F(tv1[1])} x2={F(tv2[0])} y2={F(tv2[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      {highlight.map((h, i) => {
+        const { path } = wedgeMark(h.vertex, h.key, h.color);
+        return <path key={`h${i}`} d={path} fill="none" stroke={h.color} strokeWidth="3" strokeLinecap="round" />;
+      })}
+      {marks.map((mk, i) => {
+        const { path, lab } = wedgeMark(mk.vertex, mk.key, "var(--red)");
+        return (
+          <g key={`m${i}`}>
+            <path d={path} fill="none" stroke="var(--red)" strokeWidth="1.6" />
+            <text x={F(lab[0])} y={F(lab[1])} fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill="var(--red)" style={halo}>{mk.text}</text>
+          </g>
+        );
+      })}
+      <circle cx={F(p1[0])} cy={F(p1[1])} r="2.2" fill="var(--ink)" />
+      <circle cx={F(p2[0])} cy={F(p2[1])} r="2.2" fill="var(--ink)" />
+    </svg>
+  );
+}
+
 // A circle diagram — plain radius/diameter, a sector/arc, or one of the
 // circle-theorem configurations. Geometry is built in world coords (O at
 // the origin, R world units, y-up) then uniformly scaled to fit the
@@ -3872,6 +4016,7 @@ const TOPICS = [
     generate() {
       const D = Math.PI / 180;
       const pick = (a) => a[randInt(0, a.length - 1)];
+      const shuffle = (arr) => { const c = [...arr]; for (let i = c.length - 1; i > 0; i--) { const j = randInt(0, i); [c[i], c[j]] = [c[j], c[i]]; } return c; };
       const r1 = (x) => Math.round(x * 10) / 10;
       const approx = (val) => (inp) => { try { const x = evalString(String(inp), 0); return Number.isFinite(x) && Math.abs(x - val) <= Math.max(0.15, Math.abs(val) * 0.02); } catch (e) { return false; } };
       // A at origin, B on +x (AB = side c), C from angle A and AC = side b
@@ -3881,7 +4026,42 @@ const TOPICS = [
 
       const r = Math.random();
 
-      if (r < 0.16) {
+      if (r < 0.20) {
+        // angle rules for parallel lines cut by a transversal — vertically
+        // opposite, alternate, co-interior, corresponding
+        const theta = pick([35, 40, 45, 50, 55, 60, 65, 70, 75, 80]);
+        const rule = pick(Object.keys(PARALLEL_RULES));
+        const [v1, k1, v2, k2] = pick(PARALLEL_RULES[rule]);
+
+        if (Math.random() < 0.6) {
+          // find the marked angle
+          const giveFirst = Math.random() < 0.5;
+          const [gv, gk, av, ak] = giveFirst ? [v1, k1, v2, k2] : [v2, k2, v1, k1];
+          const givenVal = Math.round(parallelWedge(theta, gv, gk));
+          const askVal = Math.round(parallelWedge(theta, av, ak));
+          const sameValue = Math.abs(givenVal - askVal) < 1e-6;
+          return {
+            prompt: `The two lines are parallel. Find the angle marked ?, in degrees`,
+            parallel: { theta, marks: [{ vertex: gv, key: gk, text: `${givenVal}°` }, { vertex: av, key: ak, text: "?" }] },
+            answer: `${askVal}`, hint: PARALLEL_RULE_LABEL[rule],
+            steps: [
+              PARALLEL_RULE_EXPLAIN[rule],
+              sameValue ? `? = ${givenVal}°` : `? = 180° − ${givenVal}° = ${askVal}°`,
+            ],
+          };
+        }
+
+        // MCQ — which rule connects the two marked (coloured) angles
+        const options = shuffle(Object.keys(PARALLEL_RULES).map((k) => PARALLEL_RULE_LABEL[k]));
+        return {
+          prompt: `The two lines are parallel. Which rule connects the two marked angles (blue and green)?`,
+          parallel: { theta, highlight: [{ vertex: v1, key: k1, color: "var(--blue)" }, { vertex: v2, key: k2, color: "var(--green)" }] },
+          choices: options, answer: PARALLEL_RULE_LABEL[rule], hint: "pick one",
+          steps: [PARALLEL_RULE_EXPLAIN[rule]],
+        };
+      }
+
+      if (r < 0.33) {
         // Pythagoras — ~40% ask for a leg (using a triple so it's a whole number)
         if (Math.random() < 0.4) {
           const [x, y, h] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17], [9, 12, 15], [7, 24, 25], [20, 21, 29], [12, 16, 20], [10, 24, 26], [9, 40, 41]]);
@@ -3907,7 +4087,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.33) {
+      if (r < 0.465) {
         // SOH CAH TOA — find a side
         const th = pick([32, 36, 40, 44, 48, 52, 56, 60]);
         const hyp = randInt(8, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
@@ -3932,7 +4112,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.45) {
+      if (r < 0.56) {
         // SOH CAH TOA — find an angle
         const th = pick([33, 37, 42, 46, 50, 54, 58]);
         const hyp = randInt(9, 16), adj = hyp * Math.cos(th * D), opp = hyp * Math.sin(th * D);
@@ -3953,7 +4133,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.57) {
+      if (r < 0.655) {
         // sine rule — find a side
         let A = pick([35, 40, 45, 50, 55, 60, 70, 80]), B = pick([35, 40, 45, 50, 55, 60, 70]);
         while (A + B > 150 || B === A) B = pick([35, 40, 45, 50, 55]);
@@ -3967,7 +4147,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.65) {
+      if (r < 0.72) {
         // sine rule — find an angle  (A + B ≤ 130 by construction)
         const A = pick([30, 40, 50, 60, 70]);
         let B = pick([35, 40, 45, 50, 55, 60]);
@@ -3981,7 +4161,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.78) {
+      if (r < 0.825) {
         // cosine rule — find a side
         const A = pick([35, 45, 55, 65, 75, 100, 110]);
         let b = randInt(5, 12), c = randInt(5, 12);
@@ -3995,7 +4175,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.86) {
+      if (r < 0.89) {
         // cosine rule — find an angle  (every angle ≥ ~25° so it's not a sliver)
         let b, c, a, A, B, C;
         for (let i = 0; i < 40; i++) {
@@ -4014,7 +4194,7 @@ const TOPICS = [
         };
       }
 
-      if (r < 0.93) {
+      if (r < 0.945) {
         // area of a right-angled triangle
         const base = randInt(4, 16), h = randInt(3, 15), area = (base * h) / 2;
         return {
@@ -8333,6 +8513,7 @@ export default function MathsUnlockedBN() {
               )}
               {question.tri && <TriangleFigure {...question.tri} />}
               {question.circle && <CircleFigure {...question.circle} />}
+              {question.parallel && <ParallelFigure {...question.parallel} />}
               {question.solid && <MensurationFigure {...question.solid} />}
               {question.vec && <VectorFigure {...question.vec} />}
               {question.cumfreq && (
