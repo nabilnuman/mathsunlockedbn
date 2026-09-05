@@ -6543,7 +6543,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(autoHint);
+    setHintShown(false); // still a click away — autoHint only waives the coin cost
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -6962,7 +6962,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(autoHint);
+    setHintShown(false); // still a click away — autoHint only waives the coin cost
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -7003,7 +7003,7 @@ export default function MathsUnlockedBN() {
     setDrawTri([]);
     setSketchStrokes([]);
     setSketchOn(false);
-    setHintShown(autoHint);
+    setHintShown(false); // still a click away — autoHint only waives the coin cost
     setShieldOffer(false);
     setShieldDeclined(false);
     setFeedback(null);
@@ -7041,16 +7041,17 @@ export default function MathsUnlockedBN() {
     setTimeout(() => submitAnswer(), 0);
   }
 
-  // Spend a Hint coin to reveal the formula/approach for this question.
+  // Spend a Hint coin to reveal the formula/approach for this question —
+  // free (no coin, always tappable) after 3 wrong in a row, see hintFree.
   function doHint() {
     if (hintShown || feedback || !question) return;
     if (!question.hint && !(question.steps && question.steps.length > 0)) { flash("No hint for this one."); return; }
+    if (hintFree) { setHintShown(true); return; }
     if ((profile.hints || 0) <= 0) { flash("No Hint coins — you get one every level up."); return; }
     const next = JSON.parse(JSON.stringify(profile));
     next.hints = Math.max(0, (next.hints || 0) - 1);
     next.usedHint = true; // "Every Puzzle Has an Answer"
     const unlocked = awardAchievements(next);
-    setHintFree(false);
     setHintShown(true);
     saveProfile(next);
     if (unlocked.length) playJingle(true);
@@ -8523,12 +8524,12 @@ export default function MathsUnlockedBN() {
                       )}
                     </div>
                   ) : (
-                    <button type="button" onClick={doHint} disabled={(profile.hints || 0) <= 0} style={{
+                    <button type="button" onClick={doHint} disabled={!hintFree && (profile.hints || 0) <= 0} style={{
                       fontSize: 12, fontWeight: 600,
-                      color: (profile.hints || 0) > 0 ? "var(--amber)" : "var(--muted)",
-                      background: "none", border: `1px solid ${(profile.hints || 0) > 0 ? "var(--amber)" : "var(--grid)"}`,
-                      borderRadius: 8, padding: "6px 12px", cursor: (profile.hints || 0) > 0 ? "pointer" : "default",
-                    }}>🪙 Hint · {profile.hints || 0} coin{(profile.hints || 0) === 1 ? "" : "s"}</button>
+                      color: hintFree || (profile.hints || 0) > 0 ? "var(--amber)" : "var(--muted)",
+                      background: "none", border: `1px solid ${hintFree || (profile.hints || 0) > 0 ? "var(--amber)" : "var(--grid)"}`,
+                      borderRadius: 8, padding: "6px 12px", cursor: hintFree || (profile.hints || 0) > 0 ? "pointer" : "default",
+                    }}>{hintFree ? "🎁 Free hint · tap to reveal" : `🪙 Hint · ${profile.hints || 0} coin${(profile.hints || 0) === 1 ? "" : "s"}`}</button>
                   )}
                 </div>
               )}
