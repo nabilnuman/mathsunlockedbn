@@ -2119,14 +2119,63 @@ const TOPICS = [
         { u: "litres", noun: "volume", precs: [1, 0.1, 0.5] },
         { u: "seconds", noun: "time", precs: [1, 5, 10, 0.1] },
       ];
+      const singularOf = (u) => ({ litres: "litre", seconds: "second" }[u] || u);
+      const precLabelOf = (u, prec) => (prec === 1 ? `nearest ${singularOf(u)}` : `nearest ${clean(prec)} ${u}`);
+      const genMeasure = (spec) => {
+        const prec = spec.precs[randInt(0, spec.precs.length - 1)];
+        const v = clean(randInt(3, 40) * prec);
+        return { v, prec, half: clean(prec / 2), label: precLabelOf(spec.u, prec) };
+      };
+
+      // combined measure: a result worked out FROM two measured values
+      // (speed = distance ÷ time, area = length × width, ...) — the
+      // upper/lower bound of the result depends on the operation:
+      // multiplying, both inputs push the same way; dividing, the
+      // denominator pushes the opposite way (÷ a smaller number → a
+      // bigger result, so the upper bound takes the numerator's upper
+      // bound but the denominator's LOWER bound).
+      if (Math.random() < 0.4) {
+        const U = Object.fromEntries(units.map((u) => [u.u, u]));
+        const scenarios = [
+          { result: "speed", op: "÷", aKey: "m", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "m/s", formula: "speed = distance ÷ time" },
+          { result: "density", op: "÷", aKey: "g", aNoun: "mass", bKey: "ml", bNoun: "volume", resultUnit: "g/ml", formula: "density = mass ÷ volume" },
+          { result: "average speed", op: "÷", aKey: "km", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "km/s", formula: "speed = distance ÷ time" },
+          { result: "area", op: "×", aKey: "cm", aNoun: "length", bKey: "cm", bNoun: "width", resultUnit: "cm²", formula: "area = length × width" },
+          { result: "area", op: "×", aKey: "m", aNoun: "length", bKey: "m", bNoun: "width", resultUnit: "m²", formula: "area = length × width" },
+        ];
+        const sc = scenarios[randInt(0, scenarios.length - 1)];
+        const A = genMeasure(U[sc.aKey]), B = genMeasure(U[sc.bKey]);
+        const bound = Math.random() < 0.5 ? "upper" : "lower";
+        // which bound of A, and of B, gives the asked-for bound of the result
+        const aBoundUp = bound === "upper";
+        const bBoundUp = sc.op === "×" ? bound === "upper" : bound === "lower";
+        const aVal = clean(aBoundUp ? A.v + A.half : A.v - A.half);
+        const bVal = clean(bBoundUp ? B.v + B.half : B.v - B.half);
+        const raw = sc.op === "×" ? aVal * bVal : aVal / bVal;
+        const result = sc.op === "×" ? clean(raw) : Number(raw.toPrecision(4)); // ÷ results are often recurring decimals
+        return {
+          prompt: `${sc.formula}.\nThe ${sc.aNoun} is measured as ${A.v} ${U[sc.aKey].u} (to the ${A.label}) and the ${sc.bNoun} as ${B.v} ${U[sc.bKey].u} (to the ${B.label}).\nFind the ${bound} bound of the ${sc.result}, in ${sc.resultUnit}`,
+          answer: `${result}`, hint: `Enter a number, in ${sc.resultUnit}.`,
+          steps: sc.op === "×"
+            ? [
+                `To get the ${bound} bound of a product, use the ${bound} bound of both measurements`,
+                `${sc.aNoun}: ${bound} bound = ${A.v} ${aBoundUp ? "+" : "−"} ${A.half} = ${aVal} ${U[sc.aKey].u}`,
+                `${sc.bNoun}: ${bound} bound = ${B.v} ${bBoundUp ? "+" : "−"} ${B.half} = ${bVal} ${U[sc.bKey].u}`,
+                `${sc.result} ${bound} bound = ${aVal} × ${bVal} = ${result} ${sc.resultUnit}`,
+              ]
+            : [
+                `Dividing by a smaller number gives a bigger answer, so the ${bound} bound of ${sc.result} takes the ${bound} bound of ${sc.aNoun} and the ${bound === "upper" ? "lower" : "upper"} bound of ${sc.bNoun}`,
+                `${sc.aNoun}: ${bound} bound = ${A.v} ${aBoundUp ? "+" : "−"} ${A.half} = ${aVal} ${U[sc.aKey].u}`,
+                `${sc.bNoun}: ${bBoundUp ? "upper" : "lower"} bound = ${B.v} ${bBoundUp ? "+" : "−"} ${B.half} = ${bVal} ${U[sc.bKey].u}`,
+                `${sc.result} ${bound} bound = ${aVal} ÷ ${bVal} = ${result} ${sc.resultUnit}`,
+              ],
+        };
+      }
+
       const pick = units[randInt(0, units.length - 1)];
-      const prec = pick.precs[randInt(0, pick.precs.length - 1)];
-      const v = clean(randInt(3, 40) * prec);
-      const half = clean(prec / 2);
+      const { v, half, label: precLabel } = genMeasure(pick);
       const bound = Math.random() < 0.5 ? "upper" : "lower";
       const ans = clean(bound === "upper" ? v + half : v - half);
-      const singular = { litres: "litre", seconds: "second" }[pick.u] || pick.u;
-      const precLabel = prec === 1 ? `nearest ${singular}` : `nearest ${clean(prec)} ${pick.u}`;
       return {
         prompt: `A ${pick.noun} is measured as ${v} ${pick.u}, correct to the ${precLabel}. Find the ${bound} bound`,
         answer: `${ans}`, hint: "Enter a number.",
