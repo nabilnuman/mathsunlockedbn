@@ -2137,11 +2137,11 @@ const TOPICS = [
       if (Math.random() < 0.4) {
         const U = Object.fromEntries(units.map((u) => [u.u, u]));
         const scenarios = [
-          { result: "speed", op: "÷", aKey: "m", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "m/s", formula: "speed = distance ÷ time" },
-          { result: "density", op: "÷", aKey: "g", aNoun: "mass", bKey: "ml", bNoun: "volume", resultUnit: "g/ml", formula: "density = mass ÷ volume" },
-          { result: "average speed", op: "÷", aKey: "km", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "km/s", formula: "speed = distance ÷ time" },
-          { result: "area", op: "×", aKey: "cm", aNoun: "length", bKey: "cm", bNoun: "width", resultUnit: "cm²", formula: "area = length × width" },
-          { result: "area", op: "×", aKey: "m", aNoun: "length", bKey: "m", bNoun: "width", resultUnit: "m²", formula: "area = length × width" },
+          { result: "speed", op: "÷", aKey: "m", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "m/s" },
+          { result: "density", op: "÷", aKey: "g", aNoun: "mass", bKey: "ml", bNoun: "volume", resultUnit: "g/ml" },
+          { result: "average speed", op: "÷", aKey: "km", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "km/s" },
+          { result: "area", op: "×", aKey: "cm", aNoun: "length", bKey: "cm", bNoun: "width", resultUnit: "cm²" },
+          { result: "area", op: "×", aKey: "m", aNoun: "length", bKey: "m", bNoun: "width", resultUnit: "m²" },
         ];
         const sc = scenarios[randInt(0, scenarios.length - 1)];
         const A = genMeasure(U[sc.aKey]), B = genMeasure(U[sc.bKey]);
@@ -2154,7 +2154,7 @@ const TOPICS = [
         const raw = sc.op === "×" ? aVal * bVal : aVal / bVal;
         const result = sc.op === "×" ? clean(raw) : Number(raw.toPrecision(4)); // ÷ results are often recurring decimals
         return {
-          prompt: `${sc.formula}.\nThe ${sc.aNoun} is measured as ${A.v} ${U[sc.aKey].u} (to the ${A.label}) and the ${sc.bNoun} as ${B.v} ${U[sc.bKey].u} (to the ${B.label}).\nFind the ${bound} bound of the ${sc.result}, in ${sc.resultUnit}`,
+          prompt: `The ${sc.aNoun} is measured as ${A.v} ${U[sc.aKey].u} (to the ${A.label}) and the ${sc.bNoun} as ${B.v} ${U[sc.bKey].u} (to the ${B.label}).\nFind the ${bound} bound of the ${sc.result}, in ${sc.resultUnit}`,
           answer: `${result}`, hint: `Enter a number, in ${sc.resultUnit}.`,
           steps: sc.op === "×"
             ? [
