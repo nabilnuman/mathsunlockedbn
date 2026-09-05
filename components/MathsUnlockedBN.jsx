@@ -5458,6 +5458,8 @@ const ACHIEVEMENTS = [
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(26, 29), "A") },
   { id: "ohyeah", tier: "Silver", name: "OH YEAH!!!", icon: "🧡", desc: "Reach rank A in topic 30 (Vectors)",
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(29, 30), "A") },
+  { id: "triplethreat", tier: "Silver", name: "Triple Threat", icon: "⚠️", desc: "Get 33 Trigonometry questions correct in a row",
+    check: (p) => (p.bestTrigStreak || 0) >= 33 },
 
   /* ---------------- Gold ---------------- */
   { id: "unstoppable", tier: "Gold", name: "Unstoppable", icon: "🚀", desc: "Reach S+ rank in any topic",
@@ -7674,6 +7676,7 @@ export default function MathsUnlockedBN() {
     if (!forgiven) {
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
       t.streak = correct ? (t.streak || 0) + 1 : 0;
+      if (scoredId === "trigonometry") next.bestTrigStreak = Math.max(next.bestTrigStreak || 0, t.streak); // "Triple Threat"
     }
     let candidateIdx = rankIndexForAvg(avgFromHistory(t.history));
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
