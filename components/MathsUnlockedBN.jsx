@@ -2808,8 +2808,9 @@ const TOPICS = [
 
       if (r < 0.30) {
         const { m, c, x1, x2, y1, y2 } = twoPts();
-        const eq = `y = ${mxTerm(`${m}`)}${plusC(c)}`;
-        return { prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2}).\nGive it as y = mx + c`, answer: eq, hint: "e.g. y = 2x - 1",
+        const rhs = `${mxTerm(`${m}`)}${plusC(c)}`, eq = `y = ${rhs}`;
+        return { prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2})`,
+          answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "e.g. 2x - 1",
           steps: [`gradient m = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${m}`, `Substitute (${x1}, ${y1}):  ${y1} = ${m}(${x1}) + c  →  c = ${c}`, eq] };
       }
 
@@ -2845,9 +2846,9 @@ const TOPICS = [
         const m = nz(-4, 4), rc = randInt(-5, 5);
         const t = nz(-3, 3), px = m * t, py = randInt(-6, 6), c = py + t;
         const mpS = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
-        const eq = `y = ${mxTerm(mpS)}${plusC(c)}`;
-        return { prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py}).\nGive it as y = mx + c`,
-          answer: eq, hint: "e.g. y = -1/2x + 3",
+        const rhs = `${mxTerm(mpS)}${plusC(c)}`, eq = `y = ${rhs}`;
+        return { prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py})`,
+          answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "e.g. -1/2x + 3",
           steps: [`Perpendicular gradient = −1 ÷ ${m} = ${mpS}`, `Through (${px}, ${py}):  ${py} = ${mpS}(${px}) + c  →  c = ${c}`, eq] };
       }
 
@@ -2860,10 +2861,10 @@ const TOPICS = [
         let p2 = [sd, sn + c];
         for (const kk of [3, -3, 2, -2, 1, -1]) { const x = sd * kk, y = sn * kk + c; if (Math.abs(x) <= 5 && Math.abs(y) <= 5) { p2 = [x, y]; break; } }
         const mS = fr(sn, sd);
-        const eq = `y = ${mxTerm(mS)}${plusC(c)}`;
+        const rhs = `${mxTerm(mS)}${plusC(c)}`, eq = `y = ${rhs}`;
         return {
-          prompt: `The straight line is drawn on the grid. Write its equation as y = mx + c`,
-          graph: { m, c, marks: [p1, p2] }, answer: eq, hint: "read two points off the line",
+          prompt: `The straight line is drawn on the grid. Find its equation`,
+          graph: { m, c, marks: [p1, p2] }, answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "read two points off the line",
           steps: [
             `Two points on the line: (${p1[0]}, ${p1[1]}) and (${p2[0]}, ${p2[1]})`,
             `gradient = (${p2[1]} − ${p1[1]}) ÷ (${p2[0]} − ${p1[0]}) = ${mS}`,
@@ -8404,7 +8405,10 @@ export default function MathsUnlockedBN() {
                   ))}
                 </div>
               ) : (
-                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
+                  {question.answerPrefix && (
+                    <span className="mub-mono" style={{ fontSize: 15, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{question.answerPrefix}</span>
+                  )}
                   <input
                     ref={answerRef}
                     autoFocus={isDesktop} className="mub-mono" value={answerInput}
