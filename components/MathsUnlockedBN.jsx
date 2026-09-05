@@ -5412,15 +5412,24 @@ function unlocksAtLevel(L) {
 // Achievements you've earned are also selectable as profile icons —
 // stored as "ach:<achievementId>".
 const achAvatarId = (achId) => `ach:${achId}`;
+// Reaching rank S on a topic unlocks that topic's icon as a profile icon;
+// reaching S+ unlocks the same icon again as a separate "gold" variant —
+// stored as "topic:<topicId>" / "topicgold:<topicId>".
+const topicAvatarId = (topicId) => `topic:${topicId}`;
+const topicGoldAvatarId = (topicId) => `topicgold:${topicId}`;
 // Every profile-icon id the student can currently pick — base icons up to
-// their level, then one per earned achievement. Used for the "new" dots.
+// their level, then one per earned achievement, then one per topic ranked
+// S / S+. Used for the "new" dots.
 function unlockedAvatarIds(profile) {
   const lv = levelFromExp(totalExp(profile));
   const base = Object.keys(AVATARS).filter((id) => lv >= (AVATAR_LV[id] || 1));
   const ach = (profile.achievements || [])
     .filter((id) => ACHIEVEMENTS.some((a) => a.id === id))
     .map((id) => achAvatarId(id));
-  return [...base, ...ach];
+  const topicIds = Object.keys(profile.topics || {}).filter((id) => TOPIC_BY_ID[id]);
+  const topicS = topicIds.filter((id) => topicRankAtLeast(profile, id, "S")).map(topicAvatarId);
+  const topicSPlus = topicIds.filter((id) => topicRankAtLeast(profile, id, "S+")).map(topicGoldAvatarId);
+  return [...base, ...ach, ...topicS, ...topicSPlus];
 }
 const avatarChar = (p) => {
   const id = (p && p.avatar) || "grad";
@@ -5428,9 +5437,23 @@ const avatarChar = (p) => {
     const a = ACHIEVEMENTS.find((x) => x.id === id.slice(4));
     return a ? a.icon : AVATARS.grad;
   }
+  if (id.startsWith("topicgold:")) {
+    const t = TOPIC_BY_ID[id.slice(10)];
+    return t ? t.icon : AVATARS.grad;
+  }
+  if (id.startsWith("topic:")) {
+    const t = TOPIC_BY_ID[id.slice(6)];
+    return t ? t.icon : AVATARS.grad;
+  }
   return AVATARS[id] || AVATARS.grad;
 };
 const frameStyle = (p) => FRAMES[(p && p.avatarFrame)] || FRAMES.plain;
+// S+ topic icons get a gold backdrop instead of the plain card background —
+// an emoji glyph itself can't be recoloured, so the "gold" variant is the
+// same icon on a gold background instead.
+const avatarBg = (p) => (((p && p.avatar) || "").startsWith("topicgold:")
+  ? "radial-gradient(circle at 35% 30%, #FFE9A8, #D9A73B 75%)"
+  : "var(--card)");
 
 /* ---- Phase 4 cosmetics --------------------------------------------- */
 
@@ -5496,7 +5519,7 @@ function cardBgStyle(b, swatch) {
 function MiniAvatar({ profile, size = 32 }) {
   return (
     <span style={{
-      width: size, height: size, borderRadius: "50%", background: "var(--card)", flexShrink: 0,
+      width: size, height: size, borderRadius: "50%", background: avatarBg(profile), flexShrink: 0,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       fontSize: Math.round(size * 0.56), lineHeight: 1, ...frameStyle(profile),
     }}>{avatarChar(profile)}</span>
@@ -5588,7 +5611,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         <div style={{ position: "relative", flexShrink: 0 }}>
           <div
             onClick={onEditIcon}
-            style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, cursor: onEditIcon ? "pointer" : "default", WebkitTapHighlightColor: "transparent", outline: "none", ...frameStyle(profile) }}
+            style={{ width: 60, height: 60, borderRadius: "50%", background: avatarBg(profile), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, lineHeight: 1, cursor: onEditIcon ? "pointer" : "default", WebkitTapHighlightColor: "transparent", outline: "none", ...frameStyle(profile) }}
           >
             {avatarChar(profile)}
           </div>
@@ -5644,12 +5667,17 @@ function IconPickerModal({ profile, onChange, onClose }) {
     <span style={{ position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)", fontSize: 8, fontWeight: 800, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "0 4px", whiteSpace: "nowrap" }}>Lv {lv}</span>
   );
   const seen = profile.seenIcons || [];
+  const rankedTopicIds = Object.keys(profile.topics || {}).filter((id) => TOPIC_BY_ID[id]);
   const iconItems = [
     ...Object.keys(AVATARS)
       .sort((a, b) => avatarLevel(a) - avatarLevel(b))
       .map((id) => ({ id, char: AVATARS[id], lv: avatarLevel(id), border: "var(--grid)" })),
     ...ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id))
       .map((a) => ({ id: achAvatarId(a.id), char: a.icon, lv: 0, border: TIER_COLOR[a.tier], title: `${a.name} · ${a.tier}` })),
+    ...rankedTopicIds.filter((id) => topicRankAtLeast(profile, id, "S"))
+      .map((id) => ({ id: topicAvatarId(id), char: TOPIC_BY_ID[id].icon, lv: 0, border: "var(--grid)", title: `${TOPIC_BY_ID[id].name} · Rank S` })),
+    ...rankedTopicIds.filter((id) => topicRankAtLeast(profile, id, "S+"))
+      .map((id) => ({ id: topicGoldAvatarId(id), char: TOPIC_BY_ID[id].icon, lv: 0, border: "#D9A73B", gold: true, title: `${TOPIC_BY_ID[id].name} · Rank S+` })),
   ];
   return (
     <EditSheet title="Profile icon" onClose={onClose}>
@@ -5665,7 +5693,8 @@ function IconPickerModal({ profile, onChange, onClose }) {
                 onClick={() => { if (locked) return; onChange((p) => ({ avatar: it.id, seenIcons: [...new Set([...(p.seenIcons || []), it.id])] })); }}
                 style={{
                   width: 44, height: 44, borderRadius: 10, fontSize: 22, lineHeight: 1, cursor: locked ? "default" : "pointer",
-                  background: on ? "var(--blue)" : "var(--paper)", border: `1.5px solid ${on ? "var(--blue)" : it.border}`,
+                  background: on ? "var(--blue)" : it.gold ? "radial-gradient(circle at 35% 30%, #FFE9A8, #D9A73B 75%)" : "var(--paper)",
+                  border: `1.5px solid ${on ? "var(--blue)" : it.border}`,
                   filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.4 : 1,
                 }}>{it.char}</button>
               {locked && lockPill(it.lv)}
@@ -7957,6 +7986,7 @@ export default function MathsUnlockedBN() {
                     className={unlocked ? "mub-card" : ""}
                     title={unlocked ? undefined : lockedReason(t)}
                     style={{
+                      position: "relative",
                       background: unlocked ? "var(--card)" : "var(--locked)",
                       border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 11px",
                       cursor: unlocked ? "pointer" : "not-allowed",
@@ -7974,6 +8004,9 @@ export default function MathsUnlockedBN() {
                         <div style={{ fontSize: 13, color: "var(--muted)" }}>🔒</div>
                       )}
                     </div>
+                    {unlocked && topicRankAtLeast(profile, t.id, "S+") && (
+                      <div title="Rank S+ complete" style={{ position: "absolute", right: 6, bottom: 6, fontSize: 13, lineHeight: 1 }}>⭐</div>
+                    )}
                     <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 5, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.name}</div>
                     <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {unlocked
