@@ -1463,17 +1463,21 @@ function VennPlaceBoard({ venn, placement, onPlace, showAnswer }) {
 
   const cir = vennCircles(venn.sets);
   const svgH = w * (200 / 240);
-  const trayH = 56;
   const scaleX = w / 240, scaleY = svgH / 200;
   const CHIP = 30;
+  // Tray height has to fit however many rows the numbers actually wrap
+  // into (not just one) — otherwise a wide universe on a narrow screen
+  // overflows the board and collides with whatever sits below it.
+  const trayPerRow = Math.max(1, Math.floor((w - 16) / 40));
+  const trayRows = Math.max(1, Math.ceil(venn.universe.length / trayPerRow));
+  const trayH = trayRows * 32 + 24;
 
   const unplaced = venn.universe.filter((el) => placement[el] == null);
   function restPos(el) {
     const region = placement[el];
     if (region == null) {
       const idx = unplaced.indexOf(el);
-      const perRow = Math.max(1, Math.floor((w - 16) / 40));
-      return { x: 24 + (idx % perRow) * 40, y: svgH + 20 + Math.floor(idx / perRow) * 32 };
+      return { x: 24 + (idx % trayPerRow) * 40, y: svgH + 20 + Math.floor(idx / trayPerRow) * 32 };
     }
     const same = venn.universe.filter((u) => placement[u] === region);
     const idx = same.indexOf(el);
