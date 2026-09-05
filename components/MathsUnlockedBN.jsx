@@ -4369,8 +4369,8 @@ const TOPICS = [
       }
 
       // drag every element of a small universal set into the region it belongs in
+      // (two sets only — three circles gets too cramped to drag into reliably)
       if (Math.random() < 0.55) {
-        const three = Math.random() < 0.25;
         const RULES = [
           { name: "even numbers", test: (x) => x % 2 === 0 },
           { name: "odd numbers", test: (x) => x % 2 === 1 },
@@ -4389,39 +4389,32 @@ const TOPICS = [
 
         let rules = null;
         for (let tries = 0; tries < 40 && !rules; tries++) {
-          const cand = shuffle(RULES).slice(0, three ? 3 : 2);
-          // every rule must actually split the universe (not match everything or nothing)
+          const cand = shuffle(RULES).slice(0, 2);
+          // both rules must actually split the universe (not match everything or nothing)
           if (cand.every((rule) => { const c = universe.filter(rule.test).length; return c > 0 && c < universe.length; })) rules = cand;
         }
         if (!rules) rules = RULES.slice(0, 2);
 
         const keyFor = (el) => {
-          const flags = rules.map((rule) => rule.test(el));
-          if (rules.length === 2) { const [inA, inB] = flags; return inA && inB ? "ab" : inA ? "a" : inB ? "b" : "out"; }
-          const [inA, inB, inC] = flags;
-          if (inA && inB && inC) return "abc";
-          if (inA && inB) return "ab"; if (inA && inC) return "ac"; if (inB && inC) return "bc";
-          if (inA) return "a"; if (inB) return "b"; if (inC) return "c";
-          return "out";
+          const [inA, inB] = rules.map((rule) => rule.test(el));
+          return inA && inB ? "ab" : inA ? "a" : inB ? "b" : "out";
         };
         const correct = {};
         universe.forEach((el) => { correct[el] = keyFor(el); });
 
-        const REGION_NAME = rules.length === 2
-          ? { a: "A only", b: "B only", ab: "A and B", out: "neither" }
-          : { a: "A only", b: "B only", c: "C only", ab: "A and B only", ac: "A and C only", bc: "B and C only", abc: "A, B and C", out: "none of them" };
-        const order = rules.length === 2 ? ["a", "b", "ab", "out"] : ["a", "b", "c", "ab", "ac", "bc", "abc", "out"];
+        const REGION_NAME = { a: "A only", b: "B only", ab: "A and B", out: "neither" };
+        const order = ["a", "b", "ab", "out"];
         const groups = {};
         universe.forEach((el) => { (groups[correct[el]] = groups[correct[el]] || []).push(el); });
         const filled = order.filter((k) => groups[k] && groups[k].length);
 
         return {
-          prompt: `The universal set is {${universe.join(", ")}}.\n${rules.map((r, i) => `${"ABC"[i]} = ${r.name}`).join("\n")}\nDrag each number into the correct region of the Venn diagram.`,
-          placeVenn: { sets: three ? 3 : 2, universe, correct },
+          prompt: `ζ = {1 ≤ x ≤ ${n}}\n${rules.map((r, i) => `${"AB"[i]} = ${r.name}`).join("\n")}\nDrag each number into the correct region of the Venn diagram.`,
+          placeVenn: { sets: 2, universe, correct },
           answer: filled.map((k) => `${REGION_NAME[k]}: ${groups[k].join(", ")}`).join(" · "),
           hint: "Check every rule for one number at a time.",
           steps: [
-            ...rules.map((r, i) => `${"ABC"[i]} = ${r.name}`),
+            ...rules.map((r, i) => `${"AB"[i]} = ${r.name}`),
             ...filled.map((k) => `${groups[k].join(", ")} → ${REGION_NAME[k]}`),
           ],
         };
