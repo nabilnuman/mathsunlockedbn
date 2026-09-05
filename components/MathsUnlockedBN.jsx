@@ -2570,15 +2570,59 @@ const TOPICS = [
           };
         }
 
-        // 65% — substitute a value
-        const a = randInt(2, 9), b = nz(-10, 10), k = nz(-8, 8);
-        const ans = a * k + b;
+        // 15% — composite function, one of f/g a simple quadratic (x² + e)
+        if (r < 0.50) {
+          const a = randInt(2, 6), b = nz(-9, 9), e = nz(-6, 6), k = nz(-5, 5);
+          const quad = { desc: `x² ${spaced(e)}`, evalFn: (x) => x * x + e, step: (x, y) => `(${x})² ${spaced(e)} = ${y}` };
+          const lin = { desc: `${a}x ${spaced(b)}`, evalFn: (x) => a * x + b, step: (x, y) => `${a}×${x} ${spaced(b)} = ${y}` };
+          const fQuad = Math.random() < 0.5;
+          const F = fQuad ? quad : lin, G = fQuad ? lin : quad;
+          const outerIsF = Math.random() < 0.5;
+          const [Outer, Inner] = outerIsF ? [F, G] : [G, F];
+          const outerName = outerIsF ? "f" : "g", innerName = outerIsF ? "g" : "f";
+          const inner = Inner.evalFn(k);
+          const ans = Outer.evalFn(inner);
+          if (inner === 0 || ans === 0) return null;
+          return {
+            prompt: `f(x) = ${F.desc}\ng(x) = ${G.desc}\nFind ${outerName}${innerName}(${k})`,
+            answer: `${ans}`,
+            hint: "apply the right-hand function first",
+            steps: [
+              `${outerName}${innerName}(${k}) means: work out ${innerName}(${k}) first, then apply ${outerName}.`,
+              `${innerName}(${k}) = ${Inner.step(k, inner)}`,
+              `${outerName}(${inner}) = ${Outer.step(inner, ans)}`,
+            ],
+          };
+        }
+
+        // 25% — substitute a value into a linear function
+        if (r < 0.75) {
+          const a = randInt(2, 9), b = nz(-10, 10), k = nz(-8, 8);
+          const ans = a * k + b;
+          if (ans === 0) return null;
+          return {
+            prompt: `f(x) = ${a}x ${spaced(b)}\nFind f(${k})`,
+            answer: `${ans}`,
+            hint: "Enter a number.",
+            steps: [`Substitute x = ${k}:  f(${k}) = ${a}×${k} ${spaced(b)}`, `= ${a * k} ${spaced(b)} = ${ans}`],
+          };
+        }
+
+        // 25% — substitute a value into a quadratic function
+        const a = randInt(1, 4), b = nz(-6, 6), c = nz(-9, 9), k = nz(-5, 5);
+        const ans = a * k * k + b * k + c;
         if (ans === 0) return null;
+        const aTerm = a === 1 ? "x²" : `${a}x²`;
+        const bTerm = ` ${b > 0 ? "+" : "-"} ${Math.abs(b) === 1 ? "" : Math.abs(b)}x`;
         return {
-          prompt: `f(x) = ${a}x ${spaced(b)}\nFind f(${k})`,
+          prompt: `f(x) = ${aTerm}${bTerm} ${spaced(c)}\nFind f(${k})`,
           answer: `${ans}`,
           hint: "Enter a number.",
-          steps: [`Substitute x = ${k}:  f(${k}) = ${a}×${k} ${spaced(b)}`, `= ${a * k} ${spaced(b)} = ${ans}`],
+          steps: [
+            `Substitute x = ${k}:  f(${k}) = ${a}×(${k})² ${spaced(b)}×${k} ${spaced(c)}`,
+            `= ${a}×${k * k} ${spaced(b * k)} ${spaced(c)}`,
+            `= ${ans}`,
+          ],
         };
       };
       let q;
