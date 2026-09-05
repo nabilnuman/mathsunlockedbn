@@ -3078,7 +3078,7 @@ const TOPICS = [
       const xtm = (n) => (n > 0 ? ` + ${n === 1 ? "" : n}x` : ` - ${n === -1 ? "" : -n}x`);
       const divLine = (k, ans, x0) => `Divide by ${k}${k < 0 ? " — the inequality flips" : ""}:  x ${ans} ${x0}`;
 
-      if (Math.random() < 0.25) {
+      if (Math.random() < 0.5) {
         // shade the region that satisfies an inequality
         const kind = ["diag", "diag", "vert", "horiz"][randInt(0, 3)];
         const op = OPS[randInt(0, 3)];
@@ -3117,7 +3117,7 @@ const TOPICS = [
         const x0 = nz(-6, 6);
         const r = Math.random();
 
-        if (r < 0.28) {
+        if (r < 0.20) {
           // single x-term, one number  (negative or positive coefficient)
           const a = Math.random() < 0.65 ? nz(-5, -1) : randInt(2, 6);
           const b = nz(-9, 9), c = a * x0 + b, ans = a < 0 ? flip(op) : op;
@@ -3127,7 +3127,7 @@ const TOPICS = [
           return { disp, ans, x0, op, steps: [`Get the x-term by itself:  ${xc(a)} ${op} ${c - b}`, divLine(a, ans, x0)] };
         }
 
-        if (r < 0.48) {
+        if (r < 0.40) {
           // expand a bracket first;  p(cx + q) op rhs
           const p = [-4, -3, -2, 2, 3, 4][randInt(0, 5)], cx = randInt(1, 3);
           const q = nz(-6, 6), rhs = p * cx * x0 + p * q, k = p * cx, ans = k < 0 ? flip(op) : op;
@@ -3135,7 +3135,7 @@ const TOPICS = [
             steps: [`Expand:  ${xc(k)}${tm(p * q)} ${op} ${rhs}`, `Get the x-term by itself:  ${xc(k)} ${op} ${rhs - p * q}`, divLine(k, ans, x0)] };
         }
 
-        if (r < 0.66) {
+        if (r < 0.60) {
           // several x-terms to collect;  k1·x ± k2·x ± b op rhs
           const k1 = nz(-5, 5), k2 = nz(-5, 5), sum = k1 + k2;
           if (sum === 0) return null;
