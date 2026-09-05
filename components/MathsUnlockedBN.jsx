@@ -1148,11 +1148,12 @@ function TriangleFigure({ verts, sideLabels = [], angleLabels = [], vertLabels =
 // and the 4 wedges between consecutive rays are named by which side (L/R)
 // and position (in/out) bound them, e.g. "Lin" = between the left ray and
 // the inward ray.
-function parallelGeom(theta) {
+function parallelGeom(theta, mirror) {
   const D = Math.PI / 180;
   const topY = 35, botY = -35;
-  const run = (topY - botY) / Math.tan(theta * D);
-  const span = Math.max(95, run + 30);
+  let run = (topY - botY) / Math.tan(theta * D);
+  if (mirror) run = -run; // tilt the transversal the other way for visual variety
+  const span = Math.max(95, Math.abs(run) + 55);
   const P1 = [0, topY], P2 = [run, botY];
   const dx = P2[0] - P1[0], dy = P2[1] - P1[1];
   const L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
@@ -1175,8 +1176,8 @@ function parallelRays(g, vertex) {
     ? { v: g.P1, L: g.left1, R: g.right1, in: g.in1, out: g.out1 }
     : { v: g.P2, L: g.left2, R: g.right2, in: g.in2, out: g.out2 };
 }
-function parallelWedge(theta, vertex, key) {
-  const g = parallelGeom(theta);
+function parallelWedge(theta, mirror, vertex, key) {
+  const g = parallelGeom(theta, mirror);
   const rays = parallelRays(g, vertex);
   return angleBetween(rays.v, rays[key[0]], rays[key.slice(1)]);
 }
@@ -1215,8 +1216,8 @@ const PARALLEL_RULE_EXPLAIN = {
 // Draws the parallel-lines-and-transversal diagram: `marks` label specific
 // wedges with text (a value or "?"), `highlight` colours wedges with no
 // text (for the "which rule connects these?" MCQ).
-function ParallelFigure({ theta, marks = [], highlight = [] }) {
-  const g = parallelGeom(theta);
+function ParallelFigure({ theta, mirror, marks = [], highlight = [] }) {
+  const g = parallelGeom(theta, mirror);
   const W = 300, H = 210, m = 20;
   const xs = [g.left1[0], g.right1[0], g.left2[0], g.right2[0], g.out1[0], g.out2[0]];
   const ys = [g.left1[1], g.left2[1], g.out1[1], g.out2[1]];
@@ -1255,14 +1256,20 @@ function ParallelFigure({ theta, marks = [], highlight = [] }) {
     const p1a = [x - dx * 6 + px * 5, y - dy * 6 + py * 5], p2a = [x - dx * 6 - px * 5, y - dy * 6 - py * 5];
     return `M ${F(p1a[0])} ${F(p1a[1])} L ${F(x)} ${F(y)} L ${F(p2a[0])} ${F(p2a[1])}`;
   };
+  // Put the parallel-mark arrows on whichever side sits clear of BOTH
+  // intersections (P1 is always at x=0, P2 at x=run — the run's own sign
+  // tells us which side is crowded), so they never collide with an angle
+  // arc drawn near either vertex.
+  const run = g.P2[0] - g.P1[0];
+  const arrowX = run >= 0 ? -Math.abs(run) - 40 : Math.abs(run) + 40;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="parallel lines cut by a transversal"
       style={{ maxWidth: 320, display: "block", margin: "0 auto 8px" }}>
       <line x1={F(T(g.left1)[0])} y1={F(T(g.left1)[1])} x2={F(T(g.right1)[0])} y2={F(T(g.right1)[1])} stroke="var(--ink)" strokeWidth="1.8" />
       <line x1={F(T(g.left2)[0])} y1={F(T(g.left2)[1])} x2={F(T(g.right2)[0])} y2={F(T(g.right2)[1])} stroke="var(--ink)" strokeWidth="1.8" />
-      <path d={arrow(T([0, g.P1[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
-      <path d={arrow(T([0, g.P2[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      <path d={arrow(T([arrowX, g.P1[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      <path d={arrow(T([arrowX, g.P2[1]]), [1, 0])} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
       <line x1={F(tv1[0])} y1={F(tv1[1])} x2={F(tv2[0])} y2={F(tv2[1])} stroke="var(--ink)" strokeWidth="1.8" />
       {highlight.map((h, i) => {
         const { path } = wedgeMark(h.vertex, h.key, h.color);
@@ -1279,6 +1286,184 @@ function ParallelFigure({ theta, marks = [], highlight = [] }) {
       })}
       <circle cx={F(p1[0])} cy={F(p1[1])} r="2.2" fill="var(--ink)" />
       <circle cx={F(p2[0])} cy={F(p2[1])} r="2.2" fill="var(--ink)" />
+    </svg>
+  );
+}
+
+// Small angle arc + label position for the angle-fact diagrams. `v`, `a`,
+// `b` are already in SVG/screen coordinates; `F` formats a number. Returns
+// the arc path and a label point on the bisector, pushed further out for
+// narrow angles so the text never sits on top of a ray.
+function angleArc(v, a, b, F) {
+  const nrm = (p) => { const L = Math.hypot(p[0], p[1]) || 1; return [p[0] / L, p[1] / L]; };
+  const d1 = nrm([a[0] - v[0], a[1] - v[1]]), d2 = nrm([b[0] - v[0], b[1] - v[1]]);
+  let ang = Math.atan2(d2[1], d2[0]) - Math.atan2(d1[1], d1[0]);
+  while (ang <= -Math.PI) ang += 2 * Math.PI;
+  while (ang > Math.PI) ang -= 2 * Math.PI;
+  const deg = (Math.abs(ang) * 180) / Math.PI;
+  const rr = deg > 100 ? 15 : deg > 55 ? 20 : 24;
+  const a1 = [v[0] + d1[0] * rr, v[1] + d1[1] * rr], a2 = [v[0] + d2[0] * rr, v[1] + d2[1] * rr];
+  const bis = nrm([d1[0] + d2[0], d1[1] + d2[1]]);
+  const labGap = deg >= 110 ? 9 : deg >= 75 ? 12 : 16;
+  return {
+    path: `M ${F(a1[0])} ${F(a1[1])} A ${F(rr)} ${F(rr)} 0 0 ${ang > 0 ? 1 : 0} ${F(a2[0])} ${F(a2[1])}`,
+    lab: [v[0] + bis[0] * (rr + labGap), v[1] + bis[1] * (rr + labGap)],
+  };
+}
+// Triangle from its base BC and the two base angles (β at B, γ at C).
+function triangleFromBase(c, betaDeg, gammaDeg) {
+  const D = Math.PI / 180;
+  const beta = betaDeg * D, gamma = gammaDeg * D;
+  const t = (c * Math.sin(gamma)) / Math.sin((180 - betaDeg - gammaDeg) * D);
+  return { A: [t * Math.cos(beta), t * Math.sin(beta)], B: [0, 0], C: [c, 0] };
+}
+// Wedge sizes between consecutive rays on a straight line. `splits` is a
+// sorted list of ray angles (0-180) from the +x direction; the result
+// always sums to 180.
+function straightLineAngles(splits) {
+  const bounds = [0, ...splits, 180], out = [];
+  for (let i = 0; i < bounds.length - 1; i++) out.push(bounds[i + 1] - bounds[i]);
+  return out;
+}
+
+// mini SVG helpers shared by the angle-fact figures below
+const AF_HALO = { paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3.2, strokeLinejoin: "round" };
+function afFit(pts, W, H, m) {
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min((W - 2 * m) / (maxX - minX || 1), (H - 2 * m) / (maxY - minY || 1));
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  return ([x, y]) => [W / 2 + (x - cx) * k, H / 2 - (y - cy) * k];
+}
+const afF = (n) => n.toFixed(1);
+function afChevron(mid, F) { // ">" parallel mark at a screen point, pointing +x
+  const [x, y] = mid;
+  return `M ${F(x - 6)} ${F(y - 5)} L ${F(x)} ${F(y)} L ${F(x - 6)} ${F(y + 5)}`;
+}
+function AngleMark({ v, a, b, text, color = "var(--red)" }) {
+  const { path, lab } = angleArc(v, a, b, afF);
+  return (
+    <g>
+      <path d={path} fill="none" stroke={color} strokeWidth="1.6" />
+      {text != null && <text x={afF(lab[0])} y={afF(lab[1])} fontSize="11" fontWeight="700" textAnchor="middle" dominantBaseline="middle" fill={color} style={AF_HALO}>{text}</text>}
+    </g>
+  );
+}
+
+// Triangle ABC with a line through A parallel to BC (the classic "angles
+// in a triangle sum to 180°" diagram). `marks` label positions B, C,
+// apex (interior angle at A), Aleft / Aright (the alternate angles beside
+// it on the parallel line).
+function TriParallelFigure({ beta, gamma, marks = [] }) {
+  const c = 130;
+  const { A, B, C } = triangleFromBase(c, beta, gamma);
+  const ext = c * 0.34;
+  const leftPar = [A[0] - ext, A[1]], rightPar = [A[0] + ext, A[1]];
+  const W = 300, H = 210;
+  const T = afFit([B, C, leftPar, rightPar, A], W, H, 26);
+  const tA = T(A), tB = T(B), tC = T(C), tL = T(leftPar), tR = T(rightPar);
+  const ray = { B: [tB, tA, tC], C: [tC, tA, tB], apex: [tA, tB, tC], Aleft: [tA, tL, tB], Aright: [tA, tR, tC] };
+  const baseArrow = T([(B[0] + C[0]) / 2, 0]);
+  const parArrow = T([A[0] + ext - 12, A[1]]);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="triangle with a line through one vertex parallel to the base"
+      style={{ maxWidth: 320, display: "block", margin: "0 auto 8px" }}>
+      <line x1={afF(tL[0])} y1={afF(tL[1])} x2={afF(tR[0])} y2={afF(tR[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      <path d={afChevron(parArrow, afF)} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      <polygon points={`${afF(tA[0])},${afF(tA[1])} ${afF(tB[0])},${afF(tB[1])} ${afF(tC[0])},${afF(tC[1])}`} fill="var(--blue)" fillOpacity="0.08" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d={afChevron(baseArrow, afF)} fill="none" stroke="var(--muted)" strokeWidth="1.6" />
+      {marks.map((mk, i) => <AngleMark key={i} v={ray[mk.pos][0]} a={ray[mk.pos][1]} b={ray[mk.pos][2]} text={mk.text} />)}
+      <text x={afF(tA[0])} y={afF(tA[1] - 13)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>A</text>
+      <text x={afF(tB[0] - 10)} y={afF(tB[1] + 5)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>B</text>
+      <text x={afF(tC[0] + 10)} y={afF(tC[1] + 5)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>C</text>
+    </svg>
+  );
+}
+
+// Isosceles triangle (AB = AC) with the base BC extended past C to D, so
+// the exterior angle at C sits on a straight line. `marks` label apex,
+// B, C (interior base angles) and ext (exterior angle at C).
+function IsoLineFigure({ apexDeg, marks = [] }) {
+  const D = Math.PI / 180;
+  const base = (180 - apexDeg) / 2;
+  const w = 62, h = w * Math.tan(base * D);
+  const A = [0, h], B = [-w, 0], C = [w, 0], Dpt = [w + 48, 0];
+  const W = 300, H = 200;
+  const T = afFit([A, B, Dpt, [-w - 6, 0]], W, H, 26);
+  const tA = T(A), tB = T(B), tC = T(C), tD = T(Dpt);
+  const ray = { apex: [tA, tB, tC], B: [tB, tA, tC], C: [tC, tA, tB], ext: [tC, tD, tA] };
+  const tick = (p, q) => { // small "equal length" hash at the midpoint of p-q
+    const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+    const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    return `M ${afF(mx - nx * 4)} ${afF(my - ny * 4)} L ${afF(mx + nx * 4)} ${afF(my + ny * 4)}`;
+  };
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="isosceles triangle on a straight line"
+      style={{ maxWidth: 300, display: "block", margin: "0 auto 8px" }}>
+      <line x1={afF(tB[0])} y1={afF(tB[1])} x2={afF(tD[0])} y2={afF(tD[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      <polygon points={`${afF(tA[0])},${afF(tA[1])} ${afF(tB[0])},${afF(tB[1])} ${afF(tC[0])},${afF(tC[1])}`} fill="var(--blue)" fillOpacity="0.08" stroke="var(--ink)" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d={tick(tA, tB)} stroke="var(--ink)" strokeWidth="1.4" />
+      <path d={tick(tA, tC)} stroke="var(--ink)" strokeWidth="1.4" />
+      {marks.map((mk, i) => <AngleMark key={i} v={ray[mk.pos][0]} a={ray[mk.pos][1]} b={ray[mk.pos][2]} text={mk.text} />)}
+      <text x={afF(tA[0])} y={afF(tA[1] - 13)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>A</text>
+      <text x={afF(tB[0] - 10)} y={afF(tB[1] + 5)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>B</text>
+      <text x={afF(tC[0] - 3)} y={afF(tC[1] + 13)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>C</text>
+      <text x={afF(tD[0] + 8)} y={afF(tD[1] + 4)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>D</text>
+    </svg>
+  );
+}
+
+// Rays from a single point on a straight line — angles on a straight line
+// add up to 180°. `splits` are the ray angles; `marks[i].text` labels the
+// i-th wedge (from the +x side).
+function StraightLineFigure({ splits, marks = [] }) {
+  const D = Math.PI / 180, R = 96;
+  const O = [0, 0], rays = [0, ...splits, 180].map((a) => [R * Math.cos(a * D), R * Math.sin(a * D)]);
+  const W = 300, H = 150;
+  const T = afFit([...rays, O, [0, -18]], W, H, 24);
+  const tO = T(O), tRays = rays.map(T);
+  const wedges = straightLineAngles(splits);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="angles on a straight line"
+      style={{ maxWidth: 300, display: "block", margin: "0 auto 8px" }}>
+      <line x1={afF(tRays[0][0])} y1={afF(tRays[0][1])} x2={afF(tRays[tRays.length - 1][0])} y2={afF(tRays[tRays.length - 1][1])} stroke="var(--ink)" strokeWidth="1.8" />
+      {splits.map((_, i) => <line key={i} x1={afF(tO[0])} y1={afF(tO[1])} x2={afF(tRays[i + 1][0])} y2={afF(tRays[i + 1][1])} stroke="var(--ink)" strokeWidth="1.8" />)}
+      {wedges.map((_, i) => <AngleMark key={i} v={tO} a={tRays[i]} b={tRays[i + 1]} text={(marks[i] || {}).text} />)}
+      <circle cx={afF(tO[0])} cy={afF(tO[1])} r="2.2" fill="var(--ink)" />
+    </svg>
+  );
+}
+
+// Two points A and B, each with a North line (the North lines are always
+// parallel). The angle between North and BA is marked at B.
+function BearingFigure({ bearingAfromB }) {
+  const D = Math.PI / 180, dist = 92, nLen = 44;
+  const B = [0, 0], A = [dist * Math.sin(bearingAfromB * D), dist * Math.cos(bearingAfromB * D)];
+  const nB = [0, nLen], nA = [A[0], A[1] + nLen];
+  const W = 300, H = 240;
+  const T = afFit([A, B, nB, nA, [A[0], A[1] - 10], [B[0], B[1] - 10]], W, H, 28);
+  const tA = T(A), tB = T(B), tnB = T(nB), tnA = T(nA);
+  const head = (tip, base) => {
+    const dx = tip[0] - base[0], dy = tip[1] - base[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, px = -uy, py = ux;
+    const back = [tip[0] - ux * 8, tip[1] - uy * 8];
+    return `${afF(tip[0])},${afF(tip[1])} ${afF(back[0] + px * 3.5)},${afF(back[1] + py * 3.5)} ${afF(back[0] - px * 3.5)},${afF(back[1] - py * 3.5)}`;
+  };
+  const marked = Math.round(Math.min(bearingAfromB, 360 - bearingAfromB));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="bearing diagram"
+      style={{ maxWidth: 300, display: "block", margin: "0 auto 8px" }}>
+      <line x1={afF(tB[0])} y1={afF(tB[1])} x2={afF(tA[0])} y2={afF(tA[1])} stroke="var(--ink)" strokeWidth="1.8" />
+      <line x1={afF(tB[0])} y1={afF(tB[1])} x2={afF(tnB[0])} y2={afF(tnB[1])} stroke="var(--ink)" strokeWidth="1.4" strokeDasharray="4 3" />
+      <polygon points={head(tnB, tB)} fill="var(--ink)" />
+      <line x1={afF(tA[0])} y1={afF(tA[1])} x2={afF(tnA[0])} y2={afF(tnA[1])} stroke="var(--ink)" strokeWidth="1.4" strokeDasharray="4 3" />
+      <polygon points={head(tnA, tA)} fill="var(--ink)" />
+      <AngleMark v={tB} a={tnB} b={tA} text={`${marked}°`} />
+      <text x={afF(tnB[0])} y={afF(tnB[1] - 7)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--ink)" style={AF_HALO}>N</text>
+      <text x={afF(tnA[0])} y={afF(tnA[1] - 7)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--ink)" style={AF_HALO}>N</text>
+      <text x={afF(tB[0] + 9)} y={afF(tB[1] + 12)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>B</text>
+      <text x={afF(tA[0] + 9)} y={afF(tA[1] + 4)} fontSize="10" fontWeight="700" textAnchor="middle" fill="var(--muted)" style={AF_HALO}>A</text>
+      <circle cx={afF(tB[0])} cy={afF(tB[1])} r="2.4" fill="var(--ink)" />
+      <circle cx={afF(tA[0])} cy={afF(tA[1])} r="2.4" fill="var(--ink)" />
     </svg>
   );
 }
@@ -4027,37 +4212,159 @@ const TOPICS = [
       const r = Math.random();
 
       if (r < 0.20) {
-        // angle rules for parallel lines cut by a transversal — vertically
-        // opposite, alternate, co-interior, corresponding
-        const theta = pick([35, 40, 45, 50, 55, 60, 65, 70, 75, 80]);
-        const rule = pick(Object.keys(PARALLEL_RULES));
-        const [v1, k1, v2, k2] = pick(PARALLEL_RULES[rule]);
+        // angle-fact questions — several different shapes, not just the one
+        // parallel-lines diagram every time: pure parallel lines, a triangle
+        // with a line through one vertex parallel to the base, an isosceles
+        // triangle sitting on a straight line, angles on a straight line by
+        // themselves, and bearings (parallel Norths + the ±180° rule).
+        const x = Math.random();
+        const THETAS = [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80];
 
-        if (Math.random() < 0.6) {
-          // find the marked angle
+        if (x < 0.22) {
+          // parallel lines — find the marked angle
+          const theta = pick(THETAS), mirror = Math.random() < 0.5;
+          const rule = pick(Object.keys(PARALLEL_RULES));
+          const [v1, k1, v2, k2] = pick(PARALLEL_RULES[rule]);
           const giveFirst = Math.random() < 0.5;
           const [gv, gk, av, ak] = giveFirst ? [v1, k1, v2, k2] : [v2, k2, v1, k1];
-          const givenVal = Math.round(parallelWedge(theta, gv, gk));
-          const askVal = Math.round(parallelWedge(theta, av, ak));
+          const givenVal = Math.round(parallelWedge(theta, mirror, gv, gk));
+          const askVal = Math.round(parallelWedge(theta, mirror, av, ak));
           const sameValue = Math.abs(givenVal - askVal) < 1e-6;
           return {
             prompt: `The two lines are parallel. Find the angle marked ?, in degrees`,
-            parallel: { theta, marks: [{ vertex: gv, key: gk, text: `${givenVal}°` }, { vertex: av, key: ak, text: "?" }] },
+            parallel: { theta, mirror, marks: [{ vertex: gv, key: gk, text: `${givenVal}°` }, { vertex: av, key: ak, text: "?" }] },
             answer: `${askVal}`, hint: PARALLEL_RULE_LABEL[rule],
-            steps: [
-              PARALLEL_RULE_EXPLAIN[rule],
-              sameValue ? `? = ${givenVal}°` : `? = 180° − ${givenVal}° = ${askVal}°`,
-            ],
+            steps: [PARALLEL_RULE_EXPLAIN[rule], sameValue ? `? = ${givenVal}°` : `? = 180° − ${givenVal}° = ${askVal}°`],
           };
         }
 
-        // MCQ — which rule connects the two marked (coloured) angles
-        const options = shuffle(Object.keys(PARALLEL_RULES).map((k) => PARALLEL_RULE_LABEL[k]));
+        if (x < 0.35) {
+          // parallel lines — MCQ: which rule connects the two marked angles
+          const theta = pick(THETAS), mirror = Math.random() < 0.5;
+          const rule = pick(Object.keys(PARALLEL_RULES));
+          const [v1, k1, v2, k2] = pick(PARALLEL_RULES[rule]);
+          const options = shuffle(Object.keys(PARALLEL_RULES).map((k) => PARALLEL_RULE_LABEL[k]));
+          return {
+            prompt: `The two lines are parallel. Which rule connects the two marked angles (blue and green)?`,
+            parallel: { theta, mirror, highlight: [{ vertex: v1, key: k1, color: "var(--blue)" }, { vertex: v2, key: k2, color: "var(--green)" }] },
+            choices: options, answer: PARALLEL_RULE_LABEL[rule], hint: "pick one",
+            steps: [PARALLEL_RULE_EXPLAIN[rule]],
+          };
+        }
+
+        if (x < 0.58) {
+          // triangle with a line through one vertex parallel to the base —
+          // angles in a triangle add up to 180°, sometimes via alternate
+          // angles first to read off a base angle from the parallel line.
+          const beta = pick([30, 35, 40, 45, 50, 55, 60, 65, 70]);
+          const gammaOpts = [30, 35, 40, 45, 50, 55, 60, 65, 70].filter((g) => g + beta < 170);
+          const gamma = pick(gammaOpts);
+          const apex = 180 - beta - gamma;
+          const mode = pick(["plain", "altLeft", "altRight", "findAlias"]);
+          if (mode === "plain") return {
+            prompt: `Find the angle marked ?, in degrees`,
+            triParallel: { beta, gamma, marks: [{ pos: "B", text: `${beta}°` }, { pos: "C", text: `${gamma}°` }, { pos: "apex", text: "?" }] },
+            answer: `${apex}`, hint: "Angles in a triangle add up to 180°",
+            steps: [`Angles in a triangle add up to 180°.`, `? = 180° − ${beta}° − ${gamma}° = ${apex}°`],
+          };
+          if (mode === "altLeft") return {
+            prompt: `Find the angle marked ?, in degrees`,
+            triParallel: { beta, gamma, marks: [{ pos: "B", text: `${beta}°` }, { pos: "Aright", text: `${gamma}°` }, { pos: "apex", text: "?" }] },
+            answer: `${apex}`, hint: "Alternate angles, then angles in a triangle",
+            steps: [`Alternate angles: the marked angle at A equals angle C = ${gamma}°.`, `Angles in a triangle add up to 180°: ? = 180° − ${beta}° − ${gamma}° = ${apex}°`],
+          };
+          if (mode === "altRight") return {
+            prompt: `Find the angle marked ?, in degrees`,
+            triParallel: { beta, gamma, marks: [{ pos: "C", text: `${gamma}°` }, { pos: "Aleft", text: `${beta}°` }, { pos: "apex", text: "?" }] },
+            answer: `${apex}`, hint: "Alternate angles, then angles in a triangle",
+            steps: [`Alternate angles: the marked angle at A equals angle B = ${beta}°.`, `Angles in a triangle add up to 180°: ? = 180° − ${beta}° − ${gamma}° = ${apex}°`],
+          };
+          return {
+            prompt: `Find the angle marked ?, in degrees`,
+            triParallel: { beta, gamma, marks: [{ pos: "B", text: `${beta}°` }, { pos: "apex", text: `${apex}°` }, { pos: "Aright", text: "?" }] },
+            answer: `${gamma}`, hint: "Angles in a triangle, then alternate angles",
+            steps: [`Angles in a triangle add up to 180°: angle C = 180° − ${beta}° − ${apex}° = ${gamma}°.`, `Alternate angles: ? = angle C = ${gamma}°`],
+          };
+        }
+
+        if (x < 0.78) {
+          // isosceles triangle sitting on a straight line — base angles
+          // equal, then angles in a triangle or angles on a straight line
+          const apexDeg = pick([30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]);
+          const baseAngle = (180 - apexDeg) / 2, extAngle = 180 - baseAngle;
+          const askExt = Math.random() < 0.4, giveApex = Math.random() < 0.5, showSide = pick(["B", "C"]);
+          if (askExt && giveApex) return {
+            prompt: `The triangle is isosceles. Find the angle marked ?, in degrees`,
+            isoLine: { apexDeg, marks: [{ pos: "apex", text: `${apexDeg}°` }, { pos: "ext", text: "?" }] },
+            answer: `${extAngle}`, hint: "Base angles equal, then angles on a straight line",
+            steps: [`Base angles of an isosceles triangle are equal: each = (180° − ${apexDeg}°) ÷ 2 = ${baseAngle}°`, `Angles on a straight line add up to 180°: ? = 180° − ${baseAngle}° = ${extAngle}°`],
+          };
+          if (askExt) return {
+            prompt: `The triangle is isosceles. Find the angle marked ?, in degrees`,
+            isoLine: { apexDeg, marks: [{ pos: showSide, text: `${baseAngle}°` }, { pos: "ext", text: "?" }] },
+            answer: `${extAngle}`, hint: "Base angles equal, then angles on a straight line",
+            steps: [`Base angles of an isosceles triangle are equal, so the other base angle is also ${baseAngle}°.`, `Angles on a straight line add up to 180°: ? = 180° − ${baseAngle}° = ${extAngle}°`],
+          };
+          if (giveApex) return {
+            prompt: `The triangle is isosceles. Find the angle marked ?, in degrees`,
+            isoLine: { apexDeg, marks: [{ pos: "apex", text: `${apexDeg}°` }, { pos: showSide, text: "?" }] },
+            answer: `${baseAngle}`, hint: "Base angles of an isosceles triangle are equal",
+            steps: [`Base angles are equal.`, `? = (180° − ${apexDeg}°) ÷ 2 = ${baseAngle}°`],
+          };
+          return {
+            prompt: `The triangle is isosceles. Find the angle marked ?, in degrees`,
+            isoLine: { apexDeg, marks: [{ pos: showSide, text: `${baseAngle}°` }, { pos: "apex", text: "?" }] },
+            answer: `${apexDeg}`, hint: "Base angles equal, then angles in a triangle",
+            steps: [`Base angles of an isosceles triangle are equal, so the other base angle is also ${baseAngle}°.`, `Angles in a triangle add up to 180°: ? = 180° − ${baseAngle}° − ${baseAngle}° = ${apexDeg}°`],
+          };
+        }
+
+        if (x < 0.90) {
+          // angles on a straight line, on their own
+          const twoRays = Math.random() < 0.5;
+          let splits;
+          if (twoRays) {
+            const a = pick([20, 30, 40, 50, 60, 70, 80]);
+            let b = a + pick([20, 30, 40, 50, 60]);
+            if (b >= 160) b = 160;
+            splits = [a, b];
+          } else {
+            splits = [pick([30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150])];
+          }
+          const wedges = straightLineAngles(splits);
+          const askIdx = randInt(0, wedges.length - 1);
+          const known = wedges.filter((_, i) => i !== askIdx);
+          const ask = wedges[askIdx];
+          return {
+            prompt: `The angles are on a straight line. Find the angle marked ?, in degrees`,
+            straightLine: { splits, marks: wedges.map((w, i) => ({ text: i === askIdx ? "?" : `${w}°` })) },
+            answer: `${ask}`, hint: "Angles on a straight line add up to 180°",
+            steps: [`Angles on a straight line add up to 180°.`, `? = 180°${known.map((w) => ` − ${w}°`).join("")} = ${ask}°`],
+          };
+        }
+
+        // bearings — the two North lines are parallel, so reversing a
+        // bearing is really just the ±180° co-interior/alternate rule
+        const bearingOpts = [];
+        for (let b = 20; b < 360; b += 10) if (Math.abs(b - 180) > 15 && b < 345) bearingOpts.push(b);
+        const bearingAfromB = pick(bearingOpts);
+        const onRight = bearingAfromB <= 180;
+        const markedAngle = onRight ? bearingAfromB : 360 - bearingAfromB;
+        const sideStep = onRight
+          ? `The marked angle is already measured clockwise from North: bearing of A from B = ${markedAngle}°`
+          : `A is on the far side of North, so subtract from 360°: bearing of A from B = 360° − ${markedAngle}° = ${bearingAfromB}°`;
+        if (Math.random() < 0.5) return {
+          prompt: `Find the bearing of A from B, in degrees`,
+          bearing: { bearingAfromB },
+          answer: `${bearingAfromB}`, hint: "Bearings are measured clockwise from North",
+          steps: [sideStep],
+        };
+        const bBfromA = (bearingAfromB + 180) % 360;
         return {
-          prompt: `The two lines are parallel. Which rule connects the two marked angles (blue and green)?`,
-          parallel: { theta, highlight: [{ vertex: v1, key: k1, color: "var(--blue)" }, { vertex: v2, key: k2, color: "var(--green)" }] },
-          choices: options, answer: PARALLEL_RULE_LABEL[rule], hint: "pick one",
-          steps: [PARALLEL_RULE_EXPLAIN[rule]],
+          prompt: `Find the bearing of B from A, in degrees`,
+          bearing: { bearingAfromB },
+          answer: `${bBfromA}`, hint: "The two North lines are parallel — use the ±180° rule",
+          steps: [sideStep, `The North lines at A and B are parallel, so bearing of B from A = bearing of A from B ${bearingAfromB < 180 ? "+ 180°" : "− 180°"} = ${bBfromA}°`],
         };
       }
 
@@ -8514,6 +8821,10 @@ export default function MathsUnlockedBN() {
               {question.tri && <TriangleFigure {...question.tri} />}
               {question.circle && <CircleFigure {...question.circle} />}
               {question.parallel && <ParallelFigure {...question.parallel} />}
+              {question.triParallel && <TriParallelFigure {...question.triParallel} />}
+              {question.isoLine && <IsoLineFigure {...question.isoLine} />}
+              {question.straightLine && <StraightLineFigure {...question.straightLine} />}
+              {question.bearing && <BearingFigure {...question.bearing} />}
               {question.solid && <MensurationFigure {...question.solid} />}
               {question.vec && <VectorFigure {...question.vec} />}
               {question.cumfreq && (
