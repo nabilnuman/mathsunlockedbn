@@ -3397,10 +3397,10 @@ const TOPICS = [
             ],
           };
           return {
-            prompt: `Triangle A is enlarged onto triangle B with scale factor ${kTxt}. Find the centre of enlargement as (x, y)`,
+            prompt: `Triangle A is enlarged onto triangle B with scale factor ${kTxt}. Tap the centre of enlargement on the grid`,
             transform: { a, b, answerCentre: c, answerRays: rays },
-            check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
-            answer: `(${c[0]}, ${c[1]})`, hint: "e.g. (1, -2)",
+            tapPoint: { correct: c },
+            answer: `(${c[0]}, ${c[1]})`,
             steps: [
               `Draw a straight line through each vertex of A and its matching vertex of B.`,
               `All three lines meet at one point — the centre of enlargement.`,
@@ -7068,6 +7068,14 @@ export default function MathsUnlockedBN() {
     });
   }
 
+  // "Find the centre" questions: tap a single lattice point — a new tap
+  // always replaces whatever was there before; tapping the same point
+  // again clears it.
+  function toggleCentrePoint(pt) {
+    if (feedback) return;
+    setDrawPts((cur) => (cur.length === 1 && cur[0][0] === pt[0] && cur[0][1] === pt[1] ? [] : [pt]));
+  }
+
   // "Shade the region" questions: tap a half-plane (rejected if too near the line).
   function pickRegion(x, y) {
     if (feedback || !question.region) return;
@@ -7135,6 +7143,10 @@ export default function MathsUnlockedBN() {
       const mm = question.drawMirror;
       const onL = (p) => mm.kind === "x" ? p[0] === mm.k : mm.kind === "y" ? p[1] === mm.k : mm.kind === "yx" ? p[0] === p[1] : p[0] === -p[1];
       correct = drawPts.every(onL);
+    } else if (question.tapPoint) {
+      if (drawPts.length !== 1) return;
+      const tp = question.tapPoint.correct;
+      correct = drawPts[0][0] === tp[0] && drawPts[0][1] === tp[1];
     } else if (question.drawTransform) {
       if (drawTri.length !== 3) return;
       const tgt = question.drawTransform.image;
@@ -8392,21 +8404,25 @@ export default function MathsUnlockedBN() {
                     mirror={feedback ? (question.drawMirror || question.transform.answerMirror) : null}
                     rays={question.transform.rays || (feedback ? question.transform.answerRays : null)}
                     lineMode={!!question.drawMirror}
-                    tapPts={question.transform.draw ? drawTri : question.drawMirror ? drawPts : null}
-                    onTap={feedback ? null : question.transform.draw ? toggleTriPoint : question.drawMirror ? toggleDrawPoint : null}
+                    tapPts={question.transform.draw ? drawTri : (question.drawMirror || question.tapPoint) ? drawPts : null}
+                    onTap={feedback ? null : question.transform.draw ? toggleTriPoint : question.drawMirror ? toggleDrawPoint : question.tapPoint ? toggleCentrePoint : null}
                   />
                   <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center" }}>
                     {question.drawMirror
                       ? (feedback
                         ? (feedback.correct ? "Mirror line correct" : "Red shows the correct mirror line")
                         : drawPts.length < 2 ? "Tap two points on the mirror line" : "Tap a different point to adjust the line")
-                      : question.transform.draw
+                      : question.tapPoint
                         ? (feedback
-                          ? (feedback.correct ? "Image placed correctly" : "Green shows the correct image")
-                          : drawTri.length === 0 ? "Tap the first vertex of the image"
-                            : drawTri.length < 3 ? `${3 - drawTri.length} more to tap`
-                              : "Tap a different point to adjust a vertex")
-                        : "Triangle A (blue) is mapped onto triangle B (green)"}
+                          ? (feedback.correct ? "Correct point" : "The X marks the actual centre")
+                          : drawPts.length === 0 ? "Tap the centre of enlargement" : "Tap a different point to adjust")
+                        : question.transform.draw
+                          ? (feedback
+                            ? (feedback.correct ? "Image placed correctly" : "Green shows the correct image")
+                            : drawTri.length === 0 ? "Tap the first vertex of the image"
+                              : drawTri.length < 3 ? `${3 - drawTri.length} more to tap`
+                                : "Tap a different point to adjust a vertex")
+                          : "Triangle A (blue) is mapped onto triangle B (green)"}
                   </div>
                 </div>
               )}
@@ -8428,7 +8444,7 @@ export default function MathsUnlockedBN() {
                 )
               )}
 
-              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror) ? null : question.vector ? (
+              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror || question.tapPoint) ? null : question.vector ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>(</span>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -8554,6 +8570,7 @@ export default function MathsUnlockedBN() {
                   || (question.drawMirror && drawPts.length < 2)
                   || (question.vector && (!(multiInput.vx || "").trim() || !(multiInput.vy || "").trim()))
                   || (question.drawTransform && drawTri.length !== 3)
+                  || (question.tapPoint && drawPts.length !== 1)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
