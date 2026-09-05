@@ -4127,7 +4127,7 @@ const TOPICS = [
           tri: { verts: rlayout(adj, opp), sideLabels: sl, angleLabels: ["?", "", ""], rightAngle: 2 },
           answer: `${r1(th)}`, hint: "use sin⁻¹, cos⁻¹ or tan⁻¹", check: approx(th),
           steps: [
-            `${rt}(x) = ${rt === "sin" ? "opp ÷ hyp" : rt === "cos" ? "adj ÷ hyp" : "opp ÷ adj"} = ${r1(sides[shown[0]] / sides[shown[1]] * 1000) / 1000}`,
+            `${rt}(x) = ${rt === "sin" ? "opp ÷ hyp" : rt === "cos" ? "adj ÷ hyp" : "opp ÷ adj"} = ${(sides[shown[0]] / sides[shown[1]]).toFixed(3)}`,
             `x = ${rt}⁻¹(…) = ${r1(th)}°`,
           ],
         };
@@ -4190,7 +4190,7 @@ const TOPICS = [
           prompt: `Find the angle marked ?, in degrees  (1 d.p.)`,
           tri: { verts: layout(c, b, A), sideLabels: [`${a} cm`, `${b} cm`, `${c} cm`], angleLabels: ["?", "", ""], vertLabels: ["A", "B", "C"] },
           answer: `${r1(A)}`, hint: "cos A = (b² + c² − a²) ÷ 2bc", check: approx(A),
-          steps: [`cos A = (${b}² + ${c}² − ${a}²) ÷ (2 × ${b} × ${c})`, `= ${r1((b * b + c * c - a * a) / (2 * b * c) * 1000) / 1000}`, `A = ${r1(A)}°`],
+          steps: [`cos A = (${b}² + ${c}² − ${a}²) ÷ (2 × ${b} × ${c})`, `= ${((b * b + c * c - a * a) / (2 * b * c)).toFixed(3)}`, `A = ${r1(A)}°`],
         };
       }
 
