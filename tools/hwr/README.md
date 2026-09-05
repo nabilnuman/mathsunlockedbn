@@ -26,4 +26,6 @@ train / test / inference all feed the model the same 28×28 normalisation
 placement clamped to the frame). `HWR_CHARS` must match `CHARS` in
 `train.mjs`.
 
-Current model: ~86% per-character on the EMNIST test split.
+Current model: ~86% per-character on the EMNIST test split, over
+digits + letters + `+ - = ( ) . , / √ ×` (57 classes — `√` and `×` are
+new synthetic classes, same technique as the other operators).
