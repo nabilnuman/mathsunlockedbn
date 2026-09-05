@@ -4625,7 +4625,7 @@ const ACHIEVEMENTS = [
     check: (p) => (p.totalCorrect || 0) >= 100 },
   { id: "perfectionist", tier: "Silver", name: "Perfectionist", icon: "💯", desc: "Reach S rank in any topic",
     check: (p) => TOPICS.some((t) => topicRankAtLeast(p, t.id, "S")) },
-  { id: "aristocrat", tier: "Silver", name: "Arithmetic Aristocrat", icon: "🎩", desc: "Reach rank A in the first 8 topics",
+  { id: "aristocrat", tier: "Silver", name: "Arithmetic Aristocrat", icon: "🥸", desc: "Reach rank A in the first 8 topics",
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(0, 8), "A") },
   { id: "aficionado", tier: "Silver", name: "Algebra Aficionado", icon: "🧮", desc: "Reach rank A in topics 9–14",
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(8, 14), "A") },
