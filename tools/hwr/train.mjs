@@ -13,9 +13,9 @@ const CHARS = [
   "0","1","2","3","4","5","6","7","8","9",
   "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
   "a","b","d","e","f","g","h","n","q","r","t",
-  "+","-","=","(",")",".",",","/",
+  "+","-","=","(",")",".",",","/","√","×",
 ];
-const NCLASS = CHARS.length;               // 55
+const NCLASS = CHARS.length;               // 57
 const EM_CLASSES = 47;
 
 // ---------- idx readers ----------
@@ -74,6 +74,17 @@ function opStrokes(ch) {
     case ".": return [line(jitter(0.5, 0.03), jitter(0.78, 0.03), jitter(0.5, 0.03) + 0.02, jitter(0.78, 0.03) + 0.02)];
     case ",": return [[...line(jitter(0.52, 0.03), 0.72, jitter(0.52, 0.03), 0.78), ...line(jitter(0.52, 0.03), 0.78, jitter(0.44, 0.03), 0.92)]];
     case "/": return [line(jitter(0.74, 0.05), jitter(0.16, 0.04), jitter(0.26, 0.05), jitter(0.84, 0.04))];
+    case "√": { // one continuous stroke: short tick down-then-up, then the long bar (vinculum) to the right
+      const p0 = [jitter(0.08, 0.03), jitter(0.45, 0.05)];
+      const p1 = [jitter(0.22, 0.03), jitter(0.68, 0.05)];
+      const p2 = [jitter(0.38, 0.03), jitter(0.12, 0.05)];
+      const p3 = [jitter(0.85, 0.05), jitter(0.10, 0.05)];
+      return [[...line(p0[0], p0[1], p1[0], p1[1]), ...line(p1[0], p1[1], p2[0], p2[1]).slice(1), ...line(p2[0], p2[1], p3[0], p3[1]).slice(1)]];
+    }
+    case "×": return [
+      line(jitter(0.20, 0.04), jitter(0.20, 0.04), jitter(0.80, 0.04), jitter(0.80, 0.04)),
+      line(jitter(0.80, 0.04), jitter(0.20, 0.04), jitter(0.20, 0.04), jitter(0.80, 0.04)),
+    ];
   }
   return [line(0.2, 0.5, 0.8, 0.5)];
 }
