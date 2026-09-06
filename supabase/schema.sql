@@ -81,6 +81,7 @@ as $$
     and value <> ''
     and (value::jsonb) ? 'name'
     and coalesce((value::jsonb) ->> 'name', '') <> ''
+    and scope not in (select uid::text from teachers)  -- teacher accounts don't appear on any leaderboard
 $$;
 revoke all on function public.get_leaderboard() from public;
 revoke all on function public.get_leaderboard() from anon;
