@@ -2383,7 +2383,10 @@ const TOPICS = [
             steps: [matchStep, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
         },
       ];
-      return forms[randInt(0, forms.length - 1)]();
+      const fi = randInt(0, forms.length - 1);
+      const q = forms[fi]();
+      q.sub = fi === 0 ? "toSF" : fi === 1 ? "fromSF" : "calc";
+      return q;
     } },
   { id: "sigfig", name: "Rounding", icon: "🎯", prereqs: [],
     generate() {
@@ -2455,6 +2458,8 @@ const TOPICS = [
         return { v, prec, half: clean(prec / 2), label: precLabelOf(spec.u, prec) };
       };
 
+      const _combine = Math.random() < 0.4;
+      const q = (() => {
       // combined measure: a result worked out FROM two measured values
       // (speed = distance ÷ time, area = length × width, ...) — the
       // upper/lower bound of the result depends on the operation:
@@ -2462,7 +2467,7 @@ const TOPICS = [
       // denominator pushes the opposite way (÷ a smaller number → a
       // bigger result, so the upper bound takes the numerator's upper
       // bound but the denominator's LOWER bound).
-      if (Math.random() < 0.4) {
+      if (_combine) {
         const U = Object.fromEntries(units.map((u) => [u.u, u]));
         const scenarios = [
           { result: "speed", op: "÷", aKey: "m", aNoun: "distance", bKey: "seconds", bNoun: "time", resultUnit: "m/s" },
@@ -2512,6 +2517,9 @@ const TOPICS = [
           `${bound === "upper" ? "Upper" : "Lower"} bound = ${v} ${bound === "upper" ? "+" : "−"} ${half} = ${ans}`,
         ],
       };
+      })();
+      q.sub = _combine ? "combine" : "single";
+      return q;
     } },
   { id: "time", name: "Time", icon: "⏰", prereqs: [],
     generate() {
@@ -2858,6 +2866,7 @@ const TOPICS = [
       const nz = (lo, hi) => { let n = 0; while (n === 0) n = randInt(lo, hi); return n; };
       const build = () => {
         const r = Math.random();
+        const qq = (() => {
 
         // 20% — write the inverse function
         if (r < 0.20) {
@@ -2952,6 +2961,10 @@ const TOPICS = [
             `= ${ans}`,
           ],
         };
+        })();
+        if (!qq) return null;
+        qq.sub = r < 0.20 ? "inverse" : r < 0.50 ? "composite" : "sub";
+        return qq;
       };
       let q;
       for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
@@ -3002,17 +3015,18 @@ const TOPICS = [
       const shown = [1, 2, 3, 4, 5].map(seq.term);
       const seqStr = `${shown.join(", ")}, ...`;
       const mode = Math.random() < 0.4 ? "next" : Math.random() < 0.5 ? "rule" : "kth";
+      const _subSeq = mode === "rule" ? "nth" : "term";
 
       if (mode === "next") {
-        return { prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
+        return { sub: _subSeq, prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
           steps: [seq.how, `Next term = ${seq.term(6)}`] };
       }
       if (mode === "rule") {
-        return { prompt: `Write the nth-term rule, in terms of n:   ${seqStr}`, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1",
+        return { sub: _subSeq, prompt: `Write the nth-term rule, in terms of n:   ${seqStr}`, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1",
           steps: [seq.how, `nth term = ${seq.rule}`] };
       }
       const k = seq.kind === "geo" ? pick([7, 8, 9, 10]) : pick([12, 15, 20, 25, 30, 40, 50, 60, 100]);
-      return { prompt: `Find the ${k}th term:   ${seqStr}`, answer: `${seq.term(k)}`, hint: "work out the rule first",
+      return { sub: _subSeq, prompt: `Find the ${k}th term:   ${seqStr}`, answer: `${seq.term(k)}`, hint: "work out the rule first",
         steps: [seq.how, `Substitute n = ${k}:  ${seq.term(k)}`] };
     } },
   { id: "proportionality", name: "Proportionality", icon: "⚖️", prereqs: ["algebra"],
@@ -3021,7 +3035,7 @@ const TOPICS = [
       const shuffle = (arr) => { const c = [...arr]; for (let i = c.length - 1; i > 0; i--) { const j = randInt(0, i); [c[i], c[j]] = [c[j], c[i]]; } return c; };
 
       // share a total between two people in a given ratio
-      if (Math.random() < 0.4) {
+      if (Math.random() < 0.4) {  // sub: "ratio"
         const [m, n] = pick([[1, 2], [1, 3], [1, 4], [2, 3], [3, 4], [2, 5], [3, 5], [4, 5], [1, 5], [2, 7], [3, 7], [3, 8], [5, 6]]);
         const [nameA, nameB] = shuffle(["Sam", "Joe", "Ali", "Mia", "Tom", "Zara", "Liam", "Noor"]).slice(0, 2);
         const noun = pick(["apples", "sweets", "marbles", "stickers", "pencils", "chocolates", "stamps", "dollars"]);
@@ -3056,7 +3070,7 @@ const TOPICS = [
           answer = `${shareA}`;
           steps = [`${nameB}'s ${n} part(s) = ${shareB}, so 1 part = ${shareB} ÷ ${n} = ${u}`, `${nameA}'s share = ${m} × ${u} = ${shareA}`];
         }
-        return { prompt, answer, hint: "Enter a number.", steps };
+        return { sub: "ratio", prompt, answer, hint: "Enter a number.", steps };
       }
 
       const rels = [
@@ -3099,6 +3113,7 @@ const TOPICS = [
         : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
 
       return {
+        sub: "variation",
         prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
         answer: `${ay}`, hint: "Enter a number.",
         steps: [
@@ -3410,7 +3425,9 @@ const TOPICS = [
       const xtm = (n) => (n > 0 ? ` + ${n === 1 ? "" : n}x` : ` - ${n === -1 ? "" : -n}x`);
       const divLine = (k, ans, x0) => `Divide by ${k}${k < 0 ? " — the inequality flips" : ""}:  x ${ans} ${x0}`;
 
-      if (Math.random() < 0.5) {
+      const _shade = Math.random() < 0.5;
+      const out = (() => {
+      if (_shade) {
         // shade the region that satisfies an inequality
         const kind = ["diag", "diag", "vert", "horiz"][randInt(0, 3)];
         const op = OPS[randInt(0, 3)];
@@ -3503,6 +3520,9 @@ const TOPICS = [
         check: (inp) => { const p = parseIneq(inp); return !!p && p.op === q.ans && Math.abs(p.val - q.x0) < 1e-6; },
         steps: q.steps,
       };
+      })();
+      out.sub = _shade ? "shade" : "solve";
+      return out;
     } },
   { id: "transformations", name: "Transformations", icon: "🔄", prereqs: ["coordgeo"],
     generate() {
@@ -3823,6 +3843,7 @@ const TOPICS = [
       const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
       const r = Math.random();
 
+      const q = (() => {
       // A — speed = distance ÷ time  (find speed / distance / time; time sometimes in minutes)
       if (r < 0.30) {
         const find = pick(["speed", "distance", "time"]);
@@ -3937,6 +3958,9 @@ const TOPICS = [
           `= ${(t1 * v1) / 2} + ${cruise * v1} + ${(decel * v1) / 2} = ${total} m`,
         ],
       };
+      })();
+      q.sub = r < 0.30 ? "speed" : r < 0.55 ? "accel" : "graph";
+      return q;
     } },
   { id: "dailymaths", name: "Daily Maths", icon: "🛒", prereqs: ["algebra"],
     generate() {
@@ -4020,6 +4044,7 @@ const TOPICS = [
       const even = (lo, hi) => 2 * randInt(Math.ceil(lo / 2), Math.floor(hi / 2));
       const r = Math.random();
 
+      const q = (() => {
       // ---------- rectangle ----------
       if (r < 0.13) {
         const l = randInt(4, 18), w = randInt(3, 12);
@@ -4137,6 +4162,9 @@ const TOPICS = [
         solid: { shape: "sphere", dims: { r: rad } },
         answer: `${4 * rad * rad}π`, hint: "give your answer as a multiple of π",
         steps: [`Surface area = 4πr²`, `= 4 × π × ${rad}² = ${4 * rad * rad}π cm²`] };
+      })();
+      q.sub = r < 0.13 ? "rectangle" : r < 0.23 ? "square" : r < 0.36 ? "triangle" : r < 0.46 ? "parallelogram" : r < 0.58 ? "trapezium" : r < 0.70 ? "cuboid" : r < 0.82 ? "cylinder" : r < 0.91 ? "cone" : "sphere";
+      return q;
     } },
   { id: "similarity", name: "Similarity", icon: "🔺", prereqs: ["mensuration"],
     generate() {
@@ -4214,6 +4242,7 @@ const TOPICS = [
 
       const r = Math.random();
 
+      const q = (() => {
       if (r < 0.20) {
         // angle-fact questions — several different shapes, not just the one
         // parallel-lines diagram every time: pure parallel lines, a triangle
@@ -4515,12 +4544,16 @@ const TOPICS = [
         answer: `${r1(area)}`, hint: "area = ½ · b · c · sin A", check: approx(area),
         steps: [`Area = ½ × ${b} × ${c} × sin ${A}°`, `= ${r1(area)} cm²`],
       };
+      })();
+      q.sub = r < 0.20 ? "anglefacts" : r < 0.33 ? "pythagoras" : r < 0.585 ? "sohcahtoa" : r < 0.76 ? "sinerule" : r < 0.945 ? "cosinerule" : "area";
+      return q;
     } },
   { id: "circles", name: "Circles", icon: "⭕", prereqs: ["trigonometry"],
     generate() {
       const pick = (a) => a[randInt(0, a.length - 1)];
       const roll = Math.random();
 
+      const q = (() => {
       // ---------- circumference:  C = 2πr = πd ----------
       if (roll < 0.11) {
         const rad = randInt(3, 14), d = 2 * rad;
@@ -4706,6 +4739,9 @@ const TOPICS = [
         circle: { type: "altseg", x, textA: `?`, textC: `${x}°` },
         answer: `${x}`, hint: "Angle in degrees.",
         steps: [`Alternate segment theorem: the angle between a tangent and a chord equals the angle in the alternate segment.`, `? = ${x}°`] };
+      })();
+      q.sub = roll < 0.11 ? "circumference" : roll < 0.22 ? "area" : roll < 0.335 ? "arc" : roll < 0.45 ? "sector" : "theorems";
+      return q;
     } },
   { id: "probability", name: "Probability", icon: "🎲", prereqs: [],
     generate() {
@@ -5264,6 +5300,70 @@ const TOPICS = [
     } },
 ];
 const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
+
+/* Subtopics a teacher can pick when setting homework. A topic listed here
+   tags every generated question with `q.sub` (one of these keys); the
+   homework generator then only keeps questions whose `sub` is in the
+   chosen set. Topics not listed here are whole-topic only ("General"). */
+const SUBTOPICS = {
+  trigonometry: [
+    { key: "anglefacts", name: "Angle facts (parallel lines, triangles, bearings)" },
+    { key: "pythagoras", name: "Pythagoras" },
+    { key: "sohcahtoa", name: "SOH CAH TOA (right-angled)" },
+    { key: "sinerule", name: "Sine rule" },
+    { key: "cosinerule", name: "Cosine rule" },
+    { key: "area", name: "Area of a triangle" },
+  ],
+  mensuration: [
+    { key: "rectangle", name: "Rectangle" },
+    { key: "square", name: "Square" },
+    { key: "triangle", name: "Triangle" },
+    { key: "parallelogram", name: "Parallelogram" },
+    { key: "trapezium", name: "Trapezium" },
+    { key: "cuboid", name: "Cuboid (volume & surface area)" },
+    { key: "cylinder", name: "Cylinder" },
+    { key: "cone", name: "Cone" },
+    { key: "sphere", name: "Sphere" },
+  ],
+  inequalities: [
+    { key: "shade", name: "Shade a region on a graph" },
+    { key: "solve", name: "Solve an inequality" },
+  ],
+  standardform: [
+    { key: "toSF", name: "Write in standard form" },
+    { key: "fromSF", name: "Ordinary number from standard form" },
+    { key: "calc", name: "Calculate with standard form" },
+  ],
+  limits: [
+    { key: "single", name: "Bounds of one measurement" },
+    { key: "combine", name: "Bounds of a calculation (÷ and ×)" },
+  ],
+  functions: [
+    { key: "sub", name: "Substitute a value (f(x))" },
+    { key: "composite", name: "Composite functions (fg(x))" },
+    { key: "inverse", name: "Inverse functions" },
+  ],
+  proportionality: [
+    { key: "ratio", name: "Sharing in a ratio" },
+    { key: "variation", name: "Direct & inverse variation" },
+  ],
+  kinematics: [
+    { key: "speed", name: "Speed = distance ÷ time" },
+    { key: "accel", name: "Acceleration (a = (v−u) ÷ t)" },
+    { key: "graph", name: "Distance–time / speed–time graphs" },
+  ],
+  sequences: [
+    { key: "nth", name: "Write the nth-term rule" },
+    { key: "term", name: "Find a term / next term" },
+  ],
+  circles: [
+    { key: "circumference", name: "Circumference" },
+    { key: "area", name: "Area of a circle" },
+    { key: "arc", name: "Arc length" },
+    { key: "sector", name: "Sector area" },
+    { key: "theorems", name: "Circle theorems (angles)" },
+  ],
+};
 
 // Mixed Review — a level-3 reward: random questions drawn from every topic
 // the student has unlocked. Answers still score their source topic.
@@ -6493,6 +6593,13 @@ function autoHintDue(profile, topicId) {
   return trailingWrongStreak(((profile.topics || {})[topicId] || {}).history) >= 3;
 }
 
+// Human list of an assignment's chosen subtopics, "" if it's the whole topic.
+function asgSubLabel(a) {
+  const list = SUBTOPICS[a.topic_id];
+  if (!list || !a.subs || a.subs.length === 0) return "";
+  return a.subs.map((k) => (list.find((s) => s.key === k) || {}).name).filter(Boolean).join(", ");
+}
+
 // "3 days ago" / "just now" from an ISO timestamp.
 function timeAgo(iso) {
   if (!iso) return "";
@@ -7141,12 +7248,20 @@ export default function MathsUnlockedBN() {
 
   // Mixes in custom (admin-written) questions alongside the procedural
   // generator — roughly half the time, if any exist for this topic.
-  function pickQuestion(topic) {
+  // `subs` (a non-empty array) restricts to those subtopic keys — used by
+  // teacher homework; the generator is retried until a question matches.
+  function pickQuestion(topic, subs) {
     const bank = customQuestions[topic.id] || [];
+    const filtering = Array.isArray(subs) && subs.length > 0 && SUBTOPICS[topic.id]
+      && subs.length < SUBTOPICS[topic.id].length; // all-selected == no filter
     let q;
-    if (bank.length && Math.random() < 0.5) {
+    if (!filtering && bank.length && Math.random() < 0.5) {
       const c = bank[randInt(0, bank.length - 1)];
       q = { prompt: c.prompt, answer: c.answer, hint: c.hint || "Enter your answer.", steps: c.steps && c.steps.length ? c.steps : ["Check your working carefully."] };
+    } else if (filtering) {
+      const want = new Set(subs);
+      q = topic.generate();
+      for (let i = 0; i < 120 && !want.has(q.sub); i++) q = topic.generate();
     } else {
       q = topic.generate();
     }
@@ -7162,6 +7277,7 @@ export default function MathsUnlockedBN() {
 
   function startMixed() {
     if (levelFromExp(totalExp(profile)) < MIXED_UNLOCK_LEVEL) return;
+    if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
     recentQRef.current = [];
     setActiveTopic(MIXED_TOPIC);
     const q = freshQuestion(pickMixed);
@@ -7190,6 +7306,7 @@ export default function MathsUnlockedBN() {
   // ---- Blitz ----
   function startBlitz() {
     if (levelFromExp(totalExp(profile)) < BLITZ_UNLOCK_LEVEL) return;
+    if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
     challengeRef.current = null;
     setChallengeResult(null);
     setBlitzPhase("intro");
@@ -7577,14 +7694,19 @@ export default function MathsUnlockedBN() {
     setScreen("dashboard");
   }
 
-  function startTopic(topic) {
+  function startTopic(topic, fromHomework) {
     if (!isUnlocked(topic, profile)) return;
+    // Free practice from the topic grid ends any paused homework run —
+    // homework is only ever "live" when entered through its card.
+    if (!fromHomework && profile.hwRun) patchProfile(() => ({ hwRun: null }));
     recentQRef.current = [];
     setActiveTopic(topic);
     // Caught dodging before ("Nice Try") — a topic left unanswered follows
     // you back in instead of re-rolling, so ducking out no longer works.
     const stuck = profile.dodgeLocked && profile.dodgeStuck && profile.dodgeStuck[topic.id];
-    const q = stuck || freshQuestion(() => pickQuestion(topic));
+    const hwRun = profileRef.current.hwRun;
+    const subs = fromHomework && hwRun && hwRun.topicId === topic.id ? hwRun.subs : undefined;
+    const q = stuck || freshQuestion(() => pickQuestion(topic, subs));
     setQuestion(q);
     const autoHint = autoHintDue(profile, q.topicId);
     setHintFree(autoHint);
@@ -7615,9 +7737,9 @@ export default function MathsUnlockedBN() {
     if (!isUnlocked(topic, profile)) { flash("That topic isn't unlocked yet — practise its prerequisites first."); return; }
     const run = (profile.hwRun && profile.hwRun.assignmentId === a.id)
       ? profile.hwRun
-      : { assignmentId: a.id, topicId: a.topic_id, count: a.count, done: 0, correct: 0 };
+      : { assignmentId: a.id, topicId: a.topic_id, count: a.count, subs: a.subs || [], done: 0, correct: 0 };
     patchProfile(() => ({ hwRun: run }));
-    startTopic(topic);
+    startTopic(topic, true);
   }
   function quitHomework() {
     if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
@@ -7641,7 +7763,9 @@ export default function MathsUnlockedBN() {
   }
 
   function nextQuestion() {
-    const q = freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic));
+    const run = profileRef.current.hwRun;
+    const subs = run && run.topicId === activeTopic.id ? run.subs : undefined;
+    const q = freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic, subs));
     setQuestion(q);
     const autoHint = autoHintDue(profile, q.topicId);
     setHintFree(autoHint);
@@ -8064,14 +8188,18 @@ export default function MathsUnlockedBN() {
   async function doCreateAssignment() {
     if (!activeClass || asgBusy) return;
     const { topicId, count, days, name } = asgForm;
+    const list = SUBTOPICS[topicId] || [];
+    const subs = (asgForm.subs || []).filter((k) => list.some((s) => s.key === k));
     const n = Math.max(1, Math.min(200, parseInt(count, 10) || 10));
     const due = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
-    const title = (name || "").trim()
-      || (TOPIC_BY_ID[topicId] ? `${TOPIC_BY_ID[topicId].name} — mark out of ${n}` : `Mark out of ${n}`);
+    const scope = subs.length && subs.length < list.length
+      ? subs.map((k) => list.find((s) => s.key === k).name).join(", ")
+      : (TOPIC_BY_ID[topicId] ? TOPIC_BY_ID[topicId].name : "");
+    const title = (name || "").trim() || `${scope} — mark out of ${n}`;
     setAsgBusy(true);
-    const res = await createAssignment(activeClass.id, topicId, n, due, title);
+    const res = await createAssignment(activeClass.id, topicId, n, due, title, subs.length < list.length ? subs : []);
     setAsgBusy(false);
-    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); setAsgForm((f) => ({ ...f, name: "" })); }
+    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); setAsgForm((f) => ({ ...f, name: "", subs: [] })); }
     else flash(res.error || "Couldn't set the homework.");
   }
   async function doDeleteAssignment(id) {
@@ -8818,6 +8946,7 @@ export default function MathsUnlockedBN() {
                         <strong>{p.complete && !p.running ? "✓ " : ""}{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
                         <span style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", flexShrink: 0 }}>{status}{due}</span>
                       </div>
+                      {asgSubLabel(a) && <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>{asgSubLabel(a)}</div>}
                       {p.running && (
                         <div style={{ height: 5, borderRadius: 999, background: "var(--grid)", marginTop: 6, overflow: "hidden" }}>
                           <div style={{ width: `${Math.round((p.inRun / p.total) * 100)}%`, height: "100%", background: "var(--blue)" }} />
@@ -9668,9 +9797,9 @@ export default function MathsUnlockedBN() {
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Homework</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                 <input value={asgForm.name} onChange={(e) => setAsgForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name (e.g. Arithmetic 1)" style={{ ...inp, padding: "8px 10px", width: 170 }} />
-                <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value }))} style={{ ...inp, padding: "8px 8px", maxWidth: 160 }}>
+                <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value, subs: [] }))} style={{ ...inp, padding: "8px 8px", maxWidth: 160 }}>
                   {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 <input type="number" min={1} max={200} value={asgForm.count} onChange={(e) => setAsgForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 60, padding: "8px 6px" }} />
@@ -9679,6 +9808,27 @@ export default function MathsUnlockedBN() {
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>days</span>
                 <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1 }}>Set</button>
               </div>
+              {SUBTOPICS[asgForm.topicId] && (
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Subtopics:</span>
+                  {(() => {
+                    const chip = (on, label, onClick) => (
+                      <button onClick={onClick} style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, cursor: "pointer",
+                        background: on ? "var(--blue)" : "var(--paper)", color: on ? "var(--on-accent)" : "var(--muted)", border: `1px solid ${on ? "var(--blue)" : "var(--grid)"}` }}>{label}</button>
+                    );
+                    return (<>
+                      {chip((asgForm.subs || []).length === 0, "General (all)", () => setAsgForm((f) => ({ ...f, subs: [] })))}
+                      {SUBTOPICS[asgForm.topicId].map((s) => {
+                        const on = (asgForm.subs || []).includes(s.key);
+                        return chip(on, s.name, () => setAsgForm((f) => {
+                          const cur = f.subs || [];
+                          return { ...f, subs: on ? cur.filter((k) => k !== s.key) : [...cur, s.key] };
+                        }));
+                      })}
+                    </>);
+                  })()}
+                </div>
+              )}
               {classAsg.map((a) => {
                 const scores = rosterRows.map((s) => assignmentProgress(s, a).best).filter((v) => v != null);
                 const done = scores.length;
@@ -9688,6 +9838,9 @@ export default function MathsUnlockedBN() {
                     <div>
                       <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
                       {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
+                      <div style={{ color: "var(--muted)", marginTop: 2 }}>
+                        {TOPIC_BY_ID[a.topic_id]?.name}{asgSubLabel(a) ? ` · ${asgSubLabel(a)}` : ""} · {a.count} Qs
+                      </div>
                       <div style={{ color: "var(--muted)", marginTop: 2 }}>
                         {done}/{rosterRows.length} completed{avg != null ? ` · class average ${avg}/${a.count}` : ""}
                       </div>

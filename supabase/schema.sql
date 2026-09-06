@@ -327,9 +327,11 @@ create table if not exists assignments (
   topic_id text not null,
   title text,
   count integer not null default 10 check (count between 1 and 200),
+  subs text[] not null default '{}',  -- subtopic keys; empty = whole topic ("General")
   due_at timestamptz,
   created_at timestamptz not null default now()
 );
+alter table assignments add column if not exists subs text[] not null default '{}';
 alter table assignments enable row level security;
 
 drop policy if exists asg_select on assignments;
