@@ -10658,7 +10658,7 @@ export default function MathsUnlockedBN() {
               <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{rosterProfile.name}</div>
               <button onClick={() => setRosterProfile(null)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Close</button>
             </div>
-            {!teacherAccount && rosterProfile.uid && (() => {
+            {rosterProfile.uid && (() => {
               const st = friendState(rosterProfile.uid);
               if (st === "self") return null;
               const busy = friendBusy === rosterProfile.uid;
