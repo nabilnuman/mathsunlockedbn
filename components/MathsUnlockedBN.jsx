@@ -8985,10 +8985,10 @@ export default function MathsUnlockedBN() {
                       style={{ width: "100%", textAlign: "left", marginTop: 6, borderRadius: 10, padding: "9px 11px", cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1,
                         background: p.complete && !p.running ? "color-mix(in srgb, var(--green) 8%, var(--paper))" : "var(--paper)",
                         border: `1px solid ${p.overdue ? "var(--red)" : p.complete && !p.running ? "var(--green)" : "var(--grid)"}` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5 }}>
+                      <div style={{ fontSize: 12.5 }}>
                         <strong>{p.complete && !p.running ? "✓ " : ""}{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
-                        <span style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", flexShrink: 0 }}>{status}{due}</span>
                       </div>
+                      <div style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{status}{due}</div>
                       {asgSubLabel(a) && <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>{asgSubLabel(a)}</div>}
                       {p.running && (
                         <div style={{ height: 5, borderRadius: 999, background: "var(--grid)", marginTop: 6, overflow: "hidden" }}>
@@ -9904,7 +9904,7 @@ export default function MathsUnlockedBN() {
                 const avg = done ? (scores.reduce((s, v) => s + v, 0) / done).toFixed(1) : null;
                 return (
                   <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5 }}>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
                       {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
                       <div style={{ color: "var(--muted)", marginTop: 2 }}>
@@ -9914,7 +9914,7 @@ export default function MathsUnlockedBN() {
                         {done}/{rosterRows.length} completed{avg != null ? ` · class average ${avg}/${a.count}` : ""}
                       </div>
                     </div>
-                    <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                    <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}>Remove</button>
                   </div>
                 );
               })}
