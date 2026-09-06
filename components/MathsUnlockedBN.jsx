@@ -6945,10 +6945,11 @@ export default function MathsUnlockedBN() {
   const [joinCode, setJoinCode] = useState("");
   const [joinMsg, setJoinMsg] = useState(null);               // { ok, text }
   const [joinBusy, setJoinBusy] = useState(false);
-  const [asgForm, setAsgForm] = useState({ topicId: TOPICS[0].id, count: 15, days: 7, name: "" });
+  const [asgForm, setAsgForm] = useState({ topicId: TOPICS[0].id, count: 15, days: 7, name: "", subs: [] });
   const [asgBusy, setAsgBusy] = useState(false);
   const [classLic, setClassLic] = useState({ licensed: false });
   const [joinClassOpen, setJoinClassOpen] = useState(false);
+  const [subPickerOpen, setSubPickerOpen] = useState(false);
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
@@ -9808,27 +9809,22 @@ export default function MathsUnlockedBN() {
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>days</span>
                 <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1 }}>Set</button>
               </div>
-              {SUBTOPICS[asgForm.topicId] && (
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Subtopics:</span>
-                  {(() => {
-                    const chip = (on, label, onClick) => (
-                      <button onClick={onClick} style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, cursor: "pointer",
-                        background: on ? "var(--blue)" : "var(--paper)", color: on ? "var(--on-accent)" : "var(--muted)", border: `1px solid ${on ? "var(--blue)" : "var(--grid)"}` }}>{label}</button>
-                    );
-                    return (<>
-                      {chip((asgForm.subs || []).length === 0, "General (all)", () => setAsgForm((f) => ({ ...f, subs: [] })))}
-                      {SUBTOPICS[asgForm.topicId].map((s) => {
-                        const on = (asgForm.subs || []).includes(s.key);
-                        return chip(on, s.name, () => setAsgForm((f) => {
-                          const cur = f.subs || [];
-                          return { ...f, subs: on ? cur.filter((k) => k !== s.key) : [...cur, s.key] };
-                        }));
-                      })}
-                    </>);
-                  })()}
-                </div>
-              )}
+              {SUBTOPICS[asgForm.topicId] && (() => {
+                const list = SUBTOPICS[asgForm.topicId];
+                const chosen = (asgForm.subs || []).filter((k) => list.some((s) => s.key === k));
+                const label = chosen.length === 0
+                  ? "General — whole topic"
+                  : chosen.length === 1
+                    ? list.find((s) => s.key === chosen[0]).name
+                    : `${chosen.length} subtopics`;
+                return (
+                  <div style={{ marginBottom: 12 }}>
+                    <button onClick={() => setSubPickerOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 12px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      🎯 Subtopics: <span style={{ color: "var(--muted)", fontWeight: 500 }}>{label}</span> <span style={{ color: "var(--blue)" }}>change</span>
+                    </button>
+                  </div>
+                );
+              })()}
               {classAsg.map((a) => {
                 const scores = rosterRows.map((s) => assignmentProgress(s, a).best).filter((v) => v != null);
                 const done = scores.length;
@@ -10899,6 +10895,37 @@ export default function MathsUnlockedBN() {
                 {joinBusy ? "Joining…" : "Join"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {subPickerOpen && SUBTOPICS[asgForm.topicId] && (
+        <div onClick={() => setSubPickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 85 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 22, maxWidth: 400, width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 10px 40px var(--shadow)" }}>
+            <div className="mub-display" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Choose subtopics</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
+              {TOPIC_BY_ID[asgForm.topicId]?.name} — pick a set for this homework, or leave it on <strong>General</strong> for the whole topic.
+            </div>
+            {(() => {
+              const list = SUBTOPICS[asgForm.topicId];
+              const cur = asgForm.subs || [];
+              const rows = [{ key: "__all__", name: "General — whole topic" }, ...list];
+              return rows.map((s) => {
+                const isAll = s.key === "__all__";
+                const on = isAll ? cur.length === 0 : cur.includes(s.key);
+                return (
+                  <button key={s.key} onClick={() => setAsgForm((f) => {
+                    if (isAll) return { ...f, subs: [] };
+                    const c = f.subs || [];
+                    return { ...f, subs: c.includes(s.key) ? c.filter((k) => k !== s.key) : [...c, s.key] };
+                  })} style={{ display: "flex", width: "100%", alignItems: "center", gap: 10, padding: "11px 6px", background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", textAlign: "left", fontSize: 13, color: "var(--ink)" }}>
+                    <span style={{ width: 18, height: 18, flexShrink: 0, borderRadius: isAll ? "50%" : 5, border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: on ? "var(--blue)" : "transparent", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--on-accent)", fontSize: 11, fontWeight: 900 }}>{on ? "✓" : ""}</span>
+                    {s.name}
+                  </button>
+                );
+              });
+            })()}
+            <button onClick={() => setSubPickerOpen(false)} style={{ marginTop: 14, width: "100%", fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "10px 14px", cursor: "pointer" }}>Done</button>
           </div>
         </div>
       )}
