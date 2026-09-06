@@ -8698,19 +8698,19 @@ export default function MathsUnlockedBN() {
       <div className="mub-grid" style={{ borderRadius: 20, padding: "clamp(16px, 4vw, 28px)", flex: 1 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 10px", minWidth: 0 }}>
             {(() => {
               const home = profile.name && screen !== "login" && screen !== "parent";
               return (
-                <span
-                  className="mub-display"
+                <img
+                  src="/logo-mark.png" alt="MathsUnlocked"
                   onClick={() => { if (home) { setActiveTopic(null); setFriendView(null); setScreen("dashboard"); } }}
-                  style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5, cursor: home ? "pointer" : "default" }}
+                  style={{ height: 30, width: "auto", display: "block", flexShrink: 0, cursor: home ? "pointer" : "default" }}
                   title={home ? "Home" : undefined}
-                >MathsUnlocked</span>
+                />
               );
             })()}
-            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 5, padding: "1px 5px", alignSelf: "center" }}>BETA</span>
+            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 5, padding: "1px 5px" }}>BETA</span>
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
