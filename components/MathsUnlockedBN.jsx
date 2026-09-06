@@ -5731,6 +5731,7 @@ const SCHOOLS = [
     "Sayyidina Umar Al-Khattab Secondary School (SMSUA)",
     "Sengkurong Secondary School",
     "Seri Mulia Sarjana School (SMSS)",
+    "Sports School Brunei Darussalam",
     "St. Andrew's School",
     "St. George's School",
     "Sultan Muhammad Jamalul Alam Secondary School (SM SMJA)",
