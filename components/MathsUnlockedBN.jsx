@@ -12,8 +12,13 @@ import {
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
   loadAssignments, createAssignment, deleteAssignment, classLicensed,
   sendFeedback, recentFeedback,
+  savePushSubscription, deletePushSubscription, notifyPush,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
+import {
+  registerServiceWorker, onInstallAvailable, promptInstall, isStandalone, isIos,
+  pushConfigured, pushSupported, pushPermission, isPushSubscribed, subscribeToPush, unsubscribeFromPush,
+} from "../lib/pwa";
 
 const APP_VERSION = "beta-2026.09.06";
 
@@ -6960,12 +6965,50 @@ export default function MathsUnlockedBN() {
   const [fbBusy, setFbBusy] = useState(false);
   const [fbDone, setFbDone] = useState(false);
   const [fbInbox, setFbInbox] = useState(null); // teacher: null=unloaded, []=loaded
+  const [canInstallApp, setCanInstallApp] = useState(false);
+  const [installHidden, setInstallHidden] = useState(true);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
   const nextRef = useRef(null);
   const profileRef = useRef(profile);
   useEffect(() => { profileRef.current = profile; });
+
+  // PWA: register the service worker, watch for the install prompt, and
+  // read whether the student has dismissed the "install" banner before.
+  useEffect(() => { registerServiceWorker(); }, []);
+  useEffect(() => onInstallAvailable(setCanInstallApp), []);
+  useEffect(() => {
+    try { setInstallHidden(localStorage.getItem("mub_install_hidden") === "1"); } catch (e) { setInstallHidden(false); }
+  }, []);
+  // Keep the Settings "Notifications" toggle in sync with the real state.
+  useEffect(() => { isPushSubscribed().then(setPushOn); }, [settingsOpen]);
+
+  async function togglePush() {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await unsubscribeFromPush(deletePushSubscription);
+        setPushOn(false);
+      } else {
+        const r = await subscribeToPush(savePushSubscription);
+        if (r.ok) setPushOn(true);
+        else flash(r.error || "Couldn't turn on notifications.");
+      }
+    } catch (e) { flash("Couldn't change notifications — try again."); }
+    setPushBusy(false);
+  }
+  function dismissInstall() {
+    setInstallHidden(true);
+    try { localStorage.setItem("mub_install_hidden", "1"); } catch (e) { /* ignore */ }
+  }
+  async function doInstall() {
+    const outcome = await promptInstall();
+    if (outcome === "accepted" || outcome === "unavailable") dismissInstall();
+  }
 
   // Only auto-focus inputs on devices with a real pointer (desktop). On
   // touch, focusing pops the on-screen keyboard over the question — let
@@ -7432,7 +7475,7 @@ export default function MathsUnlockedBN() {
     try {
       if (ch.mode === "create") {
         const res = await createBlitzChallenge(ch.opponentUid, ch.questions, sc);
-        if (res && res.challenge) ch.id = res.challenge.id;
+        if (res && res.challenge) { ch.id = res.challenge.id; notifyPush("blitz", res.challenge.id); }
         setChallengeResult({ mode: "create", opponentName: ch.opponentName, myScore: sc, opponentScore: null });
       } else {
         await submitBlitzChallengeScore(ch.id, sc);
@@ -8213,7 +8256,11 @@ export default function MathsUnlockedBN() {
     setAsgBusy(true);
     const res = await createAssignment(activeClass.id, topicId, n, due, title, subs.length < list.length ? subs : []);
     setAsgBusy(false);
-    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); setAsgForm((f) => ({ ...f, name: "", subs: [] })); }
+    if (res.ok) {
+      setClassAsg((a) => [res.assignment, ...a]);
+      setAsgForm((f) => ({ ...f, name: "", subs: [] }));
+      if (res.assignment && res.assignment.id) notifyPush("homework", res.assignment.id);
+    }
     else flash(res.error || "Couldn't set the homework.");
   }
   async function doDeleteAssignment(id) {
@@ -8871,6 +8918,21 @@ export default function MathsUnlockedBN() {
         {/* DASHBOARD */}
         {screen === "dashboard" && (
           <div>
+            {profile.name && !isStandalone() && !installHidden && (canInstallApp || isIos()) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--blue)", background: "var(--card)" }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>📲</span>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
+                  <div style={{ fontWeight: 700 }}>Add MathsUnlocked to your home screen</div>
+                  <div style={{ color: "var(--muted)" }}>
+                    {canInstallApp ? "One tap — opens like an app, no browser bar." : "Tap the Share button, then “Add to Home Screen”."}
+                  </div>
+                </div>
+                {canInstallApp && (
+                  <button onClick={doInstall} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>Install</button>
+                )}
+                <button onClick={dismissInstall} aria-label="Dismiss" style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={15} /></button>
+              </div>
+            )}
             <div style={{ marginBottom: 18 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button onClick={() => setShowCard(true)} style={{ position: "relative", background: "none", border: "none", padding: 0, cursor: "pointer", flexShrink: 0, borderRadius: "50%" }}>
@@ -11006,6 +11068,11 @@ export default function MathsUnlockedBN() {
               { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
               ...(teacherAccount ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
               { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
+              ...((pushConfigured() && pushSupported()) ? [{
+                icon: "🔔", label: "Notifications",
+                value: pushBusy ? "…" : pushPermission() === "denied" ? "Blocked" : pushOn ? "On" : "Off",
+                onClick: togglePush,
+              }] : []),
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
             ].map((it, i) => (
               <button key={i} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 16px", background: "none", border: "none", borderTop: "1px solid var(--grid)", cursor: "pointer", color: it.danger ? "var(--red)" : "var(--ink)", textAlign: "left" }}>

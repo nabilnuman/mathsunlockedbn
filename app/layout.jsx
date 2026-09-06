@@ -3,6 +3,17 @@ import "./globals.css";
 export const metadata = {
   title: "MathsUnlockedBN",
   description: "Practice engine for O-Level Maths — MathsUnlockedBN",
+  manifest: "/manifest.webmanifest",
+  applicationName: "MathsUnlocked",
+  appleWebApp: { capable: true, title: "MathsUnlocked", statusBarStyle: "default" },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport = {
+  themeColor: "#3B6FA0",
 };
 
 // Paint the correct theme background on <html> before React hydrates, so

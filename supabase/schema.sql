@@ -580,3 +580,25 @@ as $$
 $$;
 revoke all on function public.recent_feedback(int) from public, anon;
 grant execute on function public.recent_feedback(int) to authenticated;
+
+-- ============================================================
+--  12. WEB PUSH SUBSCRIPTIONS
+--     One row per browser/device that opted in. The client writes
+--     its own rows (RLS); the `send-push` Edge Function reads every
+--     row with the service-role key and delivers via VAPID.
+--     Deploy steps are in supabase/functions/send-push/README.md.
+-- ============================================================
+create table if not exists push_subscriptions (
+  endpoint text primary key,
+  uid uuid not null default auth.uid(),
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+alter table push_subscriptions enable row level security;
+
+drop policy if exists ps_own on push_subscriptions;
+create policy ps_own on push_subscriptions for all to authenticated
+  using (uid = auth.uid()) with check (uid = auth.uid());
+-- (no anon access; the sender uses the service-role key and bypasses RLS)
