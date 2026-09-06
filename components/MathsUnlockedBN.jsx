@@ -6921,6 +6921,7 @@ export default function MathsUnlockedBN() {
   const [schoolSubTab, setSchoolSubTab] = useState("alltime"); // within the School tab: "alltime" | "week"
   const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
   const [rosterProfile, setRosterProfile] = useState(null); // a leaderboard student whose full profile is shown in a modal
+  const [openAsgId, setOpenAsgId] = useState(null); // teacher: assignment whose submission breakdown is expanded
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResults, setFriendResults] = useState(null); // null = not searched yet
   const [friendLoading, setFriendLoading] = useState(false);
@@ -9899,22 +9900,49 @@ export default function MathsUnlockedBN() {
                 );
               })()}
               {classAsg.map((a) => {
-                const scores = rosterRows.map((s) => assignmentProgress(s, a).best).filter((v) => v != null);
+                const rows = rosterRows.map((s) => ({ s, p: assignmentProgress(s, a) }));
+                const scores = rows.map((r) => r.p.best).filter((v) => v != null);
                 const done = scores.length;
-                const avg = done ? (scores.reduce((s, v) => s + v, 0) / done).toFixed(1) : null;
+                const avg = done ? (scores.reduce((x, v) => x + v, 0) / done).toFixed(1) : null;
+                const open = openAsgId === a.id;
+                const submitted = rows.filter((r) => r.p.complete);
+                const started = rows.filter((r) => !r.p.complete && (r.p.running || r.p.attempts > 0));
+                const notStarted = rows.filter((r) => !r.p.complete && !r.p.running && !(r.p.attempts > 0));
                 return (
-                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
-                      {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
-                      <div style={{ color: "var(--muted)", marginTop: 2 }}>
-                        {TOPIC_BY_ID[a.topic_id]?.name}{asgSubLabel(a) ? ` · ${asgSubLabel(a)}` : ""} · {a.count} Qs
-                      </div>
-                      <div style={{ color: "var(--muted)", marginTop: 2 }}>
-                        {done}/{rosterRows.length} completed{avg != null ? ` · class average ${avg}/${a.count}` : ""}
-                      </div>
+                  <div key={a.id} style={{ border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5, overflow: "hidden" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px" }}>
+                      <button onClick={() => setOpenAsgId(open ? null : a.id)} style={{ minWidth: 0, flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--ink)" }}>
+                        <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
+                        {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
+                        <div style={{ color: "var(--muted)", marginTop: 2 }}>
+                          {TOPIC_BY_ID[a.topic_id]?.name}{asgSubLabel(a) ? ` · ${asgSubLabel(a)}` : ""} · {a.count} Qs
+                        </div>
+                        <div style={{ color: "var(--muted)", marginTop: 2 }}>
+                          {done}/{rosterRows.length} submitted{avg != null ? ` · class average ${avg}/${a.count}` : ""} · <span style={{ color: "var(--blue)", fontWeight: 700 }}>{open ? "hide" : "who?"}</span>
+                        </div>
+                      </button>
+                      <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}>Remove</button>
                     </div>
-                    <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}>Remove</button>
+                    {open && (
+                      <div style={{ borderTop: "1px solid var(--grid)", background: "var(--paper)", padding: "8px 10px" }}>
+                        {rosterRows.length === 0 && <div style={{ color: "var(--muted)" }}>No students in this class yet.</div>}
+                        {[
+                          ["Submitted", submitted, "var(--green)", (p) => `${p.best}/${p.total}${p.attempts > 1 ? ` · ${p.attempts} tries` : ""}`],
+                          ["In progress", started, "var(--amber)", (p) => p.running ? `Q ${p.inRun}/${p.total}` : "started"],
+                          ["Not started", notStarted, "var(--muted)", () => "—"],
+                        ].map(([label, list, col, fmt]) => list.length > 0 && (
+                          <div key={label} style={{ marginBottom: 6 }}>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: col, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{label} · {list.length}</div>
+                            {list.map(({ s, p }) => (
+                              <div key={s.uid} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "3px 0" }}>
+                                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name || "—"}</span>
+                                <span style={{ color: "var(--muted)", flexShrink: 0 }}>{fmt(p)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
