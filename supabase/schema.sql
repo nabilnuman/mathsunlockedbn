@@ -15,6 +15,21 @@ create table if not exists kv_store (
   primary key (scope, key)
 );
 
+-- `default now()` only fires on INSERT, so an upsert that updates an
+-- existing row would leave updated_at frozen at creation time. This
+-- trigger bumps it on every write, so class_roster()'s "last active"
+-- is real. Safe to re-run.
+create or replace function public.kv_touch_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+drop trigger if exists kv_touch on kv_store;
+create trigger kv_touch before insert or update on kv_store
+  for each row execute function public.kv_touch_updated_at();
+
 -- ============================================================
 --  2. TEACHER ALLOWLIST
 --     After you first sign in to the app, find your auth uid in
