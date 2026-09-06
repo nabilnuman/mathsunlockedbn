@@ -11,8 +11,11 @@ import {
   getMyTeacher, createClass, myTeacherClasses, updateClass, deleteClass,
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
   loadAssignments, createAssignment, deleteAssignment, classLicensed,
+  sendFeedback, recentFeedback,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
+
+const APP_VERSION = "beta-2026.09.06";
 
 // Email-based PIN recovery is off by default: Supabase's built-in mailer
 // only delivers to your org's team members, so it can't reach students
@@ -6950,6 +6953,12 @@ export default function MathsUnlockedBN() {
   const [classLic, setClassLic] = useState({ licensed: false });
   const [joinClassOpen, setJoinClassOpen] = useState(false);
   const [subPickerOpen, setSubPickerOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [fbText, setFbText] = useState("");
+  const [fbRating, setFbRating] = useState(0);
+  const [fbBusy, setFbBusy] = useState(false);
+  const [fbDone, setFbDone] = useState(false);
+  const [fbInbox, setFbInbox] = useState(null); // teacher: null=unloaded, []=loaded
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
@@ -8255,6 +8264,39 @@ export default function MathsUnlockedBN() {
   async function doLeaveClass(classId) {
     await leaveClass(classId);
     await refreshClasses();
+  }
+
+  function openFeedback() {
+    setFbText("");
+    setFbRating(0);
+    setFbDone(false);
+    setFbBusy(false);
+    setFeedbackOpen(true);
+  }
+  async function doSendFeedback() {
+    const msg = fbText.trim();
+    if (!msg || fbBusy) return;
+    setFbBusy(true);
+    const q = activeTopic && question;
+    const res = await sendFeedback({
+      name: profile.name || null,
+      message: msg,
+      rating: fbRating || null,
+      context: {
+        version: APP_VERSION,
+        screen,
+        topic: activeTopic ? activeTopic.name : null,
+        question: q && q.prompt ? String(q.prompt).slice(0, 300) : null,
+      },
+    });
+    setFbBusy(false);
+    if (res.ok) setFbDone(true);
+    else flash(res.error ? `Couldn't send: ${res.error}` : "Couldn't send — try again.");
+  }
+  async function loadFeedbackInbox() {
+    setFbInbox(null);
+    const rows = await recentFeedback(300);
+    setFbInbox(rows);
   }
 
   async function doPinReset(uid) {
@@ -9754,6 +9796,37 @@ export default function MathsUnlockedBN() {
                   </button>
                 ))}
               </div>
+
+              <div style={{ marginTop: 24, borderTop: "1px solid var(--grid)", paddingTop: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div className="mub-display" style={{ fontSize: 15, fontWeight: 700 }}>💬 Beta feedback</div>
+                  <button onClick={loadFeedbackInbox} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
+                    {fbInbox === null ? "Load" : "Refresh"}
+                  </button>
+                </div>
+                {fbInbox !== null && (
+                  fbInbox.length === 0
+                    ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>No feedback yet.</div>
+                    : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                        {fbInbox.map((f) => (
+                          <div key={f.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
+                              <span><strong style={{ color: "var(--ink)" }}>{f.name || "Someone"}</strong>{f.rating ? ` · ${"⭐".repeat(f.rating)}` : ""}</span>
+                              <span>{timeAgo(f.created_at)}</span>
+                            </div>
+                            <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{f.message}</div>
+                            {f.context && (f.context.topic || f.context.screen) && (
+                              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                                {f.context.topic ? `Topic: ${f.context.topic}` : `Screen: ${f.context.screen}`}
+                                {f.context.question ? ` · “${f.context.question}”` : ""}
+                                {f.context.version ? ` · ${f.context.version}` : ""}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                )}
+              </div>
             </div>
           );
         })()}
@@ -10846,6 +10919,7 @@ export default function MathsUnlockedBN() {
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
               { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
               ...(teacherAccount ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
+              { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
               { icon: "↪", label: "Log out", danger: true, onClick: () => { setSettingsOpen(false); switchStudent(); } },
             ].map((it, i) => (
               <button key={i} onClick={it.onClick} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "13px 16px", background: "none", border: "none", borderTop: "1px solid var(--grid)", cursor: "pointer", color: it.danger ? "var(--red)" : "var(--ink)", textAlign: "left" }}>
@@ -10858,6 +10932,51 @@ export default function MathsUnlockedBN() {
                 {it.chevron && <span style={{ fontSize: 13, color: "var(--muted)" }}>›</span>}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {feedbackOpen && (
+        <div onClick={() => setFeedbackOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 85 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 22, maxWidth: 400, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            {fbDone ? (
+              <>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Thanks! 🙏</div>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                  Your feedback was sent. It really helps during the beta.
+                </div>
+                <button onClick={() => setFeedbackOpen(false)} style={{ width: "100%", fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "10px 14px", cursor: "pointer" }}>Close</button>
+              </>
+            ) : (
+              <>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Send feedback</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
+                  Found a bug, something confusing, or have an idea? Tell us — this is a beta and every note helps.
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} onClick={() => setFbRating(fbRating === n ? 0 : n)} aria-label={`${n} stars`}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 0, filter: n <= fbRating ? "none" : "grayscale(1) opacity(0.35)" }}>⭐</button>
+                  ))}
+                </div>
+                <textarea
+                  value={fbText}
+                  onChange={(e) => setFbText(e.target.value.slice(0, 2000))}
+                  placeholder="What happened? What were you trying to do?"
+                  rows={5}
+                  style={{ width: "100%", boxSizing: "border-box", marginBottom: 8, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, fontFamily: "Inter, sans-serif", background: "var(--card)", color: "var(--ink)", resize: "vertical" }}
+                />
+                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
+                  We'll also attach: your name{activeTopic ? `, the "${activeTopic.name}" screen` : `, the screen you're on`}, and the app version — so we can find the problem.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setFeedbackOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Cancel</button>
+                  <button onClick={doSendFeedback} disabled={fbBusy || !fbText.trim()} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: fbBusy || !fbText.trim() ? 0.6 : 1 }}>
+                    {fbBusy ? "Sending…" : "Send"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

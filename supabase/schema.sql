@@ -519,3 +519,49 @@ end;
 $$;
 revoke all on function public.class_licensed(uuid) from public, anon;
 grant execute on function public.class_licensed(uuid) to authenticated;
+
+-- ============================================================
+--  11. BETA FEEDBACK
+--     Any signed-in student can drop a note from ⚙ Settings.
+--     They can read their own notes back; teachers (uid in
+--     `teachers`) read everything through recent_feedback().
+--     No updates or deletes from the client.
+-- ============================================================
+create table if not exists feedback (
+  id uuid primary key default gen_random_uuid(),
+  student_uid uuid not null default auth.uid(),
+  name text,
+  message text not null,
+  rating smallint check (rating between 1 and 5),
+  context jsonb not null default '{}',   -- { screen, topic, question, version }
+  created_at timestamptz not null default now()
+);
+alter table feedback enable row level security;
+
+drop policy if exists fb_insert on feedback;
+create policy fb_insert on feedback for insert to authenticated
+  with check (student_uid = auth.uid() and length(message) between 1 and 4000);
+
+drop policy if exists fb_own_select on feedback;
+create policy fb_own_select on feedback for select to authenticated
+  using (student_uid = auth.uid());
+
+-- Teacher inbox: newest first, capped. Teacher-only (returns nothing
+-- for a non-teacher caller).
+create or replace function public.recent_feedback(lim int default 200)
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+           'id', id, 'name', coalesce(name, ''), 'message', message,
+           'rating', rating, 'context', context, 'created_at', created_at)
+  from feedback
+  where auth.uid() in (select uid from teachers)
+  order by created_at desc
+  limit greatest(1, least(coalesce(lim, 200), 500))
+$$;
+revoke all on function public.recent_feedback(int) from public, anon;
+grant execute on function public.recent_feedback(int) to authenticated;
