@@ -6837,7 +6837,7 @@ export default function MathsUnlockedBN() {
   const [joinCode, setJoinCode] = useState("");
   const [joinMsg, setJoinMsg] = useState(null);               // { ok, text }
   const [joinBusy, setJoinBusy] = useState(false);
-  const [asgForm, setAsgForm] = useState({ topicId: TOPICS[0].id, count: 15, days: 7 });
+  const [asgForm, setAsgForm] = useState({ topicId: TOPICS[0].id, count: 15, days: 7, name: "" });
   const [asgBusy, setAsgBusy] = useState(false);
   const [classLic, setClassLic] = useState({ licensed: false });
   const [joinClassOpen, setJoinClassOpen] = useState(false);
@@ -8062,14 +8062,15 @@ export default function MathsUnlockedBN() {
   }
   async function doCreateAssignment() {
     if (!activeClass || asgBusy) return;
-    const { topicId, count, days } = asgForm;
+    const { topicId, count, days, name } = asgForm;
     const n = Math.max(1, Math.min(200, parseInt(count, 10) || 10));
     const due = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
-    const title = TOPIC_BY_ID[topicId] ? `${TOPIC_BY_ID[topicId].name} — mark out of ${n}` : `Mark out of ${n}`;
+    const title = (name || "").trim()
+      || (TOPIC_BY_ID[topicId] ? `${TOPIC_BY_ID[topicId].name} — mark out of ${n}` : `Mark out of ${n}`);
     setAsgBusy(true);
     const res = await createAssignment(activeClass.id, topicId, n, due, title);
     setAsgBusy(false);
-    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); }
+    if (res.ok) { setClassAsg((a) => [res.assignment, ...a]); setAsgForm((f) => ({ ...f, name: "" })); }
     else flash(res.error || "Couldn't set the homework.");
   }
   async function doDeleteAssignment(id) {
@@ -9667,6 +9668,7 @@ export default function MathsUnlockedBN() {
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Homework</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                <input value={asgForm.name} onChange={(e) => setAsgForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name (e.g. Arithmetic 1)" style={{ ...inp, padding: "8px 10px", width: 170 }} />
                 <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value }))} style={{ ...inp, padding: "8px 8px", maxWidth: 160 }}>
                   {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
@@ -10371,6 +10373,25 @@ export default function MathsUnlockedBN() {
               <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{rosterProfile.name}</div>
               <button onClick={() => setRosterProfile(null)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Close</button>
             </div>
+            {classAsg.length > 0 && rosterRows.some((r) => r.uid === rosterProfile.uid) && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Homework history</div>
+                {[...classAsg].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)).map((a) => {
+                  const p = assignmentProgress(rosterProfile, a);
+                  return (
+                    <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "7px 10px", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 5, fontSize: 12.5 }}>
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {TOPIC_BY_ID[a.topic_id]?.icon} {a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id}`}
+                      </span>
+                      <span style={{ flexShrink: 0, fontWeight: 700, color: p.best == null ? "var(--muted)" : p.best >= a.count * 0.8 ? "var(--green)" : p.best >= a.count * 0.5 ? "var(--amber)" : "var(--red)" }}>
+                        {p.best == null ? (p.running ? `mid (${p.inRun}/${a.count})` : "not done") : `${p.best}/${a.count}`}
+                        {p.attempts > 1 && <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {p.attempts} tries</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <StudentProfileView profile={rosterProfile} />
           </div>
         </div>
