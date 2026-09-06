@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Users } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -6758,7 +6758,7 @@ const emptyProfile = () => ({
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
   cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
-  seenChallenges: [],
+  seenChallenges: [], seenAch: [],
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0,
@@ -7538,6 +7538,9 @@ export default function MathsUnlockedBN() {
       }
       // Seed "seen" icons so the new-unlock dots only flag genuinely new ones.
       if (!Array.isArray(prof.seenIcons)) prof.seenIcons = unlockedAvatarIds(prof);
+      // Same for achievements — an existing account shouldn't light up for
+      // everything it already earned before this feature existed.
+      if (!Array.isArray(prof.seenAch)) prof.seenAch = [...(prof.achievements || [])];
       await saveProfile(prof);
       loadCustomQuestions(); // shared reads need a session
       refreshFriends();
@@ -8606,6 +8609,13 @@ export default function MathsUnlockedBN() {
   // Earned achievements double as profile icons; a red dot flags the ones
   // the student hasn't seen offered yet (clears when they open the picker).
   const newIconCount = unlockedAvatarIds(profile).filter((id) => !(profile.seenIcons || []).includes(id)).length;
+  // Achievements earned but not yet seen in the trophy panel — red dot on
+  // the trophy icon and on each new row, cleared when the panel closes.
+  const newAchIds = (profile.achievements || []).filter((id) => !(profile.seenAch || []).includes(id));
+  const closeAch = () => {
+    setAchOpen(false);
+    if (newAchIds.length) patchProfile((p) => ({ seenAch: [...new Set([...(p.seenAch || []), ...(p.achievements || [])])] }));
+  };
   const myLevel = levelFromExp(totalExp(profile));
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
@@ -8642,7 +8652,17 @@ export default function MathsUnlockedBN() {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
-            <span className="mub-display" style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>MathsUnlocked</span>
+            {(() => {
+              const home = profile.name && screen !== "login" && screen !== "parent";
+              return (
+                <span
+                  className="mub-display"
+                  onClick={() => { if (home) { setActiveTopic(null); setFriendView(null); setScreen("dashboard"); } }}
+                  style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5, cursor: home ? "pointer" : "default" }}
+                  title={home ? "Home" : undefined}
+                >MathsUnlocked</span>
+              );
+            })()}
             <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 5, padding: "1px 5px", alignSelf: "center" }}>BETA</span>
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
@@ -8678,11 +8698,12 @@ export default function MathsUnlockedBN() {
                   {friendAlert && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
                 <button onClick={() => setAchOpen(true)} aria-label="Achievements" title="Achievements" style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
                   border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
                 }}>
                   <Trophy size={15} />
+                  {newAchIds.length > 0 && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
                 <button onClick={() => setMissionsOpen(true)} aria-label="Missions" title="Missions" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
@@ -10578,10 +10599,23 @@ export default function MathsUnlockedBN() {
       </div>
 
       <div style={{ padding: "16px 16px 22px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", fontSize: 11.5, color: "var(--muted)" }}>
-        <a href="https://www.instagram.com/mathsunlockedbn?igsi=MThmZWl6Y3E5YW9rNg==" target="_blank" rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--muted)", textDecoration: "none", fontWeight: 700 }}>
-          MathsUnlockedBN <Instagram size={13} />
-        </a>
+        <span style={{ fontWeight: 700 }}>MathsUnlockedBN</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <a href="https://www.instagram.com/mathsunlockedbn?igsi=MThmZWl6Y3E5YW9rNg==" target="_blank" rel="noopener noreferrer"
+            aria-label="Instagram" style={{ display: "inline-flex", color: "var(--muted)" }}>
+            <Instagram size={14} />
+          </a>
+          <a href="https://www.facebook.com/share/19W83bLzfP/" target="_blank" rel="noopener noreferrer"
+            aria-label="Facebook" style={{ display: "inline-flex", color: "var(--muted)" }}>
+            <Facebook size={14} />
+          </a>
+          <a href="https://www.tiktok.com/@mathsunlockedbn" target="_blank" rel="noopener noreferrer"
+            aria-label="TikTok" style={{ display: "inline-flex", color: "var(--muted)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16.5 3c.3 2.2 1.6 3.9 3.8 4.2v2.6c-1.3.1-2.6-.3-3.8-1v6.6c0 3.6-2.6 6-6 6a5.7 5.7 0 0 1-5.8-5.8c0-3.6 3.2-6.3 6.9-5.6v2.8c-.5-.1-1-.2-1.5-.2-1.7 0-3 1.4-3 3s1.3 3 3 3 3-1.4 3-3V3h3.4z" />
+            </svg>
+          </a>
+        </span>
         <span style={{ opacity: 0.6 }}>|</span>
         <span>© 2026 MathsUnlockedBN &nbsp;·&nbsp; All rights reserved</span>
       </div>
@@ -10624,6 +10658,27 @@ export default function MathsUnlockedBN() {
               <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{rosterProfile.name}</div>
               <button onClick={() => setRosterProfile(null)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>Close</button>
             </div>
+            {!teacherAccount && rosterProfile.uid && (() => {
+              const st = friendState(rosterProfile.uid);
+              if (st === "self") return null;
+              const busy = friendBusy === rosterProfile.uid;
+              const btn = (label, kind, bg) => (
+                <button onClick={() => doFriendAction(kind, rosterProfile.uid)} disabled={busy}
+                  style={{ fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: bg, border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{label}</button>
+              );
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  {st === "friend" ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>✓ Friends</span>
+                      <button onClick={() => doFriendAction("remove", rosterProfile.uid)} disabled={busy} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>Remove</button>
+                    </div>
+                  ) : st === "incoming" ? btn("Accept friend request", "accept", "var(--green)")
+                    : st === "outgoing" ? <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600 }}>Friend request sent</span>
+                    : btn("+ Add friend", "request", "var(--blue)")}
+                </div>
+              );
+            })()}
             {classAsg.length > 0 && rosterRows.some((r) => r.uid === rosterProfile.uid) && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Homework history</div>
@@ -10765,7 +10820,7 @@ export default function MathsUnlockedBN() {
       })()}
 
       {achOpen && (
-        <div onClick={() => setAchOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+        <div onClick={closeAch} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 420, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <span className="mub-display" style={{ fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
@@ -10774,7 +10829,7 @@ export default function MathsUnlockedBN() {
                   {(profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length}/{ACHIEVEMENTS.length}
                 </span>
               </span>
-              <button onClick={() => setAchOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              <button onClick={closeAch} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
             </div>
             <button onClick={() => setAchHideDone((v) => !v)} style={{
               fontSize: 12, fontWeight: 600, marginBottom: 14, cursor: "pointer",
@@ -10801,14 +10856,17 @@ export default function MathsUnlockedBN() {
                       {items.map((a) => {
                         const unlocked = (profile.achievements || []).includes(a.id);
                         const hidden = a.secret && !unlocked;
+                        const fresh = unlocked && newAchIds.includes(a.id);
                         return (
                           <div key={a.id} style={{
+                            position: "relative",
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
                             background: unlocked ? "var(--card)" : "transparent",
                             border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
                             boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
                             opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
                           }}>
+                            {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                             <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontWeight: 700 }}>{hidden ? "???" : a.name}</div>
