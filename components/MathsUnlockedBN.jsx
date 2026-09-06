@@ -7111,13 +7111,15 @@ export default function MathsUnlockedBN() {
   }, [theme]);
 
 
-  // Teacher-only screens are unreachable without the ?teacher=1 unlock
-  // (admin / question bank) or a real teacher account (classes).
+  // Teacher-only screens need a real teacher account. Admin / question bank
+  // additionally want the ?teacher=1 opt-in; classes just need the account.
   useEffect(() => {
-    if (!teacherMode && (screen === "admin" || screen === "questions")) {
+    if (!ready) return;
+    const adminOk = teacherMode && teacherAccount === true;
+    if (!adminOk && (screen === "admin" || screen === "questions")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-    if (!teacherAccount && ready && (screen === "classes" || screen === "classDetail")) {
+    if (!teacherAccount && (screen === "classes" || screen === "classDetail")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
   }, [teacherMode, teacherAccount, ready, screen, profile.name]);
@@ -8664,6 +8666,10 @@ export default function MathsUnlockedBN() {
     if (newAchIds.length) patchProfile((p) => ({ seenAch: [...new Set([...(p.seenAch || []), ...(p.achievements || [])])] }));
   };
   const myLevel = levelFromExp(totalExp(profile));
+  // `teacherMode` (the ?teacher=1 localStorage flag) is browser-local and
+  // not tied to an account, so on its own it must never expose the admin
+  // surfaces or the dev/cheat tools — require a real teacher account too.
+  const devUnlocked = teacherMode && teacherAccount === true;
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
@@ -8724,12 +8730,12 @@ export default function MathsUnlockedBN() {
                 🎓 Classes
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && teacherMode && screen !== "admin" && (
+            {screen !== "login" && screen !== "parent" && devUnlocked && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && teacherMode && screen !== "questions" && (
+            {screen !== "login" && screen !== "parent" && devUnlocked && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
@@ -8879,7 +8885,7 @@ export default function MathsUnlockedBN() {
                 )}
               </div>
             )}
-            {teacherMode && (
+            {devUnlocked && (
               <div style={{ textAlign: "center", marginTop: 14, display: "flex", justifyContent: "center", gap: 16 }}>
                 <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
                   Admin view
@@ -8984,7 +8990,7 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {teacherMode && (
+              {devUnlocked && (
                 <div style={{ border: "1px dashed var(--amber)", borderRadius: 10, padding: "10px 12px", marginTop: 12, fontSize: 12 }}>
                   <button onClick={() => setDevOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 700, color: "var(--amber)" }}>
                     <span>🛠 Teacher / dev tools <span style={{ fontWeight: 400, color: "var(--muted)" }}>— affects your own account</span></span>
