@@ -9909,7 +9909,7 @@ export default function MathsUnlockedBN() {
                 const started = rows.filter((r) => !r.p.complete && (r.p.running || r.p.attempts > 0));
                 const notStarted = rows.filter((r) => !r.p.complete && !r.p.running && !(r.p.attempts > 0));
                 return (
-                  <div key={a.id} style={{ border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5, overflow: "hidden" }}>
+                  <div key={a.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5, overflow: "hidden" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px" }}>
                       <button onClick={() => setOpenAsgId(open ? null : a.id)} style={{ minWidth: 0, flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--ink)" }}>
                         <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
@@ -9918,7 +9918,7 @@ export default function MathsUnlockedBN() {
                           {TOPIC_BY_ID[a.topic_id]?.name}{asgSubLabel(a) ? ` · ${asgSubLabel(a)}` : ""} · {a.count} Qs
                         </div>
                         <div style={{ color: "var(--muted)", marginTop: 2 }}>
-                          {done}/{rosterRows.length} submitted{avg != null ? ` · class average ${avg}/${a.count}` : ""} · <span style={{ color: "var(--blue)", fontWeight: 700 }}>{open ? "hide" : "who?"}</span>
+                          {done}/{rosterRows.length} submitted{avg != null ? ` · class average ${avg}/${a.count}` : ""}
                         </div>
                       </button>
                       <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}>Remove</button>
@@ -9950,7 +9950,7 @@ export default function MathsUnlockedBN() {
 
               {rosterRows.length > 0 && (<>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>Where the class stands</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: 12 }}>
                   {TOPICS.map((t) => {
                     const idxs = rosterRows.map((s) => ((s.topics || {})[t.id] || {}).highestRank ?? -1).filter((v) => v >= 0);
                     if (!idxs.length) return null;
