@@ -6503,13 +6503,23 @@ function timeAgo(iso) {
   return d === 1 ? "yesterday" : `${d} days ago`;
 }
 
-// Progress toward a teacher's assignment: questions answered in its topic
-// since the student first saw it (asgSeen baseline).
+// A student's standing on a teacher's assignment. Homework is a mark out
+// of `count`: they answer `count` questions of the topic, their score is
+// how many they got right, and `best` only ever ratchets up (retry to
+// improve). `inRun` is how far through the current attempt they are.
 function assignmentProgress(profile, a) {
-  const attempts = ((profile.topicAttempts || {})[a.topic_id]) || 0;
-  const base = (profile.asgSeen || {})[a.id];
-  const done = Math.max(0, attempts - (base === undefined ? attempts : base));
-  return { done, total: a.count, complete: done >= a.count, overdue: a.due_at && Date.now() > new Date(a.due_at).getTime() };
+  const rec = (profile.hw || {})[a.id];
+  const best = rec && typeof rec.best === "number" ? rec.best : null;
+  const run = profile.hwRun && profile.hwRun.assignmentId === a.id ? profile.hwRun : null;
+  return {
+    best,
+    total: a.count,
+    complete: best !== null,                 // finished at least one full attempt
+    inRun: run ? (run.done || 0) : 0,
+    running: !!run,
+    attempts: rec ? (rec.attempts || 0) : 0,
+    overdue: a.due_at && Date.now() > new Date(a.due_at).getTime(),
+  };
 }
 
 /* A topic unlocks once every prerequisite topic has reached at least
@@ -6641,7 +6651,7 @@ const emptyProfile = () => ({
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0,
-  topicAttempts: {}, asgSeen: {}, // per-topic lifetime attempts + assignment baselines (homework tracking)
+  hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 const genToken = () => {
@@ -7596,6 +7606,22 @@ export default function MathsUnlockedBN() {
     setScreen("quiz");
   }
 
+  // Start (or resume) a teacher homework run: a fixed number of questions
+  // in one topic, scored as a mark out of that number.
+  function startHomework(a) {
+    const topic = TOPIC_BY_ID[a.topic_id];
+    if (!topic) return;
+    if (!isUnlocked(topic, profile)) { flash("That topic isn't unlocked yet — practise its prerequisites first."); return; }
+    const run = (profile.hwRun && profile.hwRun.assignmentId === a.id)
+      ? profile.hwRun
+      : { assignmentId: a.id, topicId: a.topic_id, count: a.count, done: 0, correct: 0 };
+    patchProfile(() => ({ hwRun: run }));
+    startTopic(topic);
+  }
+  function quitHomework() {
+    if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
+  }
+
   // "back to topics" while a question sits unanswered — leaving and
   // re-entering a topic normally re-rolls a fresh question, which is easy
   // to abuse to dodge anything that isn't easy. Track it for "Nice Try";
@@ -7830,7 +7856,6 @@ export default function MathsUnlockedBN() {
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
     next.topics[scoredId] = t;
-    next.topicAttempts = { ...(next.topicAttempts || {}), [scoredId]: ((next.topicAttempts || {})[scoredId] || 0) + 1 }; // homework progress
     const rankedUp = t.highestRank > rankBefore
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
@@ -7903,12 +7928,32 @@ export default function MathsUnlockedBN() {
     }
     if (next.dodgeTopic === scoredId) { next.dodgeTopic = null; next.dodgeCount = 0; }
 
+    // Teacher homework: count this question toward the run in progress.
+    // At question N the run finalises — best score ratchets up, never down,
+    // and they can retry unlimited times to beat it.
+    let hwComplete = null;
+    const run = next.hwRun;
+    if (run && (question.topicId || activeTopic.id) === run.topicId) {
+      const done = (run.done || 0) + 1;
+      const gotRight = (run.correct || 0) + (correct ? 1 : 0);
+      if (done >= run.count) {
+        const prev = (next.hw && next.hw[run.assignmentId] && next.hw[run.assignmentId].best);
+        const best = Math.max(prev ?? -1, gotRight);
+        next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: ((next.hw && next.hw[run.assignmentId] && next.hw[run.assignmentId].attempts) || 0) + 1 } };
+        next.hwRun = null;
+        hwComplete = { assignmentId: run.assignmentId, topicId: run.topicId, count: run.count, score: gotRight, best, improved: gotRight > (prev ?? -1), first: prev === undefined || prev === null };
+      } else {
+        next.hwRun = { ...run, done, correct: gotRight };
+      }
+    }
+
     const unlocked = awardAchievements(next);
     const bonusSound = unlocked.length > 0 || leveledTo;
     if (bonusSound) playJingle(!!leveledTo);
+    else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
-    if (!correct) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp });
+    if (!correct && !hwComplete) playWrong();
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete });
     saveProfile(next);
   }
 
@@ -8020,7 +8065,7 @@ export default function MathsUnlockedBN() {
     const { topicId, count, days } = asgForm;
     const n = Math.max(1, Math.min(200, parseInt(count, 10) || 10));
     const due = days ? new Date(Date.now() + days * 86400000).toISOString() : null;
-    const title = TOPIC_BY_ID[topicId] ? `${count} ${TOPIC_BY_ID[topicId].name} questions` : `${count} questions`;
+    const title = TOPIC_BY_ID[topicId] ? `${TOPIC_BY_ID[topicId].name} — mark out of ${n}` : `Mark out of ${n}`;
     setAsgBusy(true);
     const res = await createAssignment(activeClass.id, topicId, n, due, title);
     setAsgBusy(false);
@@ -8035,7 +8080,7 @@ export default function MathsUnlockedBN() {
     if (!activeClass || !rosterRows.length) return;
     const cols = ["Name", "Level", "Prestige", "Best streak", "Total correct", "Topics started", "Achievements", "Last active"];
     const topicCols = TOPICS.map((t) => t.name);
-    const head = [...cols, ...topicCols, ...classAsg.map((a) => a.title || `Homework ${a.topic_id}`)];
+    const head = [...cols, ...topicCols, ...classAsg.map((a) => `HW: ${a.title || (TOPIC_BY_ID[a.topic_id]?.name || a.topic_id)} (/${a.count})`)];
     const rows = rosterRows.map((s) => {
       const started = TOPICS.filter((t) => ((s.topics || {})[t.id] || {}).history?.length > 0).length;
       const base = [
@@ -8044,7 +8089,7 @@ export default function MathsUnlockedBN() {
         s.joined_at ? new Date(s.joined_at).toLocaleDateString() : "",
       ];
       const ranks = TOPICS.map((t) => rankDisplay(((s.topics || {})[t.id] || {}).highestRank).label);
-      const hw = classAsg.map((a) => { const p = assignmentProgress(s, a); return `${p.done}/${p.total}`; });
+      const hw = classAsg.map((a) => { const p = assignmentProgress(s, a); return p.best == null ? "—" : `${p.best}/${p.total}`; });
       return [...base, ...ranks, ...hw];
     });
     const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
@@ -8156,20 +8201,9 @@ export default function MathsUnlockedBN() {
       const ids = classes.map((c) => c.class_id);
       const asg = ids.length ? await loadAssignments(ids) : [];
       setAssignments(asg);
-      // Snapshot the baseline attempt count the first time we see each
-      // assignment, so "do 15 questions" counts from now, not all-time.
-      // patchProfile's updater form is used so this can't clobber a
-      // profile still mid-restore.
-      const cur = profileRef.current || {};
-      if (asg.some((a) => (cur.asgSeen || {})[a.id] === undefined)) {
-        patchProfile((prev) => {
-          const seen = { ...(prev.asgSeen || {}) };
-          for (const a of asg) {
-            if (seen[a.id] === undefined) seen[a.id] = (prev.topicAttempts || {})[a.topic_id] || 0;
-          }
-          return { asgSeen: seen };
-        });
-      }
+      // If a homework run points at an assignment that's gone, drop it.
+      const run = (profileRef.current || {}).hwRun;
+      if (run && !asg.some((a) => a.id === run.assignmentId)) patchProfile(() => ({ hwRun: null }));
     } catch (e) { /* offline */ }
   }
 
@@ -8435,6 +8469,7 @@ export default function MathsUnlockedBN() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "0 10px", minWidth: 0 }}>
             <span className="mub-display" style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.5 }}>MathsUnlocked</span>
+            <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 5, padding: "1px 5px", alignSelf: "center" }}>BETA</span>
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
@@ -8763,30 +8798,34 @@ export default function MathsUnlockedBN() {
                     {c.name}{c.teacher_name ? ` · ${c.teacher_name}` : ""}
                   </div>
                 ))}
-                {assignments.filter((a) => !assignmentProgress(profile, a).complete).map((a) => {
+                {[...assignments].sort((x, y) => Number(assignmentProgress(profile, x).complete) - Number(assignmentProgress(profile, y).complete)).map((a) => {
                   const p = assignmentProgress(profile, a);
                   const topic = TOPIC_BY_ID[a.topic_id];
                   const locked = topic && !isUnlocked(topic, profile);
-                  const pct = Math.min(100, Math.round((p.done / p.total) * 100));
+                  const status = locked ? "🔒 unlocks later"
+                    : p.running ? `resume · Q ${p.inRun + 1} of ${p.total}`
+                    : p.complete ? `best ${p.best}/${p.total} · retry to improve`
+                    : `mark out of ${p.total}`;
+                  const due = a.due_at ? ` · ${p.overdue ? "overdue" : `due ${new Date(a.due_at).toLocaleDateString()}`}` : "";
                   return (
-                    <button key={a.id} onClick={() => topic && !locked && startTopic(topic)} disabled={locked}
-                      style={{ width: "100%", textAlign: "left", background: "var(--paper)", border: `1px solid ${p.overdue ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, padding: "9px 11px", marginTop: 6, cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1 }}>
+                    <button key={a.id} onClick={() => !locked && startHomework(a)} disabled={locked}
+                      style={{ width: "100%", textAlign: "left", marginTop: 6, borderRadius: 10, padding: "9px 11px", cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1,
+                        background: p.complete && !p.running ? "color-mix(in srgb, var(--green) 8%, var(--paper))" : "var(--paper)",
+                        border: `1px solid ${p.overdue ? "var(--red)" : p.complete && !p.running ? "var(--green)" : "var(--grid)"}` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5 }}>
-                        <strong>{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
-                        <span style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", flexShrink: 0 }}>
-                          {locked ? "🔒 unlocks later" : `${p.done}/${p.total}${a.due_at ? ` · ${p.overdue ? "overdue" : `due ${new Date(a.due_at).toLocaleDateString()}`}` : ""}`}
-                        </span>
+                        <strong>{p.complete && !p.running ? "✓ " : ""}{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
+                        <span style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", flexShrink: 0 }}>{status}{due}</span>
                       </div>
-                      {!locked && (
+                      {p.running && (
                         <div style={{ height: 5, borderRadius: 999, background: "var(--grid)", marginTop: 6, overflow: "hidden" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", background: "var(--blue)" }} />
+                          <div style={{ width: `${Math.round((p.inRun / p.total) * 100)}%`, height: "100%", background: "var(--blue)" }} />
                         </div>
                       )}
                     </button>
                   );
                 })}
                 {assignments.length > 0 && assignments.every((a) => assignmentProgress(profile, a).complete) && (
-                  <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, marginTop: 6 }}>✓ All homework done — nice.</div>
+                  <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, marginTop: 8 }}>✓ All homework done — retry any to push your score up.</div>
                 )}
               </div>
             )}
@@ -9104,6 +9143,20 @@ export default function MathsUnlockedBN() {
             <button onClick={leaveQuizUnanswered} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
               <ArrowLeft size={14} /> back to topics
             </button>
+
+            {profile.hwRun && (question.topicId || activeTopic.id) === profile.hwRun.topicId && (() => {
+              const r = profile.hwRun;
+              const rec = (profile.hw || {})[r.assignmentId];
+              return (
+                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: "1px solid var(--blue)", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
+                  <span style={{ fontWeight: 700, color: "var(--blue)" }}>
+                    📋 Homework · Q {(r.done || 0) + 1} of {r.count}
+                    <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.correct || 0} right so far{rec && typeof rec.best === "number" ? ` · best ${rec.best}/${r.count}` : ""}</span>
+                  </span>
+                  <button onClick={quitHomework} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}>exit</button>
+                </div>
+              );
+            })()}
 
             <div style={{
               maxWidth: 520, margin: "0 auto", background: "var(--card)", border: "1px solid var(--grid)",
@@ -9481,10 +9534,37 @@ export default function MathsUnlockedBN() {
                       <LevelBar profile={profile} />
                     </div>
                   )}
-                  <div>
-                    <button ref={nextRef} onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                      Next question →
-                    </button>
+                  {feedback.hwComplete && (() => {
+                    const h = feedback.hwComplete;
+                    return (
+                      <div className="mub-stamp" style={{ marginBottom: 12, background: "var(--paper)", border: "2px solid var(--green)", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "var(--green)", marginBottom: 2 }}>🎉 Homework complete!</div>
+                        <div style={{ fontSize: 13, color: "var(--ink)" }}>
+                          You scored <strong>{h.score}/{h.count}</strong>.{" "}
+                          {h.first
+                            ? "That's your homework mark."
+                            : h.improved
+                              ? <span style={{ color: "var(--green)", fontWeight: 700 }}>New best — mark updated!</span>
+                              : `Your best stays ${h.best}/${h.count}.`}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>You can retry as many times as you like — your mark only ever goes up.</div>
+                      </div>
+                    );
+                  })()}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {feedback.hwComplete ? (<>
+                      <button ref={nextRef} onClick={() => startHomework({ id: feedback.hwComplete.assignmentId, topic_id: feedback.hwComplete.topicId, count: feedback.hwComplete.count })}
+                        style={{ padding: "9px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                        🔁 Retry to improve
+                      </button>
+                      <button onClick={() => { setActiveTopic(null); setScreen("dashboard"); }} style={{ padding: "9px 18px", background: "none", color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                        Done
+                      </button>
+                    </>) : (
+                      <button ref={nextRef} onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                        Next question →
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -9597,13 +9677,17 @@ export default function MathsUnlockedBN() {
                 <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1 }}>Set</button>
               </div>
               {classAsg.map((a) => {
-                const done = rosterRows.filter((s) => assignmentProgress(s, a).complete).length;
+                const scores = rosterRows.map((s) => assignmentProgress(s, a).best).filter((v) => v != null);
+                const done = scores.length;
+                const avg = done ? (scores.reduce((s, v) => s + v, 0) / done).toFixed(1) : null;
                 return (
                   <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5 }}>
                     <div>
                       <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
                       {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
-                      <div style={{ color: "var(--muted)", marginTop: 2 }}>{done}/{rosterRows.length} students done</div>
+                      <div style={{ color: "var(--muted)", marginTop: 2 }}>
+                        {done}/{rosterRows.length} completed{avg != null ? ` · class average ${avg}/${a.count}` : ""}
+                      </div>
                     </div>
                     <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                   </div>
@@ -9665,7 +9749,7 @@ export default function MathsUnlockedBN() {
                               <span key={a.id} title={a.title || ""} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
                                 background: p.complete ? "var(--green)" : "var(--paper)", color: p.complete ? "var(--on-accent)" : "var(--muted)",
                                 border: `1px solid ${p.complete ? "var(--green)" : "var(--grid)"}` }}>
-                                {TOPIC_BY_ID[a.topic_id]?.icon} {p.done}/{p.total}
+                                {TOPIC_BY_ID[a.topic_id]?.icon} {p.best == null ? (p.running ? `Q${p.inRun}/${p.total}` : `–/${p.total}`) : `${p.best}/${p.total}`}
                               </span>
                             );
                           })}
