@@ -11068,6 +11068,14 @@ export default function MathsUnlockedBN() {
               { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
               ...(teacherAccount ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
               { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
+              ...((!isStandalone() && (canInstallApp || isIos())) ? [{
+                icon: "📲", label: "Install app", chevron: true,
+                onClick: () => {
+                  setSettingsOpen(false);
+                  if (canInstallApp) doInstall();
+                  else flash("Tap your browser's Share button, then “Add to Home Screen”.");
+                },
+              }] : []),
               ...((pushConfigured() && pushSupported()) ? [{
                 icon: "🔔", label: "Notifications",
                 value: pushBusy ? "…" : pushPermission() === "denied" ? "Blocked" : pushOn ? "On" : "Off",
