@@ -8,7 +8,7 @@ import {
   teacherResetPin, changePin,
   sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
   createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
-  getMyTeacher, getMyEntitlement, createClass, myTeacherClasses, updateClass, deleteClass,
+  getMyTeacher, createClass, myTeacherClasses, updateClass, deleteClass,
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
   loadAssignments, createAssignment, deleteAssignment, classLicensed,
 } from "../lib/auth";
@@ -6815,7 +6815,6 @@ export default function MathsUnlockedBN() {
   const [teacherMode, setTeacherMode] = useState(false);
   // ---- classes / licences / assignments (B2B) ----
   const [teacherAccount, setTeacherAccount] = useState(null); // { uid, name } if this login is a teacher
-  const [entitlement, setEntitlement] = useState({ premium: false });
   const [studentClasses, setStudentClasses] = useState([]);   // classes the student is in (my_classes)
   const [assignments, setAssignments] = useState([]);         // assignment rows for those classes
   const [teacherClasses, setTeacherClasses] = useState([]);   // classes this teacher owns
@@ -8142,13 +8141,12 @@ export default function MathsUnlockedBN() {
     (friendGraph.friends || []).some((u) => !(profile.seenFriends || []).includes(u)) ||
     challengeAlert;
 
-  // Teacher status, premium entitlement, and — for a student — the
-  // classes they're in plus any homework their teacher has set.
+  // Teacher status and — for a student — the classes they're in plus any
+  // homework their teacher has set.
   async function refreshClasses() {
     try {
-      const [tch, ent] = await Promise.all([getMyTeacher(), getMyEntitlement()]);
+      const tch = await getMyTeacher();
       setTeacherAccount(tch);
-      setEntitlement(ent || { premium: false });
       if (tch) {
         setTeacherClasses(await myTeacherClasses());
         return;
@@ -8655,7 +8653,6 @@ export default function MathsUnlockedBN() {
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
                     <span>· Current streak: {profile.streak || 0} 🔥</span>
-                    {entitlement.premium && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--on-accent)", background: "var(--green)", borderRadius: 999, padding: "1px 7px" }}>✦ PREMIUM</span>}
                   </div>
                 </button>
               </div>
@@ -8758,9 +8755,8 @@ export default function MathsUnlockedBN() {
 
             {(assignments.length > 0 || studentClasses.some((c) => !c.archived)) && (
               <div style={{ border: "1px solid var(--blue)", borderRadius: 14, padding: 14, marginBottom: 16, background: "var(--card)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: assignments.length ? 10 : 0 }}>
+                <div style={{ marginBottom: assignments.length ? 10 : 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 0.5 }}>📋 From your teacher</span>
-                  {entitlement.premium && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--on-accent)", background: "var(--green)", borderRadius: 999, padding: "2px 8px" }}>✦ PREMIUM</span>}
                 </div>
                 {studentClasses.filter((c) => !c.archived).map((c) => (
                   <div key={c.class_id} style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
@@ -9572,10 +9568,10 @@ export default function MathsUnlockedBN() {
               </div>
 
               <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 10, fontSize: 12.5,
-                background: "var(--paper)", border: `1px solid ${classLic.licensed ? "var(--green)" : "var(--amber)"}`, color: "var(--ink)" }}>
+                background: "var(--paper)", border: `1px solid ${classLic.licensed ? "var(--green)" : "var(--grid)"}`, color: "var(--ink)" }}>
                 {classLic.licensed
-                  ? <>✓ <strong>Licensed</strong> — your students have the full app{classLic.expires_at ? ` until ${new Date(classLic.expires_at).toLocaleDateString()}` : ""}.</>
-                  : <>⚠ <strong>No licence</strong> — your students are on the free tier. A class or school licence unlocks everything for them.</>}
+                  ? <>✓ <strong>Licence active</strong>{classLic.expires_at ? ` — until ${new Date(classLic.expires_at).toLocaleDateString()}` : ""}.</>
+                  : <><strong>Free trial</strong> — no licence on this class yet. Everything works; a licence is the paid plan for keeping the class dashboard running.</>}
               </div>
 
               <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
