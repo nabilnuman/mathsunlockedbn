@@ -7126,6 +7126,8 @@ export default function MathsUnlockedBN() {
   const [asgBusy, setAsgBusy] = useState(false);
   const [classLic, setClassLic] = useState({ licensed: false });
   const [joinClassOpen, setJoinClassOpen] = useState(false);
+  const [pendingJoin, setPendingJoin] = useState(null); // ?join=<code> to act on once signed in
+  const [joinLinkCopied, setJoinLinkCopied] = useState(false);
   const [subPickerOpen, setSubPickerOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [fbText, setFbText] = useState("");
@@ -7181,6 +7183,22 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (screen === "blitz" && blitzBoard === null) loadBlitzBoard();
   }, [screen, blitzBoard]);
+
+  // Class invite link: once the student is signed in, join the class from
+  // the ?join= code they arrived with (stashed in localStorage).
+  useEffect(() => {
+    if (!ready || !profile.name || !authUid || teacherAccount) return;
+    let code = null;
+    try { code = window.localStorage.getItem("mub_pendingjoin"); } catch (e) { /* ignore */ }
+    if (!code) return;
+    try { window.localStorage.removeItem("mub_pendingjoin"); } catch (e) { /* ignore */ }
+    setPendingJoin(null);
+    (async () => {
+      const res = await joinClass(code);
+      if (res.ok) { flash(`✓ Joined ${res.name}${res.teacher_name ? ` · ${res.teacher_name}` : ""}`); await refreshClasses(); }
+      else flash(res.error || "That class invite didn't work.");
+    })();
+  }, [ready, profile.name, authUid, teacherAccount]);
 
   // Daily Challenge live timer.
   useEffect(() => {
@@ -7298,6 +7316,20 @@ export default function MathsUnlockedBN() {
         if (params.get("teacher") === "1") window.localStorage.setItem("mub_teacher", "1");
         if (params.get("teacher") === "0") window.localStorage.removeItem("mub_teacher");
         if (window.localStorage.getItem("mub_teacher") === "1") setTeacherMode(true);
+        // Class invite link: ?join=<code> — remember it and join once the
+        // student is signed in (a separate effect below acts on it).
+        const jc = (params.get("join") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+        if (jc.length === 6) {
+          window.localStorage.setItem("mub_pendingjoin", jc);
+          setPendingJoin(jc);
+          try {
+            params.delete("join");
+            const q = params.toString();
+            window.history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + window.location.hash);
+          } catch (e) { /* ignore */ }
+        } else {
+          setPendingJoin(window.localStorage.getItem("mub_pendingjoin") || null);
+        }
       } catch (e) { /* defaults are fine */ }
 
       // Parent Link: ?p=<token> shows a read-only view of one student,
@@ -9164,6 +9196,11 @@ export default function MathsUnlockedBN() {
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
+            {pendingJoin && (
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--blue)", background: "color-mix(in srgb, var(--blue) 10%, var(--card))", border: "1px solid var(--blue)", borderRadius: 10, padding: "8px 12px", marginBottom: 14 }}>
+                🎓 Class invite ({pendingJoin}) — sign in and you&rsquo;ll be added to the class automatically.
+              </div>
+            )}
 
             <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>All 30 topics from the checklist are here. Foundational topics start open; the rest unlock once their prerequisite topic reaches rank C. Enter the same name and PIN next time to pick up where you left off.</div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
@@ -10432,7 +10469,20 @@ export default function MathsUnlockedBN() {
               <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Join code</div>
                 <div className="mub-mono" style={{ fontSize: 30, fontWeight: 800, letterSpacing: 4, margin: "4px 0" }}>{activeClass.join_code}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>Students: open the app → ⚙ Settings → <strong>Join a class</strong> → enter this code.</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 6px" }}>
+                  <button
+                    onClick={async () => {
+                      const link = `${window.location.origin}/?join=${activeClass.join_code}`;
+                      try { await navigator.clipboard.writeText(link); } catch (e) { /* ignore */ }
+                      setJoinLinkCopied(true);
+                      setTimeout(() => setJoinLinkCopied(false), 2000);
+                    }}
+                    style={{ ...prim }}
+                  >{joinLinkCopied ? "✓ Copied" : "🔗 Copy invite link"}</button>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+                  Send students the link — they click it, sign in, and they&rsquo;re in this class. Or they can enter the code manually at ⚙ Settings → <strong>Join a class</strong>.
+                </div>
               </div>
 
               <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
