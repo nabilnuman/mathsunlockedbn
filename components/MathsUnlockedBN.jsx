@@ -6984,7 +6984,7 @@ function CelebrationOverlay({ c, onDone }) {
   useEffect(() => {
     if (!c) return;
     setGi(0);
-    const dur = { prestige: 3000, firstsplus: 2600, bigach: 2200, levelup: 1500, daily1: 2200, groupsplus: 1700 }[c.kind] || 2200;
+    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, levelup: 1500, daily1: 2200, groupsplus: 1700 }[c.kind] || 2200;
     if (c.kind === "groupsplus") {
       const groups = (c.data && c.data.groups) || [];
       let i = 0, t;
@@ -7008,11 +7008,11 @@ function CelebrationOverlay({ c, onDone }) {
     const n = (c.data && c.data.n) || 1;
     return (
       <div className="mub-cel" style={wrap}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #C99A1E, #7C5CFF)", animation: "celFlash 1s ease-out forwards" }} />
-        <Confetti count={170} duration={2900} />
-        <div style={{ textAlign: "center", animation: "celSlam 0.7s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 3s ease forwards" }}>
-          <PrestigeBadge prestige={n} size={92} />
-          <div className="mub-display" style={{ fontSize: 34, fontWeight: 900, color: "#fff", textShadow: "0 2px 14px rgba(0,0,0,0.55)", marginTop: 8 }}>PRESTIGE {n}</div>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #C99A1E, #7C5CFF)", animation: "celFlash 1.1s ease-out forwards" }} />
+        <Confetti count={190} duration={4200} />
+        <div style={{ display: "flex", alignItems: "center", gap: 22, animation: "celSlideH 0.7s cubic-bezier(.2,.9,.3,1.15) forwards, celFadeLong 4.8s ease forwards" }}>
+          <PrestigeBadge prestige={n} size={96} />
+          <div className="mub-display" style={{ fontSize: 40, fontWeight: 900, color: "#fff", textShadow: "0 2px 16px rgba(0,0,0,0.55)", letterSpacing: 1 }}>PRESTIGE {n}</div>
         </div>
       </div>
     );
@@ -7682,6 +7682,16 @@ export default function MathsUnlockedBN() {
   // Achievement (short) / level-up (long) arpeggios — waveform follows the pack.
   function playJingle(big) {
     playSeq(big ? [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5] : [523.25, 659.25, 783.99, 1046.5], { step: 0.1, dur: 0.36, wave: soundPackOf(profile).wave });
+  }
+
+  // Prestige — a brassy royal fanfare with a dotted "ta-ta-taaa", a rising
+  // flourish, and a held major chord.
+  function playRoyalFanfare() {
+    const w = "sawtooth";
+    playSeq([392, 392], { wave: w, step: 0.16, dur: 0.16, attack: 0.008, vol: 0.1 });          // ta-ta
+    setTimeout(() => playSeq([523.25], { wave: w, step: 0.1, dur: 0.5, attack: 0.01, vol: 0.11, detune: 6 }), 340);   // taaa
+    setTimeout(() => playSeq([523.25, 659.25, 783.99, 1046.5], { wave: w, step: 0.115, dur: 0.32, attack: 0.01, vol: 0.1 }), 900);  // rising flourish
+    setTimeout(() => playSeq([392, 523.25, 659.25, 783.99, 1046.5], { wave: "triangle", step: 0, dur: 1.5, attack: 0.04, vol: 0.085 }), 1420); // held regal chord
   }
 
   // Per-answer feedback — rising for correct, mirrored/softer for wrong.
@@ -8724,7 +8734,7 @@ export default function MathsUnlockedBN() {
     setConfirmPrestige(false);
     setActiveTopic(null);
     setScreen("dashboard");
-    playJingle(true);
+    playRoyalFanfare();
     saveProfile(cur);
     celebrate("prestige", { n: cur.prestige });
   }
@@ -9259,6 +9269,8 @@ export default function MathsUnlockedBN() {
         @keyframes celFlash { 0% { opacity: 0; } 10% { opacity: 0.85; } 100% { opacity: 0; } }
         @keyframes celSlam { 0% { transform: scale(3) rotate(-15deg); opacity: 0; } 55% { transform: scale(0.86) rotate(-15deg); opacity: 1; } 78% { transform: scale(1.07) rotate(-15deg); } 100% { transform: scale(1) rotate(-15deg); opacity: 1; } }
         @keyframes celFade { 0%,72% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes celFadeLong { 0%,85% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes celSlideH { 0% { transform: translateX(-80px); opacity: 0; } 62% { transform: translateX(9px); opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
         @keyframes celShimmer { 0% { transform: translateX(-130%) skewX(-16deg); } 100% { transform: translateX(130%) skewX(-16deg); } }
         @keyframes celCrown { 0% { transform: translateY(-160px) rotate(-24deg); opacity: 0; } 62% { transform: translateY(10px) rotate(7deg); opacity: 1; } 82% { transform: translateY(-5px) rotate(-4deg); } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
         @keyframes celRing { 0% { transform: scale(0.35); opacity: 0.85; } 100% { transform: scale(2.6); opacity: 0; } }
