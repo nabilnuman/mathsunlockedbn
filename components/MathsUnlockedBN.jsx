@@ -9097,7 +9097,7 @@ export default function MathsUnlockedBN() {
               )}
             </div>
 
-            {teacherAccount && (
+            {teacherAccount && !showNewDash && (
               <button onClick={openClasses} className="mub-card" style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--blue)", background: "var(--card)", cursor: "pointer", marginBottom: 14 }}>
                 <span style={{ fontSize: 24 }}>🎓</span>
                 <span style={{ minWidth: 0, flex: 1 }}>
@@ -9109,34 +9109,7 @@ export default function MathsUnlockedBN() {
             )}
 
             {showNewDash && (<>
-            {/* Quick Start — resume the last topic, streak on the side */}
-            {(() => {
-              const last = profile.lastTopicId && TOPIC_BY_ID[profile.lastTopicId];
-              const canResume = last && isUnlocked(last, profile);
-              const target = canResume ? last : TOPICS[0];
-              return (
-                <button onClick={() => startTopic(target)} className="mub-card" style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", borderRadius: 16,
-                  border: "none", background: "var(--blue)", color: "var(--on-accent)", cursor: "pointer", marginBottom: 12, textAlign: "left",
-                }}>
-                  <span style={{ fontSize: 24, lineHeight: 1 }}>▶</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 800, fontSize: 15.5 }}>
-                      {canResume ? `Continue ${last.name}` : "Start practising"}
-                    </span>
-                    <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>
-                      {canResume ? "pick up where you left off" : "jump straight in"}
-                    </span>
-                  </span>
-                  <span style={{ flexShrink: 0, textAlign: "center", lineHeight: 1.15 }}>
-                    <span className="mub-display" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>{profile.streak || 0} 🔥</span>
-                    <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>day streak</span>
-                  </span>
-                </button>
-              );
-            })()}
-
-            {/* Inventory · Perks · Assignments */}
+            {/* Inventory · Perks · (Classes | Assignments) */}
             {(() => {
               const util = {
                 flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
@@ -9155,13 +9128,44 @@ export default function MathsUnlockedBN() {
                     style={{ ...util, color: perksOk ? "var(--blue)" : "var(--muted)", opacity: perksOk ? 1 : 0.55, cursor: perksOk ? "pointer" : "default" }}>
                     <span style={{ fontSize: 17 }}>🎖</span>{perksOk ? "Perks" : "Perks 🔒"}
                   </button>
-                  {showAsg && (
+                  {teacherAccount ? (
+                    <button onClick={openClasses} style={{ ...util, color: "var(--blue)" }}>
+                      <span style={{ fontSize: 17 }}>🎓</span>Classes
+                    </button>
+                  ) : showAsg ? (
                     <button onClick={() => setScreen("assignments")} style={{ ...util, color: "var(--blue)", position: "relative" }}>
                       <span style={{ fontSize: 17 }}>📋</span>Assignments
                       {openHw && <span style={{ position: "absolute", top: 5, right: 8, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--card)", boxSizing: "border-box" }} />}
                     </button>
-                  )}
+                  ) : null}
                 </div>
+              );
+            })()}
+
+            {/* Quick Start — resume the last topic, streak on the side */}
+            {(() => {
+              const last = profile.lastTopicId && TOPIC_BY_ID[profile.lastTopicId];
+              const canResume = last && isUnlocked(last, profile);
+              const target = canResume ? last : TOPICS[0];
+              return (
+                <button onClick={() => startTopic(target)} className="mub-card" style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", borderRadius: 16,
+                  border: "none", background: "var(--blue)", color: "var(--on-accent)", cursor: "pointer", marginBottom: 16, textAlign: "left",
+                }}>
+                  <span style={{ fontSize: 24, lineHeight: 1 }}>▶</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontWeight: 800, fontSize: 15.5 }}>
+                      {canResume ? `Continue ${last.name}` : "Start practising"}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>
+                      {canResume ? "pick up where you left off" : "jump straight in"}
+                    </span>
+                  </span>
+                  <span style={{ flexShrink: 0, textAlign: "center", lineHeight: 1.15 }}>
+                    <span className="mub-display" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>{profile.streak || 0} 🔥</span>
+                    <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>streak</span>
+                  </span>
+                </button>
               );
             })()}
 
@@ -9194,9 +9198,12 @@ export default function MathsUnlockedBN() {
                       <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{g.name}</span>
                       <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)" }}>{nUnlocked} of {ids.length} topics unlocked</span>
                     </span>
-                    <span style={{ width: 42, height: 42, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                      background: `conic-gradient(${pct >= 80 ? "var(--green)" : "var(--blue)"} ${pct * 3.6}deg, var(--grid) 0deg)` }}>
-                      <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 800, color: "var(--ink)" }}>{pct}%</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      {pct >= 100 && <span title="Every topic mastered" style={{ fontSize: 15, lineHeight: 1 }}>⭐</span>}
+                      <span style={{ width: 42, height: 42, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                        background: `conic-gradient(${pct >= 100 ? "var(--amber)" : pct >= 80 ? "var(--green)" : "var(--blue)"} ${pct * 3.6}deg, var(--grid) 0deg)` }}>
+                        <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--card)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10.5, fontWeight: 800, color: "var(--ink)" }}>{pct}%</span>
+                      </span>
                     </span>
                   </button>
                 );
