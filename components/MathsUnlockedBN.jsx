@@ -9154,8 +9154,12 @@ export default function MathsUnlockedBN() {
                 }}>
                   <span style={{ fontSize: 24, lineHeight: 1 }}>▶</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 800, fontSize: 15.5 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 800, fontSize: 15.5 }}>
                       {canResume ? `Continue ${last.name}` : "Start practising"}
+                      {canResume && (() => {
+                        const r = rankDisplay((profile.topics[last.id] || {}).highestRank ?? -1);
+                        return <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, padding: "1px 6px", borderRadius: 6, background: "rgba(255,255,255,0.22)", color: "#fff" }}>{r.label}</span>;
+                      })()}
                     </span>
                     <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>
                       {canResume ? "pick up where you left off" : "jump straight in"}
