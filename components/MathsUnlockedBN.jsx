@@ -6946,7 +6946,6 @@ export default function MathsUnlockedBN() {
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
   const [teacherMode, setTeacherMode] = useState(false);
-  const [newUiFlag, setNewUiFlag] = useState(false); // ?newui=1 — preview the redesigned dashboard
   // ---- classes / licences / assignments (B2B) ----
   const [teacherAccount, setTeacherAccount] = useState(null); // { uid, name } if this login is a teacher
   const [studentClasses, setStudentClasses] = useState([]);   // classes the student is in (my_classes)
@@ -7104,10 +7103,6 @@ export default function MathsUnlockedBN() {
         if (params.get("teacher") === "1") window.localStorage.setItem("mub_teacher", "1");
         if (params.get("teacher") === "0") window.localStorage.removeItem("mub_teacher");
         if (window.localStorage.getItem("mub_teacher") === "1") setTeacherMode(true);
-        // Opt into the redesigned dashboard early. ?newui=1 / ?newui=0.
-        if (params.get("newui") === "1") window.localStorage.setItem("mub_newui", "1");
-        if (params.get("newui") === "0") window.localStorage.removeItem("mub_newui");
-        if (window.localStorage.getItem("mub_newui") === "1") setNewUiFlag(true);
       } catch (e) { /* defaults are fine */ }
 
       // Parent Link: ?p=<token> shows a read-only view of one student,
@@ -8726,10 +8721,6 @@ export default function MathsUnlockedBN() {
   // not tied to an account, so on its own it must never expose the admin
   // surfaces or the dev/cheat tools — require a real teacher account too.
   const devUnlocked = teacherMode && !!teacherAccount;
-  // Redesigned dashboard (Quick Start + 5 topic groups). Live for teacher
-  // accounts and anyone who opted in with ?newui=1, classic for everyone
-  // else — flip to always-on once it's proven.
-  const showNewDash = !!teacherAccount || newUiFlag;
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
@@ -9024,28 +9015,6 @@ export default function MathsUnlockedBN() {
               <div style={{ marginTop: 14 }}>
                 <LevelBar profile={profile} onPrestige={() => setConfirmPrestige(true)} onOpenUnlocks={() => setUnlocksOpen(true)} />
               </div>
-              {!showNewDash && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, maxWidth: 460 }}>
-                <button onClick={() => setInventoryOpen(true)} style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                  🎒 Inventory
-                </button>
-                {(() => {
-                  const perksOk = myLevel >= PERKS.compound.lv;
-                  return (
-                    <button onClick={() => perksOk && setPerksOpen(true)} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS.compound.lv}`} style={{
-                      flex: 1, fontSize: 12.5, fontWeight: 700, color: perksOk ? "var(--blue)" : "var(--muted)",
-                      background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "7px 14px",
-                      cursor: perksOk ? "pointer" : "default", opacity: perksOk ? 1 : 0.5,
-                      display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: "0 1px 3px var(--shadow-soft)",
-                    }}>
-                      🎖 Perks {perksOk
-                        ? <span style={{ letterSpacing: 1 }}>{(profile.perks || []).filter((p) => PERKS[p]).map((p) => PERKS[p].icon).join("")}</span>
-                        : <span style={{ fontSize: 11 }}>🔒 Lv {PERKS.compound.lv}</span>}
-                    </button>
-                  );
-                })()}
-              </div>
-              )}
               {(profile.boostUntil || 0) > Date.now() && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--green)", marginTop: 6 }}>
                   ⚡ ×2 XP · {Math.max(1, Math.ceil(((profile.boostUntil || 0) - Date.now()) / 60000))} min left
@@ -9102,18 +9071,6 @@ export default function MathsUnlockedBN() {
               )}
             </div>
 
-            {teacherAccount && !showNewDash && (
-              <button onClick={openClasses} className="mub-card" style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, border: "1px solid var(--blue)", background: "var(--card)", cursor: "pointer", marginBottom: 14 }}>
-                <span style={{ fontSize: 24 }}>🎓</span>
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Your classes</span>
-                  <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{teacherClasses.length} class{teacherClasses.length === 1 ? "" : "es"} — open the dashboard</span>
-                </span>
-                <span style={{ fontSize: 13, color: "var(--blue)", fontWeight: 700 }}>Open →</span>
-              </button>
-            )}
-
-            {showNewDash && (<>
             {/* Inventory · Perks · (Classes | Assignments) */}
             {(() => {
               const util = {
@@ -9218,158 +9175,6 @@ export default function MathsUnlockedBN() {
                 );
               })}
             </div>
-            </>)}
-
-            {!showNewDash && (<>
-            {(assignments.length > 0 || studentClasses.some((c) => !c.archived)) && (
-              <div style={{ border: "1px solid var(--blue)", borderRadius: 14, padding: 14, marginBottom: 16, background: "var(--card)" }}>
-                <div style={{ marginBottom: assignments.length ? 10 : 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase", letterSpacing: 0.5 }}>📋 From your teacher</span>
-                </div>
-                {studentClasses.filter((c) => !c.archived).map((c) => (
-                  <div key={c.class_id} style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
-                    {c.name}{c.teacher_name ? ` · ${c.teacher_name}` : ""}
-                  </div>
-                ))}
-                {[...assignments].sort((x, y) => Number(assignmentProgress(profile, x).complete) - Number(assignmentProgress(profile, y).complete)).map((a) => {
-                  const p = assignmentProgress(profile, a);
-                  const topic = TOPIC_BY_ID[a.topic_id];
-                  const locked = topic && !isUnlocked(topic, profile);
-                  const status = locked ? "🔒 unlocks later"
-                    : p.running ? `resume · Q ${p.inRun + 1} of ${p.total}`
-                    : p.complete ? `best ${p.best}/${p.total} · retry to improve`
-                    : `mark out of ${p.total}`;
-                  const due = a.due_at ? ` · ${p.overdue ? "overdue" : `due ${new Date(a.due_at).toLocaleDateString()}`}` : "";
-                  return (
-                    <button key={a.id} onClick={() => !locked && startHomework(a)} disabled={locked}
-                      style={{ width: "100%", textAlign: "left", marginTop: 6, borderRadius: 10, padding: "9px 11px", cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1,
-                        background: p.complete && !p.running ? "color-mix(in srgb, var(--green) 8%, var(--paper))" : "var(--paper)",
-                        border: `1px solid ${p.overdue ? "var(--red)" : p.complete && !p.running ? "var(--green)" : "var(--grid)"}` }}>
-                      <div style={{ fontSize: 12.5 }}>
-                        <strong>{p.complete && !p.running ? "✓ " : ""}{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
-                      </div>
-                      <div style={{ fontSize: 11, color: p.overdue ? "var(--red)" : "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{status}{due}</div>
-                      {asgSubLabel(a) && <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>{asgSubLabel(a)}</div>}
-                      {p.running && (
-                        <div style={{ height: 5, borderRadius: 999, background: "var(--grid)", marginTop: 6, overflow: "hidden" }}>
-                          <div style={{ width: `${Math.round((p.inRun / p.total) * 100)}%`, height: "100%", background: "var(--blue)" }} />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-                {assignments.length > 0 && assignments.every((a) => assignmentProgress(profile, a).complete) && (
-                  <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, marginTop: 8 }}>✓ All homework done — retry any to push your score up.</div>
-                )}
-              </div>
-            )}
-
-            {(() => {
-              const lvl = levelFromExp(totalExp(profile));
-              const mixedOpen = lvl >= MIXED_UNLOCK_LEVEL;
-              const blitzOpen = lvl >= BLITZ_UNLOCK_LEVEL;
-              const modeBtn = (open) => ({
-                width: "100%", textAlign: "left", cursor: open ? "pointer" : "not-allowed",
-                display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14,
-                border: `1px solid ${open ? "var(--blue)" : "var(--grid)"}`,
-                background: open ? "var(--card)" : "var(--locked)", opacity: open ? 1 : 0.6,
-              });
-              return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                  <button onClick={startMixed} disabled={!mixedOpen} className={mixedOpen ? "mub-card" : ""} style={modeBtn(mixedOpen)}>
-                    <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                        Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}
-                      </span>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        {mixedOpen
-                          ? "Random questions from every topic you've unlocked — answers still count toward each topic."
-                          : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
-                      </span>
-                    </span>
-                  </button>
-                  <button onClick={startBlitz} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
-                    <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                        Blitz {blitzOpen ? "" : `🔒 Level ${BLITZ_UNLOCK_LEVEL}`}
-                      </span>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        {blitzOpen
-                          ? `${BLITZ_SECONDS} seconds, tap-only questions — answer as many as you can.`
-                          : `Unlocks at Level ${BLITZ_UNLOCK_LEVEL}.`}
-                      </span>
-                    </span>
-                    {blitzOpen && (
-                      <span style={{ flexShrink: 0, textAlign: "center" }}>
-                        <span style={{ display: "block", fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Best</span>
-                        <span className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--blue)" }}>{profile.blitzBest || 0}</span>
-                      </span>
-                    )}
-                  </button>
-                </div>
-              );
-            })()}
-
-            {(() => {
-              const anyKeyButton = (profile.keys || 0) > 0 && TOPICS.some((t) => !isUnlocked(t, profile));
-              const cardHeight = anyKeyButton ? 134 : 108;
-              return (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))", gap: 10, marginBottom: 24 }}>
-              {TOPICS.map((t) => {
-                const topicState = profile.topics[t.id] || { history: [], highestRank: -1, streak: 0 };
-                const unlocked = isUnlocked(t, profile);
-                const rank = rankDisplay(topicState.highestRank);
-                return (
-                  <div
-                    key={t.id}
-                    onClick={() => startTopic(t)}
-                    className={unlocked ? "mub-card" : ""}
-                    title={unlocked ? undefined : lockedReason(t)}
-                    style={{
-                      position: "relative",
-                      background: unlocked ? "var(--card)" : "var(--locked)",
-                      border: "1px solid var(--grid)", borderRadius: 12, padding: "9px 11px",
-                      cursor: unlocked ? "pointer" : "not-allowed",
-                      opacity: unlocked ? 1 : 0.55,
-                      minHeight: cardHeight, display: "flex", flexDirection: "column",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
-                      <div style={{ fontSize: 20, filter: unlocked ? "none" : "grayscale(1)" }}>{t.icon}</div>
-                      {unlocked ? (
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", border: `2px solid ${rank.color}`, color: rank.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
-                          {rank.label}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 13, color: "var(--muted)" }}>🔒</div>
-                      )}
-                    </div>
-                    {unlocked && topicRankAtLeast(profile, t.id, "S+") && (
-                      <div title="Rank S+ complete" style={{ position: "absolute", right: 6, bottom: 6, fontSize: 13, lineHeight: 1 }}>⭐</div>
-                    )}
-                    <div style={{ fontWeight: 600, fontSize: 12.5, marginTop: 5, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.name}</div>
-                    <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {unlocked
-                        ? `${(topicState.streak || 0) > 0 ? "🔥 " : ""}${topicState.streak || 0} streak`
-                        : lockedReason(t)}
-                    </div>
-                    {!unlocked && (profile.keys || 0) > 0 && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setKeyTarget(t); }}
-                        style={{ marginTop: "auto", alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--blue)", borderRadius: 8, padding: "3px 8px", cursor: "pointer" }}
-                      >
-                        🗝 Use key
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-              );
-            })()}
-            </>)}
           </div>
         )}
 
