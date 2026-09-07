@@ -6984,7 +6984,7 @@ function CelebrationOverlay({ c, onDone }) {
   useEffect(() => {
     if (!c) return;
     setGi(0);
-    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, levelup: 1500, daily1: 2200, groupsplus: 1700 }[c.kind] || 2200;
+    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200 }[c.kind] || 2200;
     if (c.kind === "groupsplus") {
       const groups = (c.data && c.data.groups) || [];
       let i = 0, t;
@@ -6998,7 +6998,7 @@ function CelebrationOverlay({ c, onDone }) {
   if (!c) return null;
   const wrap = { position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", overflow: "hidden" };
   const stampBox = (main, sub, color = "#C99A1E") => (
-    <div style={{ textAlign: "center", transform: "rotate(-13deg)", border: `4px solid ${color}`, borderRadius: 16, padding: "16px 30px", background: "rgba(14,21,32,0.92)", boxShadow: "0 14px 44px rgba(0,0,0,0.5)" }}>
+    <div style={{ textAlign: "center", border: `4px solid ${color}`, borderRadius: 16, padding: "16px 30px", background: "rgba(14,21,32,0.92)", boxShadow: "0 14px 44px rgba(0,0,0,0.5)" }}>
       <div className="mub-display" style={{ fontSize: 46, fontWeight: 900, color, lineHeight: 1.05 }}>{main}</div>
       {sub && <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: "#EAF0F4", marginTop: 4 }}>{sub}</div>}
     </div>
@@ -7021,7 +7021,7 @@ function CelebrationOverlay({ c, onDone }) {
     return (
       <div className="mub-cel" style={wrap}>
         <Confetti count={150} duration={2500} />
-        <div style={{ animation: "celSlam 0.6s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 2.6s ease forwards" }}>
+        <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 2.6s ease forwards" }}>
           {stampBox("S+", "FIRST S+ RANK!")}
         </div>
       </div>
@@ -7032,7 +7032,8 @@ function CelebrationOverlay({ c, onDone }) {
     const g = groups[gi]; if (!g) return null;
     return (
       <div className="mub-cel" style={wrap} key={gi}>
-        <div style={{ animation: "celSlam 0.55s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 1.7s ease forwards" }}>
+        <Confetti count={110} duration={2100} />
+        <div style={{ animation: "celPop 0.55s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 2.2s ease forwards" }}>
           {stampBox(`${g.icon} S+`, `${g.name.toUpperCase()} MASTERED`)}
         </div>
       </div>
@@ -7043,19 +7044,10 @@ function CelebrationOverlay({ c, onDone }) {
     return (
       <div className="mub-cel" style={wrap}>
         <div style={{ position: "absolute", top: 0, left: 0, width: "60%", height: "100%", background: `linear-gradient(90deg, transparent, ${d.color || "#7EC8E3"}55, transparent)`, animation: "celShimmer 1s ease-out forwards" }} />
-        <div style={{ textAlign: "center", animation: "celSlam 0.6s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 2.2s ease forwards" }}>
+        <div style={{ textAlign: "center", animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 2.2s ease forwards" }}>
           <div style={{ fontSize: 74 }}>{d.icon}</div>
           <div className="mub-display" style={{ fontSize: 22, fontWeight: 900, color: d.color || "#fff", textShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>{d.name}</div>
         </div>
-      </div>
-    );
-  }
-  if (c.kind === "levelup") {
-    const n = c.data && c.data.n;
-    return (
-      <div className="mub-cel" style={wrap}>
-        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "4px solid #C99A1E", animation: "celRing 0.9s ease-out forwards" }} />
-        <div className="mub-display" style={{ fontSize: 30, fontWeight: 900, color: "#C99A1E", textShadow: "0 2px 12px rgba(0,0,0,0.45)", animation: "celNum 0.55s ease-out forwards, celFade 1.5s ease forwards" }}>LEVEL {n}</div>
       </div>
     );
   }
@@ -7334,6 +7326,7 @@ export default function MathsUnlockedBN() {
       return ids.length > 0 && ids.every((id) => topicRankAtLeast(profile, id, "S+")) && !done.includes(g.name);
     });
     if (newly.length) {
+      playGroupMastered();
       celebrate("groupsplus", { groups: newly.map((g) => ({ name: g.name, icon: g.icon })) });
       patchProfile((p) => ({ celebratedGroups: [...new Set([...(p.celebratedGroups || []), ...newly.map((g) => g.name)])] }));
     }
@@ -7692,6 +7685,13 @@ export default function MathsUnlockedBN() {
     setTimeout(() => playSeq([523.25], { wave: w, step: 0.1, dur: 0.5, attack: 0.01, vol: 0.11, detune: 6 }), 340);   // taaa
     setTimeout(() => playSeq([523.25, 659.25, 783.99, 1046.5], { wave: w, step: 0.115, dur: 0.32, attack: 0.01, vol: 0.1 }), 900);  // rising flourish
     setTimeout(() => playSeq([392, 523.25, 659.25, 783.99, 1046.5], { wave: "triangle", step: 0, dur: 1.5, attack: 0.04, vol: 0.085 }), 1420); // held regal chord
+  }
+
+  // Whole mastery group taken to S+ — a short triumphant run + sparkle.
+  function playGroupMastered() {
+    playSeq([523.25, 659.25, 783.99, 1046.5], { wave: "triangle", step: 0.09, dur: 0.3, attack: 0.008, vol: 0.11 });
+    setTimeout(() => playSeq([1046.5, 1318.5, 1567.98], { wave: "square", step: 0.06, dur: 0.14, attack: 0.003, vol: 0.06 }), 400);
+    setTimeout(() => playSeq([783.99, 1046.5, 1318.5], { wave: "triangle", step: 0, dur: 0.9, attack: 0.03, vol: 0.07 }), 620);
   }
 
   // Per-answer feedback — rising for correct, mirrored/softer for wrong.
@@ -8713,7 +8713,6 @@ export default function MathsUnlockedBN() {
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
     if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
     else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
-    else if (leveledTo) celebrate("levelup", { n: leveledTo });
   }
 
   function doPrestige() {
@@ -9267,14 +9266,11 @@ export default function MathsUnlockedBN() {
         @keyframes rankPop { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 78% { transform: scale(0.9) rotate(-4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
         @keyframes rankGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 6px currentColor; } }
         @keyframes celFlash { 0% { opacity: 0; } 10% { opacity: 0.85; } 100% { opacity: 0; } }
-        @keyframes celSlam { 0% { transform: scale(3) rotate(-15deg); opacity: 0; } 55% { transform: scale(0.86) rotate(-15deg); opacity: 1; } 78% { transform: scale(1.07) rotate(-15deg); } 100% { transform: scale(1) rotate(-15deg); opacity: 1; } }
         @keyframes celFade { 0%,72% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes celFadeLong { 0%,85% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes celPop { 0% { transform: scale(0.35); opacity: 0; } 55% { transform: scale(1.12); opacity: 1; } 78% { transform: scale(0.97); } 100% { transform: scale(1); opacity: 1; } }
         @keyframes celShimmer { 0% { transform: translateX(-130%) skewX(-16deg); } 100% { transform: translateX(130%) skewX(-16deg); } }
         @keyframes celCrown { 0% { transform: translateY(-160px) rotate(-24deg); opacity: 0; } 62% { transform: translateY(10px) rotate(7deg); opacity: 1; } 82% { transform: translateY(-5px) rotate(-4deg); } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
-        @keyframes celRing { 0% { transform: scale(0.35); opacity: 0.85; } 100% { transform: scale(2.6); opacity: 0; } }
-        @keyframes celNum { 0% { transform: scale(0.2); opacity: 0; } 55% { transform: scale(1.25); opacity: 1; } 75% { transform: scale(0.95); } 100% { transform: scale(1); opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .mub-cel * { animation-duration: 0.01ms !important; } }
         .mub-stamp { animation: stampIn 0.4s ease-out; }
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
