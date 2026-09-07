@@ -11388,15 +11388,16 @@ export default function MathsUnlockedBN() {
                       {boostActive ? `Active — ${boostMins} min left` : "Doubles the +2 XP per correct answer for one hour."}
                     </div>
                   </div>
-                  {!boostActive && (profile.boosts || 0) > 0 && (
-                    <button onClick={activateBoost} style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>Activate</button>
-                  )}
-                  {!boostActive && (profile.boosts || 0) === 0 && (
-                    <span className="mub-display" style={{ fontSize: 20, fontWeight: 800, flexShrink: 0 }}>0</span>
-                  )}
-                  {boostActive && (profile.boosts || 0) > 0 && (
-                    <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>{profile.boosts} more</span>
-                  )}
+                  <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                    {!boostActive && (profile.boosts || 0) > 0 ? (
+                      <>
+                        <button onClick={activateBoost} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "5px 11px", cursor: "pointer" }}>Activate</button>
+                        <span style={{ fontSize: 10, color: "var(--muted)" }}>{profile.boosts} in stock</span>
+                      </>
+                    ) : (
+                      <span className="mub-display" style={{ fontSize: 20, fontWeight: 800 }}>{profile.boosts || 0}</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 12 }}>Items come from levelling up. Keep grinding.</div>
