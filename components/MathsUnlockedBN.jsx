@@ -13,7 +13,7 @@ import {
   loadAssignments, createAssignment, deleteAssignment, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
-  submitDailyResult, dailyBoard, myDailyResult,
+  submitDailyResult, dailyBoard, myDailyResult, adminStudents,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 import {
@@ -7075,6 +7075,8 @@ export default function MathsUnlockedBN() {
   const [students, setStudents] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [pinResetFor, setPinResetFor] = useState(null); // student uid whose PIN reset panel is open
+  const [adminExpanded, setAdminExpanded] = useState(null); // admin table: which student row is expanded
+  const [adminSort, setAdminSort] = useState("active"); // "active" | "name" | "level"
   const [pinResetVal, setPinResetVal] = useState("");
   const [pinResetBusy, setPinResetBusy] = useState(false);
   const [pinResetMsg, setPinResetMsg] = useState(null); // { uid, ok, text }
@@ -8582,9 +8584,8 @@ export default function MathsUnlockedBN() {
   async function loadStudents() {
     setAdminLoading(true);
     try {
-      const results = await getLeaderboard();
-      results.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-      setStudents(results);
+      const results = await adminStudents();          // most-recently-active first
+      setStudents(Array.isArray(results) ? results : []);
     } catch (e) { setStudents([]); }
     setAdminLoading(false);
   }
@@ -9737,87 +9738,95 @@ export default function MathsUnlockedBN() {
               <div style={{ fontSize: 13, color: "var(--muted)" }}>No students have registered yet.</div>
             )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {students.map((s, idx) => {
-                const attempted = TOPICS.filter((t) => (s.topics[t.id] || {}).history?.length > 0);
-                return (
-                  <div key={idx} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        {s.name}
-                        <PrestigeBadge prestige={s.prestige} size={16} />
-                        <span className="mub-display" style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 8px" }}>
-                          LV {levelFromExp(totalExp(s))}
-                        </span>
-                        {s.school && s.school !== SOLO_SCHOOL && (
-                          <span style={{ fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>{s.school}</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                        {attempted.length}/{TOPICS.length} topics started · 🔥 best streak {s.bestStreak || 0} · 🏆 {(s.achievements || []).length} achievements
-                      </div>
-                    </div>
-                    {attempted.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "var(--muted)" }}>No questions attempted yet.</div>
-                    ) : (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {attempted.map((t) => {
-                          const rank = rankDisplay(s.topics[t.id].highestRank);
-                          return (
-                            <div key={t.id} title={t.name} style={{
-                              display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 999,
-                              border: `1px solid ${rank.color}`, fontSize: 11,
-                            }}>
-                              <span>{t.icon}</span>
-                              <span style={{ fontWeight: 700, color: rank.color }}>{rank.label}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {(s.achievements || []).length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 10 }}>
-                        {(s.achievements || [])
-                          .map((aid) => ACHIEVEMENTS.find((x) => x.id === aid))
-                          .filter(Boolean)
-                          .sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier))
-                          .map((a) => (
-                            <span key={a.id} title={`${a.name} · ${a.tier}`} style={{
-                              fontSize: 13, lineHeight: 1, padding: 3, borderRadius: "50%",
-                              boxShadow: `0 0 0 1.5px ${TIER_COLOR[a.tier]}`,
-                            }}>{a.icon}</span>
-                          ))}
-                      </div>
-                    )}
-                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--grid)" }}>
-                      {pinResetFor === s.uid ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <input
-                            value={pinResetVal}
-                            onChange={(e) => setPinResetVal(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                            onKeyDown={(e) => { if (e.key === "Enter") doPinReset(s.uid); }}
-                            inputMode="numeric" placeholder="new 6-digit PIN" autoFocus
-                            style={{ width: 150, padding: "7px 10px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, letterSpacing: 3, boxSizing: "border-box" }}
-                          />
-                          <button onClick={() => doPinReset(s.uid)} disabled={pinResetBusy || !/^\d{6}$/.test(pinResetVal)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", opacity: pinResetBusy || !/^\d{6}$/.test(pinResetVal) ? 0.6 : 1 }}>
-                            {pinResetBusy ? "Setting…" : "Set PIN"}
-                          </button>
-                          <button onClick={() => { setPinResetFor(null); setPinResetVal(""); setPinResetMsg(null); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>
-                            Cancel
-                          </button>
+            {students.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {[["active", "Recent"], ["name", "Name"], ["level", "Level"]].map(([k, label]) => (
+                  <button key={k} onClick={() => setAdminSort(k)} style={{
+                    fontSize: 11.5, fontWeight: 700, padding: "4px 11px", borderRadius: 999, cursor: "pointer",
+                    color: adminSort === k ? "var(--on-accent)" : "var(--muted)",
+                    background: adminSort === k ? "var(--blue)" : "var(--card)",
+                    border: `1px solid ${adminSort === k ? "var(--blue)" : "var(--grid)"}`,
+                  }}>{label}</button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(() => {
+                const list = [...students];
+                if (adminSort === "name") list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+                else if (adminSort === "level") list.sort((a, b) => totalExp(b) - totalExp(a));
+                return list.map((s) => {
+                  const attempted = TOPICS.filter((t) => (s.topics && s.topics[t.id] || {}).history?.length > 0);
+                  const achCount = (s.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
+                  const achPct = Math.round((achCount / ACHIEVEMENTS.length) * 100);
+                  const open = adminExpanded === s.uid;
+                  return (
+                    <div key={s.uid || s.name} style={{ background: "var(--card)", border: `1px solid ${open ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10, overflow: "hidden" }}>
+                      <button onClick={() => setAdminExpanded(open ? null : s.uid)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 12px", color: "var(--ink)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                          <span className="mub-display" style={{ fontSize: 10.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>LV {levelFromExp(totalExp(s))}</span>
+                          <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>{s.last_active ? timeAgo(s.last_active) : "—"}</span>
+                          <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▸</span>
                         </div>
-                      ) : (
-                        <button onClick={() => { setPinResetFor(s.uid); setPinResetVal(""); setPinResetMsg(null); }} disabled={!s.uid} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", opacity: s.uid ? 1 : 0.5 }}>
-                          Reset PIN
-                        </button>
-                      )}
-                      {pinResetMsg && pinResetMsg.uid === s.uid && (
-                        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, color: pinResetMsg.ok ? "var(--green)" : "var(--red)" }}>{pinResetMsg.text}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, fontSize: 11.5, color: "var(--muted)" }}>
+                          <span>{attempted.length}/{TOPICS.length} topics</span>
+                          <span>·</span>
+                          <span>🏆 {achPct}%</span>
+                          <span style={{ flex: 1 }} />
+                          <span onClick={(e) => { e.stopPropagation(); setPinResetFor(pinResetFor === s.uid ? null : s.uid); setPinResetVal(""); setPinResetMsg(null); if (!open) setAdminExpanded(s.uid); }}
+                            style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid var(--grid)", borderRadius: 7, padding: "2px 8px" }}>🔑 Reset PIN</span>
+                        </div>
+                      </button>
+                      {open && (
+                        <div style={{ borderTop: "1px solid var(--grid)", padding: "10px 12px", background: "var(--paper)" }}>
+                          <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.7, marginBottom: 8 }}>
+                            {s.school && s.school !== SOLO_SCHOOL ? <>🏫 {s.school}<br /></> : null}
+                            <PrestigeBadge prestige={s.prestige} size={13} /> Prestige {s.prestige || 0} · 🔥 best streak {s.bestStreak || 0} · ✓ {(s.totalCorrect || 0).toLocaleString()} correct<br />
+                            Last active: {s.last_active ? new Date(s.last_active).toLocaleString() : "unknown"}<br />
+                            🏆 {achCount}/{ACHIEVEMENTS.length} achievements
+                          </div>
+                          {attempted.length === 0 ? (
+                            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>No questions attempted yet.</div>
+                          ) : (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {attempted.map((t) => {
+                                const rank = rankDisplay(s.topics[t.id].highestRank);
+                                return (
+                                  <span key={t.id} title={t.name} style={{ display: "flex", alignItems: "center", gap: 3, padding: "2px 7px", borderRadius: 999, border: `1px solid ${rank.color}`, fontSize: 10.5 }}>
+                                    <span>{t.icon}</span><span style={{ fontWeight: 700, color: rank.color }}>{rank.label}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {achCount > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+                              {(s.achievements || []).map((aid) => ACHIEVEMENTS.find((x) => x.id === aid)).filter(Boolean)
+                                .sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier))
+                                .map((a) => (
+                                  <span key={a.id} title={`${a.name} · ${a.tier}`} style={{ fontSize: 12.5, lineHeight: 1, padding: 3, borderRadius: "50%", boxShadow: `0 0 0 1.5px ${TIER_COLOR[a.tier]}` }}>{a.icon}</span>
+                                ))}
+                            </div>
+                          )}
+                          {pinResetFor === s.uid && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--grid)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <input value={pinResetVal} onChange={(e) => setPinResetVal(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                onKeyDown={(e) => { if (e.key === "Enter") doPinReset(s.uid); }} inputMode="numeric" placeholder="new 6-digit PIN" autoFocus
+                                style={{ width: 150, padding: "7px 10px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, letterSpacing: 3, boxSizing: "border-box", background: "var(--card)", color: "var(--ink)" }} />
+                              <button onClick={() => doPinReset(s.uid)} disabled={pinResetBusy || !/^\d{6}$/.test(pinResetVal)} style={{ fontSize: 12, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", opacity: pinResetBusy || !/^\d{6}$/.test(pinResetVal) ? 0.6 : 1 }}>{pinResetBusy ? "Setting…" : "Set PIN"}</button>
+                              <button onClick={() => { setPinResetFor(null); setPinResetVal(""); setPinResetMsg(null); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>Cancel</button>
+                            </div>
+                          )}
+                          {pinResetMsg && pinResetMsg.uid === s.uid && (
+                            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 8, color: pinResetMsg.ok ? "var(--green)" : "var(--red)" }}>{pinResetMsg.text}</div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}

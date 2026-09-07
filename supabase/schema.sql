@@ -660,3 +660,29 @@ as $$
 $$;
 revoke all on function public.my_daily() from public, anon;
 grant execute on function public.my_daily() to authenticated;
+
+-- ============================================================
+--  14. ADMIN ROSTER
+--     The "Registered Students" table in the Admin view. Every
+--     student's profile (pin + parentToken stripped) plus their
+--     last-active time. Admins only (teachers.admin = true).
+-- ============================================================
+create or replace function public.admin_students()
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object('uid', k.scope, 'last_active', k.updated_at)
+         || ((k.value::jsonb) - 'pin' - 'parentToken')
+  from kv_store k
+  where k.key = 'profile'
+    and k.value is not null and k.value <> ''
+    and (k.value::jsonb) ? 'name'
+    and coalesce((k.value::jsonb) ->> 'name', '') <> ''
+    and auth.uid() in (select uid from teachers where admin)
+  order by k.updated_at desc
+$$;
+revoke all on function public.admin_students() from public, anon;
+grant execute on function public.admin_students() to authenticated;
