@@ -13,6 +13,7 @@ import {
   loadAssignments, createAssignment, deleteAssignment, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
+  submitDailyResult, dailyBoard, myDailyResult,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 import {
@@ -6676,6 +6677,61 @@ function weekKey(d = new Date()) {
   m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); // back up to Monday
   return todayKey(m);
 }
+/* ---------------------------------------------------------
+   Daily Challenge — one question, the same for every player,
+   keyed to the Brunei calendar day. Fastest clean solve wins.
+--------------------------------------------------------- */
+// Brunei (UTC+8, no DST) calendar day as YYYY-MM-DD — must match the
+// `day` the server stamps (see supabase/schema.sql §13).
+function bruneiDayKey(now = Date.now()) {
+  return new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10);
+}
+function _hashStr(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function _mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// Topics whose generators can produce a plain numeric answer — safe for a
+// one-shot challenge typed into a single box (no √ / ×10^ / algebra input,
+// no grid taps, drawing, or multi-field answers).
+const DAILY_TOPIC_IDS = [
+  "arithmetic", "hcflcm", "indices", "sigfig", "proportionality", "polygons",
+];
+function dailyChallenge(dayKey) {
+  const rnd = _mulberry32(_hashStr("mub-daily::" + dayKey));
+  const orig = Math.random;
+  Math.random = rnd;
+  try {
+    const pool = DAILY_TOPIC_IDS.map((id) => TOPIC_BY_ID[id]).filter(Boolean);
+    const topic = pool[Math.floor(rnd() * pool.length)];
+    let q = null;
+    for (let i = 0; i < 120; i++) {
+      let cand;
+      try { cand = topic.generate(); } catch (e) { continue; }
+      const simple = cand && cand.prompt
+        && !cand.fields && !cand.choices && !cand.tapPoint && !cand.drawGraph
+        && !cand.drawSolve && !cand.regionPick && !cand.cf && !cand.venn && !cand.drawTri
+        && !cand.solid && !cand.figure && !cand.svg && !cand.diagram && !cand.net && !cand.plot
+        && !/\bthis\b/i.test(cand.prompt)  // "this triangle/shape/diagram…" implies a figure we don't render here
+        && cand.answer !== undefined
+        && /^-?\d+(\.\d+)?$/.test(String(cand.answer).trim());  // a plain whole number or decimal
+      if (simple) { q = cand; break; }
+    }
+    if (!q) { const a = randInt(12, 39), b = randInt(12, 39); q = { prompt: `${a} + ${b}`, answer: a + b, steps: [`${a} + ${b} = ${a + b}`], topicId: "arithmetic" }; }
+    return { ...q, dayKey, topicId: q.topicId || topic.id, topicName: topic.name, topicIcon: topic.icon };
+  } finally {
+    Math.random = orig;
+  }
+}
+
 // Roll the weekly XP bucket over on a new week (stashing last week's total
 // for the "champions" banner), then add this session's gain.
 function bumpWeek(profile, gain) {
@@ -6769,7 +6825,7 @@ const emptyProfile = () => ({
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
   cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
-  seenChallenges: [], seenAch: [], lastTopicId: null,
+  seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0,
@@ -6973,6 +7029,13 @@ export default function MathsUnlockedBN() {
   const [fbInbox, setFbInbox] = useState(null); // teacher: null=unloaded, []=loaded
   const [groupOpen, setGroupOpen] = useState(null); // dashboard: which of the 5 topic groups is expanded
   const [modesOpen, setModesOpen] = useState(false); // dashboard: Special Modes overlay
+  const [dailyQ, setDailyQ] = useState(null);
+  const [dailyInput, setDailyInput] = useState("");
+  const [dailyElapsed, setDailyElapsed] = useState(0);
+  const [dailyDone, setDailyDone] = useState(null); // seconds once cleared / already played
+  const [dailyBoardRows, setDailyBoardRows] = useState(null);
+  const [dailyWrong, setDailyWrong] = useState(0);
+  const [dailyBusy, setDailyBusy] = useState(false);
   const [canInstallApp, setCanInstallApp] = useState(false);
   const [installHidden, setInstallHidden] = useState(true);
   const [pushOn, setPushOn] = useState(false);
@@ -6993,6 +7056,15 @@ export default function MathsUnlockedBN() {
   }, []);
   // Keep the Settings "Notifications" toggle in sync with the real state.
   useEffect(() => { isPushSubscribed().then(setPushOn); }, [settingsOpen]);
+
+  // Daily Challenge live timer.
+  useEffect(() => {
+    if (screen !== "daily" || dailyDone != null) return;
+    const run = profileRef.current.dailyRun;
+    const startedAt = run && run.startedAt ? run.startedAt : Date.now();
+    const t = setInterval(() => setDailyElapsed(Math.max(0, (Date.now() - startedAt) / 1000)), 100);
+    return () => clearInterval(t);
+  }, [screen, dailyDone]);
 
   async function togglePush() {
     if (pushBusy) return;
@@ -7418,6 +7490,46 @@ export default function MathsUnlockedBN() {
     setBlitzPhase("intro");
     setBlitzResult(null);
     setScreen("blitz");
+  }
+
+  // Daily Challenge — one shared question, ranked by clean-solve time.
+  async function startDaily() {
+    setModesOpen(false);
+    const key = bruneiDayKey();
+    setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
+    setDailyQ(dailyChallenge(key));
+    setScreen("daily");
+    const already = await myDailyResult();
+    if (already != null) {
+      setDailyDone(already);
+      setDailyElapsed(already);
+      dailyBoard().then(setDailyBoardRows);
+      return;
+    }
+    setDailyDone(null);
+    const run = (profile.dailyRun && profile.dailyRun.day === key)
+      ? profile.dailyRun
+      : { day: key, startedAt: Date.now() };
+    patchProfile(() => ({ dailyRun: run }));
+    setDailyElapsed(Math.max(0, (Date.now() - run.startedAt) / 1000));
+  }
+  async function submitDaily() {
+    if (dailyBusy || dailyDone != null || !dailyQ) return;
+    const typed = dailyInput.trim();
+    if (!typed) return;
+    const ok = typeof dailyQ.check === "function" ? !!dailyQ.check(typed) : checkEquivalent(typed, dailyQ.answer);
+    if (!ok) { setDailyWrong((n) => n + 1); playWrong(); return; }
+    setDailyBusy(true);
+    playCorrect();
+    const run = profileRef.current.dailyRun;
+    const startedAt = run && run.day === dailyQ.dayKey ? run.startedAt : Date.now();
+    const secs = Math.max(0.1, (Date.now() - startedAt) / 1000);
+    await submitDailyResult(secs, profile.name);
+    patchProfile(() => ({ dailyRun: null }));
+    setDailyDone(secs);
+    setDailyElapsed(secs);
+    setDailyBoardRows(await dailyBoard());
+    setDailyBusy(false);
   }
   // Challenge a friend: I play first, my questions + score seed the row.
   function startChallenge(friend) {
@@ -9229,6 +9341,90 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
+        {/* DAILY CHALLENGE */}
+        {screen === "daily" && (() => {
+          const rows = dailyBoardRows || [];
+          const myRank = rows.findIndex((r) => r.uid === authUid);
+          return (
+            <div>
+              <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+                <ArrowLeft size={14} /> back
+              </button>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>📅 Daily Challenge</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
+              </div>
+
+              {dailyDone == null ? (
+                <>
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", lineHeight: 1.5 }}>
+                    One question — the same for every player today. The clock is running; wrong answers just cost you time.
+                  </div>
+                  {dailyQ && (
+                    <div style={{ border: "1px solid var(--grid)", borderRadius: 16, padding: 18, background: "var(--card)", marginBottom: 18 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{dailyQ.topicIcon} {dailyQ.topicName}</span>
+                        <span className="mub-mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--blue)" }}>{dailyElapsed.toFixed(1)}s</span>
+                      </div>
+                      <div className="mub-mono" style={{ fontSize: 22, fontWeight: 700, marginBottom: 14, lineHeight: 1.35 }}><MathText text={dailyQ.prompt} /></div>
+                      <input
+                        value={dailyInput}
+                        onChange={(e) => setDailyInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") submitDaily(); }}
+                        autoFocus placeholder="Your answer" autoComplete="off" className="mub-mono"
+                        style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, marginBottom: 10, background: "var(--card)", color: "var(--ink)" }}
+                      />
+                      {dailyWrong > 0 && <div style={{ fontSize: 12.5, color: "var(--red)", fontWeight: 700, marginBottom: 10 }}>✗ Not quite — keep going ({dailyWrong})</div>}
+                      <button onClick={submitDaily} disabled={dailyBusy || !dailyInput.trim()}
+                        style={{ width: "100%", fontSize: 14, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 10, padding: "11px 14px", cursor: "pointer", opacity: dailyBusy || !dailyInput.trim() ? 0.6 : 1 }}>
+                        {dailyBusy ? "Locking in…" : "Submit"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div style={{ background: "color-mix(in srgb, var(--green) 10%, var(--card))", border: "1px solid var(--green)", borderRadius: 14, padding: 16, margin: "10px 0 16px" }}>
+                    <div className="mub-display" style={{ fontWeight: 800, fontSize: 17 }}>✓ Cleared in {dailyDone.toFixed(1)}s</div>
+                    {myRank >= 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>#{myRank + 1} of {rows.length} today{myRank === 0 ? " — fastest so far 🏆" : ""}</div>}
+                  </div>
+                  {dailyQ && Array.isArray(dailyQ.steps) && dailyQ.steps.length > 0 && (
+                    <div style={{ border: "1px solid var(--grid)", borderRadius: 12, padding: 14, marginBottom: 18, fontSize: 12.5, background: "var(--card)" }}>
+                      <div style={{ fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", fontSize: 10.5, letterSpacing: 0.5, marginBottom: 6 }}>How to solve it</div>
+                      {dailyQ.steps.map((s, i) => <div key={i} style={{ marginTop: 3 }}><MathText text={String(s)} /></div>)}
+                      <div style={{ marginTop: 6 }}>Answer: <strong><MathText text={String(dailyQ.answerDisplay ?? dailyQ.answer)} /></strong></div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Today's board · fastest first</div>
+                <button onClick={() => dailyBoard().then(setDailyBoardRows)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> refresh</button>
+              </div>
+              {dailyBoardRows == null ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+              ) : rows.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>{dailyDone == null ? "Nobody's cleared it yet today — be the first." : "You're first on the board. Nice."}</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {rows.slice(0, 100).map((r, i) => {
+                    const mine = r.uid === authUid;
+                    return (
+                      <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                        background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
+                        <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "Someone"}{mine ? " · you" : ""}</span>
+                        <span className="mub-mono" style={{ fontWeight: 700 }}>{Number(r.seconds).toFixed(1)}s</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ADMIN */}
         {screen === "admin" && (
           <div>
@@ -10958,6 +11154,15 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => setModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => go(startDaily)} className="mub-card" style={modeBtn(true)}>
+                  <span style={{ fontSize: 28 }}>📅</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Challenge</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      One question, same for everyone. Fastest clean solve tops the board.
+                    </span>
+                  </span>
+                </button>
                 <button onClick={() => go(startMixed)} disabled={!mixedOpen} className={mixedOpen ? "mub-card" : ""} style={modeBtn(mixedOpen)}>
                   <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
                   <span style={{ minWidth: 0 }}>

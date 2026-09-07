@@ -602,3 +602,57 @@ drop policy if exists ps_own on push_subscriptions;
 create policy ps_own on push_subscriptions for all to authenticated
   using (uid = auth.uid()) with check (uid = auth.uid());
 -- (no anon access; the sender uses the service-role key and bypasses RLS)
+
+-- ============================================================
+--  13. DAILY CHALLENGE
+--     One question a day, the same for everyone (the client seeds
+--     it from the Brunei calendar day). One result per player per
+--     day; the time is final. `daily_board` ranks today fastest-
+--     first with teachers excluded.
+-- ============================================================
+create table if not exists daily_results (
+  day date not null default ((now() at time zone 'Asia/Brunei')::date),
+  uid uuid not null default auth.uid(),
+  name text,
+  seconds numeric not null check (seconds > 0 and seconds < 86400),
+  created_at timestamptz not null default now(),
+  primary key (day, uid)
+);
+alter table daily_results enable row level security;
+
+-- insert your own row, for today only, once (PK blocks a second)
+drop policy if exists dr_insert on daily_results;
+create policy dr_insert on daily_results for insert to authenticated
+  with check (uid = auth.uid()
+              and day = (now() at time zone 'Asia/Brunei')::date
+              and seconds > 0);
+
+-- read your own rows directly; the board comes from daily_board()
+drop policy if exists dr_own on daily_results;
+create policy dr_own on daily_results for select to authenticated
+  using (uid = auth.uid());
+
+create or replace function public.daily_board(d date default null)
+returns setof jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object('uid', r.uid, 'name', coalesce(r.name, ''), 'seconds', r.seconds)
+  from daily_results r
+  where r.day = coalesce(d, (now() at time zone 'Asia/Brunei')::date)
+    and r.uid not in (select uid from teachers)
+  order by r.seconds asc, r.created_at asc
+  limit 300
+$$;
+revoke all on function public.daily_board(date) from public, anon;
+grant execute on function public.daily_board(date) to authenticated;
+
+create or replace function public.my_daily()
+returns numeric
+language sql stable security definer set search_path = public
+as $$
+  select seconds from daily_results
+  where uid = auth.uid() and day = (now() at time zone 'Asia/Brunei')::date
+  limit 1
+$$;
+revoke all on function public.my_daily() from public, anon;
+grant execute on function public.my_daily() to authenticated;
