@@ -7037,6 +7037,7 @@ export default function MathsUnlockedBN() {
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
+  const [dailyStart, setDailyStart] = useState(0); // anchored start time (ms) of the current daily run
   const [canInstallApp, setCanInstallApp] = useState(false);
   const [installHidden, setInstallHidden] = useState(true);
   const [pushOn, setPushOn] = useState(false);
@@ -7069,12 +7070,10 @@ export default function MathsUnlockedBN() {
 
   // Daily Challenge live timer.
   useEffect(() => {
-    if (screen !== "daily" || dailyDone != null) return;
-    const run = profileRef.current.dailyRun;
-    const startedAt = run && run.startedAt ? run.startedAt : Date.now();
-    const t = setInterval(() => setDailyElapsed(Math.max(0, (Date.now() - startedAt) / 1000)), 100);
+    if (screen !== "daily" || dailyDone != null || !dailyStart) return;
+    const t = setInterval(() => setDailyElapsed(Math.max(0, (Date.now() - dailyStart) / 1000)), 100);
     return () => clearInterval(t);
-  }, [screen, dailyDone]);
+  }, [screen, dailyDone, dailyStart]);
 
   async function togglePush() {
     if (pushBusy) return;
@@ -7507,40 +7506,50 @@ export default function MathsUnlockedBN() {
     setModesOpen(false);
     const key = bruneiDayKey();
     setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
+    setWritePad(false); setSketchOn(false); setSketchStrokes([]);
     setDailyQ(dailyChallenge(key));
     setScreen("daily");
-    const already = await myDailyResult();
-    if (already != null) {
-      setDailyDone(already);
-      setDailyDoneToday(already);
-      setDailyElapsed(already);
+    // The run — with the original start time and, once cleared, the final
+    // seconds — is anchored in the profile so leaving/reloading can't
+    // reset the clock or let you redo today's question.
+    const run = profile.dailyRun && profile.dailyRun.day === key ? profile.dailyRun : null;
+    const server = await myDailyResult();
+    const cleared = server != null ? server : (run && typeof run.cleared === "number" ? run.cleared : null);
+    if (cleared != null) {
+      setDailyDone(cleared);
+      setDailyDoneToday(cleared);
+      setDailyElapsed(cleared);
+      setDailyStart(0);
       dailyBoard().then(setDailyBoardRows);
+      if (!run || run.cleared == null) {
+        patchProfile(() => ({ dailyRun: { day: key, startedAt: (run && run.startedAt) || Date.now(), cleared } }));
+      }
       return;
     }
     setDailyDone(null);
     setDailyDoneToday(false);
-    const run = (profile.dailyRun && profile.dailyRun.day === key)
-      ? profile.dailyRun
-      : { day: key, startedAt: Date.now() };
-    patchProfile(() => ({ dailyRun: run }));
-    setDailyElapsed(Math.max(0, (Date.now() - run.startedAt) / 1000));
+    const anchored = run || { day: key, startedAt: Date.now() };
+    if (!run) patchProfile(() => ({ dailyRun: anchored }));
+    setDailyStart(anchored.startedAt);
+    setDailyElapsed(Math.max(0, (Date.now() - anchored.startedAt) / 1000));
   }
-  async function submitDaily() {
+  async function submitDaily(override) {
     if (dailyBusy || dailyDone != null || !dailyQ) return;
-    const typed = dailyInput.trim();
+    const typed = String(override ?? dailyInput).trim();
     if (!typed) return;
     const ok = typeof dailyQ.check === "function" ? !!dailyQ.check(typed) : checkEquivalent(typed, dailyQ.answer);
     if (!ok) { setDailyWrong((n) => n + 1); playWrong(); return; }
     setDailyBusy(true);
     playCorrect();
+    setWritePad(false); setSketchOn(false);
     const run = profileRef.current.dailyRun;
     const startedAt = run && run.day === dailyQ.dayKey ? run.startedAt : Date.now();
     const secs = Math.max(0.1, (Date.now() - startedAt) / 1000);
-    await submitDailyResult(secs, profile.name);
-    patchProfile(() => ({ dailyRun: null }));
+    patchProfile(() => ({ dailyRun: { day: dailyQ.dayKey, startedAt, cleared: secs } }));
     setDailyDone(secs);
     setDailyDoneToday(secs);
     setDailyElapsed(secs);
+    await submitDailyResult(secs, profile.name);
     setDailyBoardRows(await dailyBoard());
     setDailyBusy(false);
   }
@@ -9376,24 +9385,38 @@ export default function MathsUnlockedBN() {
                     One question — the same for every player today. The clock is running; wrong answers just cost you time.
                   </div>
                   {dailyQ && (
-                    <div style={{ border: "1px solid var(--grid)", borderRadius: 16, padding: 18, background: "var(--card)", marginBottom: 18 }}>
+                    <div style={{ position: "relative", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, background: "var(--card)", marginBottom: 18, minHeight: sketchOn ? 360 : undefined }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)" }}>{dailyQ.topicIcon} {dailyQ.topicName}</span>
                         <span className="mub-mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--blue)" }}>{dailyElapsed.toFixed(1)}s</span>
                       </div>
                       <div className="mub-mono" style={{ fontSize: 22, fontWeight: 700, marginBottom: 14, lineHeight: 1.35 }}><MathText text={dailyQ.prompt} /></div>
-                      <input
-                        value={dailyInput}
-                        onChange={(e) => setDailyInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") submitDaily(); }}
-                        autoFocus placeholder="Your answer" autoComplete="off" className="mub-mono"
-                        style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, marginBottom: 10, background: "var(--card)", color: "var(--ink)" }}
-                      />
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "stretch" }}>
+                        <input
+                          value={dailyInput}
+                          onChange={(e) => setDailyInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") submitDaily(); }}
+                          autoFocus placeholder="Your answer" autoComplete="off" inputMode="text" className="mub-mono"
+                          style={{ flex: 1, minWidth: 0, boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, background: "var(--card)", color: "var(--ink)" }}
+                        />
+                        <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
+                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
+                          <Pencil size={16} />
+                        </button>
+                      </div>
                       {dailyWrong > 0 && <div style={{ fontSize: 12.5, color: "var(--red)", fontWeight: 700, marginBottom: 10 }}>✗ Not quite — keep going ({dailyWrong})</div>}
-                      <button onClick={submitDaily} disabled={dailyBusy || !dailyInput.trim()}
+                      <button onClick={() => submitDaily()} disabled={dailyBusy || !dailyInput.trim()}
                         style={{ width: "100%", fontSize: 14, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 10, padding: "11px 14px", cursor: "pointer", opacity: dailyBusy || !dailyInput.trim() ? 0.6 : 1 }}>
                         {dailyBusy ? "Locking in…" : "Submit"}
                       </button>
+                      {myLevel >= SKETCH_LV && (<>
+                        <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
+                        <button onClick={() => setSketchOn((v) => !v)} title={sketchOn ? "Hide rough working" : "Rough working"}
+                          style={{ position: "absolute", bottom: 8, right: 8, zIndex: 6, width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                            border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`, background: sketchOn ? "var(--blue)" : "var(--card)", color: sketchOn ? "var(--on-accent)" : "var(--muted)", cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1 }}>
+                          🗒
+                        </button>
+                      </>)}
                     </div>
                   )}
                 </>
@@ -10948,7 +10971,15 @@ export default function MathsUnlockedBN() {
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
       {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} />}
-      {writePad && question && (
+      {writePad && screen === "daily" && dailyQ && (
+        <WritePad
+          mode="number"
+          onInsert={(t) => setDailyInput(t)}
+          onConfirm={(t) => { setDailyInput(t); submitDaily(t); }}
+          onClose={() => setWritePad(false)}
+        />
+      )}
+      {writePad && screen !== "daily" && question && (
         <WritePad
           mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
           onInsert={(t) => { setAnswerInput(t); setTimeout(() => answerRef.current && answerRef.current.focus(), 0); }}
