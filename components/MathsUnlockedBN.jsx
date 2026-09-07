@@ -2131,8 +2131,13 @@ const TOPICS = [
         () => { // a square root, then add or subtract
           const r = randInt(3, 12), sq = r * r, add = Math.random() < 0.5;
           const b = add ? randInt(1, 20) : randInt(1, r);
-          return { prompt: `√${sq} ${add ? "+" : "−"} ${b}`, answer: add ? r + b : r - b,
-            steps: [`Roots first: √${sq} = ${r}`, `${add ? "Add" : "Subtract"}: ${r} ${add ? "+" : "−"} ${b} = ${add ? r + b : r - b}`] };
+          const primary = add ? r + b : r - b;
+          const negRoot = add ? b - r : -r - b; // √25 also has the root −5 — accept that reading
+          return {
+            prompt: `√${sq} ${add ? "+" : "−"} ${b}`, answer: primary,
+            check: (typed) => checkEquivalent(typed, primary) || checkEquivalent(typed, negRoot),
+            steps: [`Roots first: √${sq} = ${r}`, `${add ? "Add" : "Subtract"}: ${r} ${add ? "+" : "−"} ${b} = ${primary}`],
+          };
         },
         () => { // divide and multiply, then add
           const b = randInt(2, 9), k = randInt(2, 9), a = b * k, c = randInt(2, 9), d = randInt(2, 9);
