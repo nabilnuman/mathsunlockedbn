@@ -164,12 +164,19 @@ const spaced = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
 const tight = (n) => (n >= 0 ? `+${n}` : `-${Math.abs(n)}`);
 // Unicode super/subscripts for simple index notation (no "^" or "÷" shown).
 const SUP = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "-": "⁻", x: "ˣ" };
-const sup = (v) => String(v).replace(/[-0-9x]/g, (c) => SUP[c] || c);
-const pw = (p) => (p === 1 ? "" : sup(p)); // x¹ → x, else a superscript index
 // A raised exponent that itself needs a stacked fraction — <MathText> lifts
 // it and draws the fraction small (so 16^(1/2) doesn't read like "16 and a half").
 const RAISE = { a: "", b: "" };
 const raise = (s) => `${RAISE.a}${s}${RAISE.b}`;
+// Single-digit indices use the unicode superscript glyphs (compact, look
+// great). Multi-digit ones (10, 12, …) mix legacy "¹²³" with the modern
+// block and render lopsided, so lift those into a real <sup> instead.
+const sup = (v) => {
+  const str = String(v);
+  if (str.replace(/[^0-9]/g, "").length >= 2) return raise(str);
+  return str.replace(/[-0-9x]/g, (c) => SUP[c] || c);
+};
+const pw = (p) => (p === 1 ? "" : sup(p)); // x¹ → x, else a superscript index
 const supFrac = (m, n) => (n == null ? sup(m) : raise(frac(m, n)));
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; }
 function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
