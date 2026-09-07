@@ -9159,17 +9159,17 @@ export default function MathsUnlockedBN() {
                 }}>
                   <span style={{ fontSize: 24, lineHeight: 1 }}>▶</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 800, fontSize: 15.5 }}>
+                    <span style={{ display: "block", fontWeight: 800, fontSize: 15.5 }}>
                       {canResume ? `Continue ${last.name}` : "Start practising"}
-                      {canResume && (() => {
-                        const r = rankDisplay((profile.topics[last.id] || {}).highestRank ?? -1);
-                        return <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: "var(--card)", border: `2px solid ${r.color}`, color: r.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 9.5, lineHeight: 1 }}>{r.label}</span>;
-                      })()}
                     </span>
                     <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>
                       {canResume ? "pick up where you left off" : "jump straight in"}
                     </span>
                   </span>
+                  {canResume && (() => {
+                    const r = rankDisplay((profile.topics[last.id] || {}).highestRank ?? -1);
+                    return <span style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: "var(--card)", border: `2.5px solid ${r.color}`, color: r.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, lineHeight: 1 }}>{r.label}</span>;
+                  })()}
                   <span style={{ flexShrink: 0, textAlign: "center", lineHeight: 1.15 }}>
                     <span className="mub-display" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>{profile.streak || 0} 🔥</span>
                     <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>streak</span>
