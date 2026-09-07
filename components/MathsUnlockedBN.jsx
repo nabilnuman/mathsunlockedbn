@@ -7010,9 +7010,9 @@ function CelebrationOverlay({ c, onDone }) {
       <div className="mub-cel" style={wrap}>
         <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #C99A1E, #7C5CFF)", animation: "celFlash 1.1s ease-out forwards" }} />
         <Confetti count={190} duration={4200} />
-        <div style={{ display: "flex", alignItems: "center", gap: 22, animation: "celSlideH 0.7s cubic-bezier(.2,.9,.3,1.15) forwards, celFadeLong 4.8s ease forwards" }}>
+        <div style={{ textAlign: "center", animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFadeLong 4.8s ease forwards" }}>
           <PrestigeBadge prestige={n} size={96} />
-          <div className="mub-display" style={{ fontSize: 40, fontWeight: 900, color: "#fff", textShadow: "0 2px 16px rgba(0,0,0,0.55)", letterSpacing: 1 }}>PRESTIGE {n}</div>
+          <div className="mub-display" style={{ fontSize: 38, fontWeight: 900, color: "#fff", textShadow: "0 2px 16px rgba(0,0,0,0.55)", letterSpacing: 1, marginTop: 10 }}>PRESTIGE {n}</div>
         </div>
       </div>
     );
@@ -9270,7 +9270,7 @@ export default function MathsUnlockedBN() {
         @keyframes celSlam { 0% { transform: scale(3) rotate(-15deg); opacity: 0; } 55% { transform: scale(0.86) rotate(-15deg); opacity: 1; } 78% { transform: scale(1.07) rotate(-15deg); } 100% { transform: scale(1) rotate(-15deg); opacity: 1; } }
         @keyframes celFade { 0%,72% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes celFadeLong { 0%,85% { opacity: 1; } 100% { opacity: 0; } }
-        @keyframes celSlideH { 0% { transform: translateX(-80px); opacity: 0; } 62% { transform: translateX(9px); opacity: 1; } 100% { transform: translateX(0); opacity: 1; } }
+        @keyframes celPop { 0% { transform: scale(0.35); opacity: 0; } 55% { transform: scale(1.12); opacity: 1; } 78% { transform: scale(0.97); } 100% { transform: scale(1); opacity: 1; } }
         @keyframes celShimmer { 0% { transform: translateX(-130%) skewX(-16deg); } 100% { transform: translateX(130%) skewX(-16deg); } }
         @keyframes celCrown { 0% { transform: translateY(-160px) rotate(-24deg); opacity: 0; } 62% { transform: translateY(10px) rotate(7deg); opacity: 1; } 82% { transform: translateY(-5px) rotate(-4deg); } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
         @keyframes celRing { 0% { transform: scale(0.35); opacity: 0.85; } 100% { transform: scale(2.6); opacity: 0; } }
