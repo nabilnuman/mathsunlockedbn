@@ -5594,6 +5594,8 @@ const ACHIEVEMENTS = [
     check: (p) => (p.totalCorrect || 0) >= 500 },
   { id: "groundhog", tier: "Gold", name: "Groundhog Day", icon: "🐗", desc: "Prestige once",
     check: (p) => (p.prestige || 0) >= 1 },
+  { id: "aura", tier: "Gold", name: "+100 AURA", icon: "🌌", desc: "100 correct answers in a row",
+    check: (p) => (p.bestStreak || 0) >= 100 },
 
   /* ---------------- Platinum ---------------- */
   { id: "unlocked", tier: "Platinum", name: "Touch Grass", icon: "🏕", desc: "Reach S+ rank in every topic",
@@ -6837,6 +6839,7 @@ const emptyProfile = () => ({
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0,
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
+  celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
@@ -6937,6 +6940,139 @@ function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
     </svg>
   );
 }
+
+/* ---------------------------------------------------------
+   Celebration overlays — reserved for genuinely rare moments
+   so they keep their impact. Confetti is a plain canvas.
+--------------------------------------------------------- */
+function Confetti({ count = 130, duration = 2600 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = cv.clientWidth || window.innerWidth, H = cv.clientHeight || window.innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.scale(dpr, dpr);
+    const cols = ["#4FB0A3", "#C99A1E", "#7FB0DD", "#E0567A", "#5EBE94", "#EAD29A"];
+    const P = Array.from({ length: count }, () => ({
+      x: Math.random() * W, y: -20 - Math.random() * H * 0.6,
+      vx: (Math.random() - 0.5) * 2.6, vy: 2 + Math.random() * 3.6,
+      s: 4 + Math.random() * 7, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.32,
+      c: cols[(Math.random() * cols.length) | 0],
+    }));
+    let raf; const start = performance.now();
+    const tick = (now) => {
+      const t = now - start;
+      ctx.clearRect(0, 0, W, H);
+      for (const p of P) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.03; p.rot += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, 1 - t / duration);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
+        ctx.restore();
+      }
+      if (t < duration) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <canvas ref={ref} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />;
+}
+
+function CelebrationOverlay({ c, onDone }) {
+  const [gi, setGi] = useState(0);
+  useEffect(() => {
+    if (!c) return;
+    setGi(0);
+    const dur = { prestige: 3000, firstsplus: 2600, bigach: 2200, levelup: 1500, daily1: 2200, groupsplus: 1700 }[c.kind] || 2200;
+    if (c.kind === "groupsplus") {
+      const groups = (c.data && c.data.groups) || [];
+      let i = 0, t;
+      const step = () => { i += 1; if (i >= groups.length) { onDone(); return; } setGi(i); t = setTimeout(step, dur); };
+      t = setTimeout(step, dur);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(onDone, dur);
+    return () => clearTimeout(t);
+  }, [c]);
+  if (!c) return null;
+  const wrap = { position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", overflow: "hidden" };
+  const stampBox = (main, sub, color = "#C99A1E") => (
+    <div style={{ textAlign: "center", transform: "rotate(-13deg)", border: `4px solid ${color}`, borderRadius: 16, padding: "16px 30px", background: "rgba(14,21,32,0.92)", boxShadow: "0 14px 44px rgba(0,0,0,0.5)" }}>
+      <div className="mub-display" style={{ fontSize: 46, fontWeight: 900, color, lineHeight: 1.05 }}>{main}</div>
+      {sub && <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 2, color: "#EAF0F4", marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+
+  if (c.kind === "prestige") {
+    const n = (c.data && c.data.n) || 1;
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #C99A1E, #7C5CFF)", animation: "celFlash 1s ease-out forwards" }} />
+        <Confetti count={170} duration={2900} />
+        <div style={{ textAlign: "center", animation: "celSlam 0.7s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 3s ease forwards" }}>
+          <PrestigeBadge prestige={n} size={92} />
+          <div className="mub-display" style={{ fontSize: 34, fontWeight: 900, color: "#fff", textShadow: "0 2px 14px rgba(0,0,0,0.55)", marginTop: 8 }}>PRESTIGE {n}</div>
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "firstsplus") {
+    return (
+      <div className="mub-cel" style={wrap}>
+        <Confetti count={150} duration={2500} />
+        <div style={{ animation: "celSlam 0.6s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 2.6s ease forwards" }}>
+          {stampBox("S+", "FIRST S+ RANK!")}
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "groupsplus") {
+    const groups = (c.data && c.data.groups) || [];
+    const g = groups[gi]; if (!g) return null;
+    return (
+      <div className="mub-cel" style={wrap} key={gi}>
+        <div style={{ animation: "celSlam 0.55s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 1.7s ease forwards" }}>
+          {stampBox(`${g.icon} S+`, `${g.name.toUpperCase()} MASTERED`)}
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "bigach") {
+    const d = c.data || {};
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", top: 0, left: 0, width: "60%", height: "100%", background: `linear-gradient(90deg, transparent, ${d.color || "#7EC8E3"}55, transparent)`, animation: "celShimmer 1s ease-out forwards" }} />
+        <div style={{ textAlign: "center", animation: "celSlam 0.6s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 2.2s ease forwards" }}>
+          <div style={{ fontSize: 74 }}>{d.icon}</div>
+          <div className="mub-display" style={{ fontSize: 22, fontWeight: 900, color: d.color || "#fff", textShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>{d.name}</div>
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "levelup") {
+    const n = c.data && c.data.n;
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", border: "4px solid #C99A1E", animation: "celRing 0.9s ease-out forwards" }} />
+        <div className="mub-display" style={{ fontSize: 30, fontWeight: 900, color: "#C99A1E", textShadow: "0 2px 12px rgba(0,0,0,0.45)", animation: "celNum 0.55s ease-out forwards, celFade 1.5s ease forwards" }}>LEVEL {n}</div>
+      </div>
+    );
+  }
+  if (c.kind === "daily1") {
+    return (
+      <div className="mub-cel" style={wrap}>
+        <Confetti count={90} duration={2000} />
+        <div style={{ textAlign: "center", animation: "celFade 2.2s ease forwards" }}>
+          <div style={{ fontSize: 78, animation: "celCrown 0.8s cubic-bezier(.2,.9,.3,1.2) forwards" }}>👑</div>
+          <div className="mub-display" style={{ fontSize: 22, fontWeight: 900, color: "#C99A1E" }}>#1 TODAY</div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 const genToken = () => {
   try { return crypto.randomUUID().replace(/-/g, "").slice(0, 18); } catch (e) { /* fall through */ }
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -7106,6 +7242,8 @@ export default function MathsUnlockedBN() {
   const [friendBusy, setFriendBusy] = useState(null);        // uid mid-action
   const [friendFind, setFriendFind] = useState(false);       // friends screen: search sub-view
   const [confirmPrestige, setConfirmPrestige] = useState(false);
+  const [celebration, setCelebration] = useState(null); // { kind, data, key }
+  const celebrate = (kind, data) => setCelebration({ kind, data, key: Date.now() + Math.random() });
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
@@ -7185,6 +7323,21 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (screen === "blitz" && blitzBoard === null) loadBlitzBoard();
   }, [screen, blitzBoard]);
+
+  // A mastery group hitting "all S+" gets a stamp — shown when the player
+  // lands back on the dashboard, once per group.
+  useEffect(() => {
+    if (screen !== "dashboard" || !ready || !profile.name || celebration) return;
+    const done = profile.celebratedGroups || [];
+    const newly = STAT_GROUPS.filter((g) => {
+      const ids = g.ids.filter((id) => TOPIC_BY_ID[id]);
+      return ids.length > 0 && ids.every((id) => topicRankAtLeast(profile, id, "S+")) && !done.includes(g.name);
+    });
+    if (newly.length) {
+      celebrate("groupsplus", { groups: newly.map((g) => ({ name: g.name, icon: g.icon })) });
+      patchProfile((p) => ({ celebratedGroups: [...new Set([...(p.celebratedGroups || []), ...newly.map((g) => g.name)])] }));
+    }
+  }, [screen, ready, profile.name, profile.topics]);
 
   // Class invite link: once the student is signed in, join the class from
   // the ?join= code they arrived with (stashed in localStorage).
@@ -7768,7 +7921,9 @@ export default function MathsUnlockedBN() {
     setDailyDoneToday(secs);
     setDailyElapsed(secs);
     await submitDailyResult(secs, profile.name);
-    setDailyBoardRows(await dailyBoard());
+    const board = await dailyBoard();
+    setDailyBoardRows(board);
+    if (board.length && board[0].uid && board[0].uid === authUid) celebrate("daily1");
     setDailyBusy(false);
   }
   // Challenge a friend: I play first, my questions + score seed the row.
@@ -8416,6 +8571,7 @@ export default function MathsUnlockedBN() {
     const expBefore = totalExp(profile);
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const rankBefore = ((profile.topics || {})[scoredId] || {}).highestRank ?? -1;
+    const hadSPlusBefore = TOPICS.some((tp) => topicRankAtLeast(profile, tp.id, "S+"));
     const next = JSON.parse(JSON.stringify(profile));
     const d = ensureDay(next);
     const perks = (profile.perks || []).filter((p) => PERKS[p]);
@@ -8543,6 +8699,11 @@ export default function MathsUnlockedBN() {
     if (!correct && !hwComplete) playWrong();
     setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete });
     saveProfile(next);
+    // Celebrations — one at a time, rarest first.
+    const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
+    if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
+    else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
+    else if (leveledTo) celebrate("levelup", { n: leveledTo });
   }
 
   function doPrestige() {
@@ -8565,6 +8726,7 @@ export default function MathsUnlockedBN() {
     setScreen("dashboard");
     playJingle(true);
     saveProfile(cur);
+    celebrate("prestige", { n: cur.prestige });
   }
 
   function useKeyOn(topic) {
@@ -9094,6 +9256,14 @@ export default function MathsUnlockedBN() {
         @keyframes wobble { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
         @keyframes rankPop { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 78% { transform: scale(0.9) rotate(-4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
         @keyframes rankGlow { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 6px currentColor; } }
+        @keyframes celFlash { 0% { opacity: 0; } 10% { opacity: 0.85; } 100% { opacity: 0; } }
+        @keyframes celSlam { 0% { transform: scale(3) rotate(-15deg); opacity: 0; } 55% { transform: scale(0.86) rotate(-15deg); opacity: 1; } 78% { transform: scale(1.07) rotate(-15deg); } 100% { transform: scale(1) rotate(-15deg); opacity: 1; } }
+        @keyframes celFade { 0%,72% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes celShimmer { 0% { transform: translateX(-130%) skewX(-16deg); } 100% { transform: translateX(130%) skewX(-16deg); } }
+        @keyframes celCrown { 0% { transform: translateY(-160px) rotate(-24deg); opacity: 0; } 62% { transform: translateY(10px) rotate(7deg); opacity: 1; } 82% { transform: translateY(-5px) rotate(-4deg); } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
+        @keyframes celRing { 0% { transform: scale(0.35); opacity: 0.85; } 100% { transform: scale(2.6); opacity: 0; } }
+        @keyframes celNum { 0% { transform: scale(0.2); opacity: 0; } 55% { transform: scale(1.25); opacity: 1; } 75% { transform: scale(0.95); } 100% { transform: scale(1); opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .mub-cel * { animation-duration: 0.01ms !important; } }
         .mub-stamp { animation: stampIn 0.4s ease-out; }
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
         .mub-rankpop { animation: rankPop 0.55s cubic-bezier(.2,.9,.3,1.25), rankGlow 0.7s ease-out 0.2s; }
@@ -12016,6 +12186,8 @@ export default function MathsUnlockedBN() {
           {toast}
         </div>
       )}
+
+      {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
     </div>
   );
 }
