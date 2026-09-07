@@ -287,6 +287,10 @@ create policy bc_delete on blitz_challenges for delete to authenticated
 -- teachers: let a signed-in user read ONLY their own row (so the app
 -- knows "am I a teacher"). Inserts stay manual / service-role.
 alter table teachers add column if not exists name text;
+-- admin = true unlocks the dev/cheat tools, Admin view, Question bank and
+-- the weekly-graphic generator. Plain teachers (admin = false) get only
+-- the class dashboard. Set by hand:  update teachers set admin = true where name = 'Nabil';
+alter table teachers add column if not exists admin boolean not null default false;
 drop policy if exists teachers_self on teachers;
 create policy teachers_self on teachers for select to authenticated
   using (uid = auth.uid());
