@@ -6900,15 +6900,14 @@ function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
       <text x="48" y="64" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="25" letterSpacing="3">MATHS UNLOCKED · BN</text>
       <text x="48" y="128" fill="#FFFFFF" fontFamily={F} fontWeight="900" fontSize="54">TOP SCHOOLS THIS WEEK</text>
       <text x="48" y="170" fill={C.navy} fontFamily={F} fontWeight="700" fontSize="25">{weekLabel}</text>
-      <text x="806" y="188" textAnchor="middle" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="14" letterSpacing="1">RANK Δ</text>
-      <text x="1038" y="188" textAnchor="end" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="14" letterSpacing="1">SHARE / GAIN</text>
+      <text x="1044" y="188" textAnchor="end" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="14" letterSpacing="1">RANK · SHARE · GAIN</text>
       {rows.map((r, i) => {
         const y = HEAD + i * ROW;
         const cy = y + ROW / 2 - 3;
         const up = r.delta != null && r.delta > 0;
         const down = r.delta != null && r.delta < 0;
         const initials = r.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
-        const nameLines = wrapLabel(r.name, 30, 2);
+        const nameLines = wrapLabel(r.name, 42, 2);
         const one = nameLines.length === 1;
         return (
           <g key={r.name}>
@@ -6921,14 +6920,14 @@ function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
               : <><circle cx="174" cy={cy} r="36" fill="#22303C" /><text x="174" y={cy + 10} textAnchor="middle" fill={C.ink} fontFamily={F} fontWeight="800" fontSize="26">{initials}</text></>}
             <circle cx="174" cy={cy} r="36" fill="none" stroke={C.teal} strokeWidth="3" />
             {nameLines.map((ln, j) => (
-              <text key={j} x="232" y={one ? cy - 2 : cy - 18 + j * 29} fill={C.ink} fontFamily={F} fontWeight="800" fontSize={one ? "26" : "23"}>{ln}</text>
+              <text key={j} x="232" y={one ? cy - 2 : cy - 18 + j * 29} fill={C.ink} fontFamily={F} fontWeight="800" fontSize={one ? "27" : "24"}>{ln}</text>
             ))}
-            <text x="232" y={cy + (one ? 24 : 30)} fill={C.mut} fontFamily={F} fontWeight="600" fontSize="16">{r.active} active this week</text>
-            <text x="806" y={cy + 10} textAnchor="middle" fill={up ? C.green : down ? C.red : C.amber} fontFamily={F} fontWeight="900" fontSize="33">
-              {r.delta == null ? "NEW" : r.delta === 0 ? "—" : `${up ? "▲" : "▼"} ${Math.abs(r.delta)}`}
+            <text x="232" y={cy + (one ? 25 : 31)} fill={C.mut} fontFamily={F} fontWeight="600" fontSize="16">{r.active} active this week</text>
+            <text x="1044" y={cy - 22} textAnchor="end" fill={up ? C.green : down ? C.red : C.amber} fontFamily={F} fontWeight="900" fontSize="22">
+              {r.delta == null ? "NEW" : r.delta === 0 ? "SAME" : `${up ? "▲" : "▼"} ${Math.abs(r.delta)}`}
             </text>
-            <text x="1038" y={cy - 3} textAnchor="end" fill={C.ink} fontFamily={F} fontWeight="900" fontSize="37">{r.pct.toFixed(1)}%</text>
-            <text x="1038" y={cy + 24} textAnchor="end" fill={r.gain >= 0 ? C.green : C.red} fontFamily={F} fontWeight="800" fontSize="17">{r.gain >= 0 ? "+" : ""}{r.gain.toFixed(1)}%</text>
+            <text x="1044" y={cy + 8} textAnchor="end" fill={C.ink} fontFamily={F} fontWeight="900" fontSize="34">{r.pct.toFixed(1)}%</text>
+            <text x="1044" y={cy + 31} textAnchor="end" fill={r.gain >= 0 ? C.green : C.red} fontFamily={F} fontWeight="800" fontSize="16">{r.gain >= 0 ? "+" : ""}{r.gain.toFixed(1)}%</text>
           </g>
         );
       })}
@@ -9676,7 +9675,7 @@ export default function MathsUnlockedBN() {
             ) : gfx.rows.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>No school has earned XP this week yet.</div>
             ) : (
-              <div ref={gfxRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--grid)" }}>
+              <div ref={gfxRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--grid)", maxWidth: 440, margin: "0 auto" }}>
                 <WeeklySchoolsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} activeTotal={gfx.activeTotal} />
               </div>
             )}
