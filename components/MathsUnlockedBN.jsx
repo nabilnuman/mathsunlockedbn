@@ -9163,7 +9163,7 @@ export default function MathsUnlockedBN() {
                       {canResume ? `Continue ${last.name}` : "Start practising"}
                       {canResume && (() => {
                         const r = rankDisplay((profile.topics[last.id] || {}).highestRank ?? -1);
-                        return <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, padding: "1px 6px", borderRadius: 6, background: "rgba(255,255,255,0.22)", color: "#fff" }}>{r.label}</span>;
+                        return <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: "var(--card)", border: `2px solid ${r.color}`, color: r.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 9.5, lineHeight: 1 }}>{r.label}</span>;
                       })()}
                     </span>
                     <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>
