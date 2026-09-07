@@ -5560,6 +5560,8 @@ const ACHIEVEMENTS = [
     secret: true, check: (p) => !!p.dodgeCaught },
   { id: "guidingkey", tier: "Bronze", name: "Your Guiding Key", icon: "🔑", desc: "Use a Skeleton Key",
     check: (p) => (p.keyedTopics || []).length > 0 },
+  { id: "oldschool", tier: "Bronze", name: "Old School", icon: "✍️", desc: "Submit 10 answers with handwriting",
+    check: (p) => (p.writtenAnswers || 0) >= 10 },
   { id: "practicemakesperfect", tier: "Bronze", name: "Practice Makes Perfect", icon: "🎰", desc: "Play 7 days in a row",
     check: (p) => (p.playStreak || 0) >= 7 },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
@@ -6837,7 +6839,7 @@ const emptyProfile = () => ({
   seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
-  bestTrigStreak: 0,
+  bestTrigStreak: 0, writtenAnswers: 0,
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
 });
@@ -7170,6 +7172,7 @@ export default function MathsUnlockedBN() {
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
   const [writePad, setWritePad] = useState(false);   // handwriting pad for the answer box
+  const wroteAnswerRef = useRef(false);              // the next submitAnswer came straight from the handwriting pad ("Old School")
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
   const [regionPick, setRegionPick] = useState(null); // [x,y] a point tapped inside a half-plane for "shade the region"
@@ -8526,6 +8529,8 @@ export default function MathsUnlockedBN() {
 
   function submitAnswer(override) {
     if (feedback) return;
+    const viaWrite = wroteAnswerRef.current;
+    wroteAnswerRef.current = false;
     const typed = typeof override === "string" ? override : answerInput;
     let correct;
     if (question.venn) {
@@ -8700,6 +8705,8 @@ export default function MathsUnlockedBN() {
         next.hwRun = { ...run, done, correct: gotRight };
       }
     }
+
+    if (viaWrite) next.writtenAnswers = (next.writtenAnswers || 0) + 1; // "Old School"
 
     const unlocked = awardAchievements(next);
     const bonusSound = unlocked.length > 0 || leveledTo;
@@ -11469,7 +11476,7 @@ export default function MathsUnlockedBN() {
         <WritePad
           mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
           onInsert={(t) => { setAnswerInput(t); setTimeout(() => answerRef.current && answerRef.current.focus(), 0); }}
-          onConfirm={(t) => { setAnswerInput(t); submitAnswer(t); }}
+          onConfirm={(t) => { setAnswerInput(t); wroteAnswerRef.current = true; submitAnswer(t); }}
           onClose={() => setWritePad(false)}
         />
       )}
