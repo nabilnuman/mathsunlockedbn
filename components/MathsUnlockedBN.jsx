@@ -9128,8 +9128,8 @@ export default function MathsUnlockedBN() {
                     return <span style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", background: "var(--card)", border: `2.5px solid ${r.color}`, color: r.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, lineHeight: 1 }}>{r.label}</span>;
                   })()}
                   <span style={{ flexShrink: 0, textAlign: "center", lineHeight: 1.15 }}>
-                    <span className="mub-display" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>{profile.streak || 0} 🔥</span>
-                    <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>streak</span>
+                    <span className="mub-display" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>{(canResume ? ((profile.topics[last.id] || {}).streak || 0) : (profile.streak || 0))} 🔥</span>
+                    <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>{canResume ? "topic streak" : "streak"}</span>
                   </span>
                 </button>
               );
