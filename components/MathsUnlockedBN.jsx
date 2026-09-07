@@ -7162,7 +7162,7 @@ export default function MathsUnlockedBN() {
   // additionally want the ?teacher=1 opt-in; classes just need the account.
   useEffect(() => {
     if (!ready) return;
-    const adminOk = teacherMode && teacherAccount === true;
+    const adminOk = teacherMode && !!teacherAccount;
     if (!adminOk && (screen === "admin" || screen === "questions")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
@@ -8720,11 +8720,11 @@ export default function MathsUnlockedBN() {
   // `teacherMode` (the ?teacher=1 localStorage flag) is browser-local and
   // not tied to an account, so on its own it must never expose the admin
   // surfaces or the dev/cheat tools — require a real teacher account too.
-  const devUnlocked = teacherMode && teacherAccount === true;
+  const devUnlocked = teacherMode && !!teacherAccount;
   // Redesigned dashboard (Quick Start + 5 topic groups). Live for teacher
   // accounts and anyone who opted in with ?newui=1, classic for everyone
   // else — flip to always-on once it's proven.
-  const showNewDash = teacherAccount === true || newUiFlag;
+  const showNewDash = !!teacherAccount || newUiFlag;
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
