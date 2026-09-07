@@ -7036,6 +7036,7 @@ export default function MathsUnlockedBN() {
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
+  const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
   const [canInstallApp, setCanInstallApp] = useState(false);
   const [installHidden, setInstallHidden] = useState(true);
   const [pushOn, setPushOn] = useState(false);
@@ -7056,6 +7057,15 @@ export default function MathsUnlockedBN() {
   }, []);
   // Keep the Settings "Notifications" toggle in sync with the real state.
   useEffect(() => { isPushSubscribed().then(setPushOn); }, [settingsOpen]);
+
+  // Whether today's Daily Challenge is still outstanding (drives the red
+  // dots on Special Modes). Re-checked when landing on the dashboard.
+  useEffect(() => {
+    if (!ready || !profile.name || dailyDoneToday !== null) return;
+    let live = true;
+    myDailyResult().then((v) => { if (live) setDailyDoneToday(v == null ? false : v); });
+    return () => { live = false; };
+  }, [ready, profile.name, dailyDoneToday]);
 
   // Daily Challenge live timer.
   useEffect(() => {
@@ -7502,11 +7512,13 @@ export default function MathsUnlockedBN() {
     const already = await myDailyResult();
     if (already != null) {
       setDailyDone(already);
+      setDailyDoneToday(already);
       setDailyElapsed(already);
       dailyBoard().then(setDailyBoardRows);
       return;
     }
     setDailyDone(null);
+    setDailyDoneToday(false);
     const run = (profile.dailyRun && profile.dailyRun.day === key)
       ? profile.dailyRun
       : { day: key, startedAt: Date.now() };
@@ -7527,6 +7539,7 @@ export default function MathsUnlockedBN() {
     await submitDailyResult(secs, profile.name);
     patchProfile(() => ({ dailyRun: null }));
     setDailyDone(secs);
+    setDailyDoneToday(secs);
     setDailyElapsed(secs);
     setDailyBoardRows(await dailyBoard());
     setDailyBusy(false);
@@ -9249,9 +9262,11 @@ export default function MathsUnlockedBN() {
 
             {/* Special Modes */}
             <button onClick={() => setModesOpen(true)} className="mub-card" style={{
+              position: "relative",
               width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 14,
               border: "1px solid var(--grid)", background: "var(--card)", cursor: "pointer", marginBottom: 16, textAlign: "left",
             }}>
+              {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--page-bg)", boxSizing: "border-box" }} />}
               <span style={{ fontSize: 22 }}>🎮</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Special Modes</span>
@@ -11154,7 +11169,8 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => setModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button onClick={() => go(startDaily)} className="mub-card" style={modeBtn(true)}>
+                <button onClick={() => go(startDaily)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
+                  {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                   <span style={{ fontSize: 28 }}>📅</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Challenge</span>
