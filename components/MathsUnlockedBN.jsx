@@ -7061,6 +7061,7 @@ export default function MathsUnlockedBN() {
   const [blitzQ, setBlitzQ] = useState(null);
   const [blitzPick, setBlitzPick] = useState(null);     // { value, correct } while the pick flashes
   const [blitzResult, setBlitzResult] = useState(null); // { score, best, newBest, unlocked }
+  const [blitzBoard, setBlitzBoard] = useState(null);   // [{ uid, name, best, prestige }] ranked by Blitz best
   const blitzDeadline = useRef(0);
   const blitzCorrect = useRef(0);
   const blitzAdvance = useRef(null);
@@ -7176,6 +7177,11 @@ export default function MathsUnlockedBN() {
     myDailyResult().then((v) => { if (live) setDailyDoneToday(v == null ? false : v); });
     return () => { live = false; };
   }, [ready, profile.name, dailyDoneToday]);
+
+  // Blitz leaderboard — load once whenever the Blitz screen opens.
+  useEffect(() => {
+    if (screen === "blitz" && blitzBoard === null) loadBlitzBoard();
+  }, [screen, blitzBoard]);
 
   // Daily Challenge live timer.
   useEffect(() => {
@@ -7607,6 +7613,18 @@ export default function MathsUnlockedBN() {
     setBlitzPhase("intro");
     setBlitzResult(null);
     setScreen("blitz");
+    loadBlitzBoard();
+  }
+  async function loadBlitzBoard() {
+    try {
+      const all = await getLeaderboard();
+      const rows = (all || [])
+        .filter((m) => m && (m.blitzBest || 0) > 0 && m.name)
+        .map((m) => ({ uid: m.uid, name: m.name, best: m.blitzBest || 0, prestige: m.prestige || 0 }))
+        .sort((a, b) => b.best - a.best || a.name.localeCompare(b.name))
+        .slice(0, 100);
+      setBlitzBoard(rows);
+    } catch (e) { setBlitzBoard([]); }
   }
 
   // Daily Challenge — one shared question, ranked by clean-solve time.
@@ -7813,6 +7831,7 @@ export default function MathsUnlockedBN() {
     setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked });
     if (unlocked.length) playJingle(true);
     saveProfile(n);
+    if (newBest) loadBlitzBoard();
     if (challengeRef.current) {
       const ch = challengeRef.current;
       setChallengeBusy(true);
@@ -10889,6 +10908,36 @@ export default function MathsUnlockedBN() {
                   )}
                   <button onClick={leaveBlitz} style={{ padding: "10px 22px", background: "none", border: "1px solid var(--grid)", borderRadius: 10, fontWeight: 600, fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>{challengeResult ? "Done" : "Back"}</button>
                 </div>
+              </div>
+            )}
+
+            {blitzPhase !== "playing" && (
+              <div style={{ maxWidth: 460, margin: "22px auto 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>⚡ Blitz leaderboard</div>
+                  <button onClick={loadBlitzBoard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> refresh</button>
+                </div>
+                {blitzBoard == null ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+                ) : blitzBoard.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>No Blitz scores yet — be the first.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {blitzBoard.map((r, i) => {
+                      const mine = r.uid && r.uid === authUid;
+                      return (
+                        <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                          background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
+                          <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
+                            {r.name}{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                          </span>
+                          <span className="mub-display" style={{ fontWeight: 800, color: "var(--blue)" }}>★ {r.best}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
