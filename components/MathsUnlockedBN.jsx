@@ -7450,6 +7450,7 @@ export default function MathsUnlockedBN() {
   const [installHidden, setInstallHidden] = useState(true);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushHidden, setPushHidden] = useState(true); // dashboard "turn on notifications" prompt dismissed?
   const startTimeRef = useRef(null);
   const audioCtxRef = useRef(null);
   const answerRef = useRef(null);
@@ -7463,9 +7464,11 @@ export default function MathsUnlockedBN() {
   useEffect(() => onInstallAvailable(setCanInstallApp), []);
   useEffect(() => {
     try { setInstallHidden(localStorage.getItem("mub_install_hidden") === "1"); } catch (e) { setInstallHidden(false); }
+    try { setPushHidden(localStorage.getItem("mub_push_hidden") === "1"); } catch (e) { setPushHidden(false); }
   }, []);
   // Keep the Settings "Notifications" toggle in sync with the real state.
   useEffect(() => { isPushSubscribed().then(setPushOn); }, [settingsOpen]);
+  useEffect(() => { isPushSubscribed().then(setPushOn); }, []); // also on first load, for the dashboard prompt
 
   // Whether today's Daily Challenge is still outstanding (drives the red
   // dots on Special Modes). Re-checked when landing on the dashboard.
@@ -7538,6 +7541,20 @@ export default function MathsUnlockedBN() {
   function dismissInstall() {
     setInstallHidden(true);
     try { localStorage.setItem("mub_install_hidden", "1"); } catch (e) { /* ignore */ }
+  }
+  function dismissPush() {
+    setPushHidden(true);
+    try { localStorage.setItem("mub_push_hidden", "1"); } catch (e) { /* ignore */ }
+  }
+  async function enablePushFromPrompt() {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      const r = await subscribeToPush(savePushSubscription);
+      if (r.ok) { setPushOn(true); dismissPush(); }
+      else flash(r.error || "Couldn't turn on notifications.");
+    } catch (e) { flash("Couldn't turn on notifications — try again."); }
+    setPushBusy(false);
   }
   async function doInstall() {
     const outcome = await promptInstall();
@@ -9927,6 +9944,17 @@ export default function MathsUnlockedBN() {
                   <button onClick={doInstall} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>Install</button>
                 )}
                 <button onClick={dismissInstall} aria-label="Dismiss" style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={15} /></button>
+              </div>
+            )}
+            {profile.name && !pushHidden && !pushOn && pushConfigured() && pushSupported() && pushPermission() === "default" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--amber)", background: "var(--card)" }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>🔔</span>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}>
+                  <div style={{ fontWeight: 700 }}>Turn on notifications</div>
+                  <div style={{ color: "var(--muted)" }}>Get reminded about homework and challenges even when the app is closed.</div>
+                </div>
+                <button onClick={enablePushFromPrompt} disabled={pushBusy} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "7px 12px", cursor: pushBusy ? "default" : "pointer", opacity: pushBusy ? 0.6 : 1 }}>{pushBusy ? "…" : "Turn on"}</button>
+                <button onClick={dismissPush} aria-label="Dismiss" style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={15} /></button>
               </div>
             )}
             <div style={{ marginBottom: 18 }}>
