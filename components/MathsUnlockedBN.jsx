@@ -7324,6 +7324,7 @@ const emptyProfile = () => ({
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
+  sawRankJump: [], // topic ids where the "reached S — move on?" prompt has already shown
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
@@ -7760,6 +7761,7 @@ export default function MathsUnlockedBN() {
   const [confirmPrestige, setConfirmPrestige] = useState(false);
   const [celebration, setCelebration] = useState(null); // { kind, data, key }
   const celebrate = (kind, data) => setCelebration({ kind, data, key: Date.now() + Math.random() });
+  const [rankJump, setRankJump] = useState(null); // { topicId, rank } — first-time "reached S, move on?" prompt
   const [keyTarget, setKeyTarget] = useState(null);
   const [theme, setTheme] = useState("light");
   const [soundOn, setSoundOn] = useState(true);
@@ -8116,6 +8118,8 @@ export default function MathsUnlockedBN() {
       setScreen(profile.name ? "dashboard" : "login");
     }
   }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
+
+  useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
 
   // Remember an in-progress guided lesson (per device) so a page reload
   // resumes where the student left off instead of restarting.
@@ -9424,6 +9428,17 @@ export default function MathsUnlockedBN() {
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
 
+    // First time this topic crosses into S / S+ (in normal topic practice —
+    // not Mixed Review or a homework run): offer to move on to a new topic.
+    const S_IDX = RANK_ORDER.indexOf("S");
+    let rankJumpTopic = null;
+    if (rankedUp && t.highestRank >= S_IDX && rankBefore < S_IDX &&
+        activeTopic && activeTopic.id === scoredId && activeTopic.id !== MIXED_TOPIC.id && !next.hwRun &&
+        !(next.sawRankJump || []).includes(scoredId)) {
+      next.sawRankJump = [...(next.sawRankJump || []), scoredId];
+      rankJumpTopic = scoredId;
+    }
+
     const nowHour = new Date().getHours();
     if (nowHour >= 0 && nowHour < 4) next.nightOwl = true; // "Night Owl" — any answer, 12am–4am
 
@@ -9533,6 +9548,7 @@ export default function MathsUnlockedBN() {
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
     if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
     else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
+    if (rankJumpTopic) setRankJump({ topicId: rankJumpTopic, rank: rankedUp.to });
   }
 
   function doPrestige() {
@@ -13358,6 +13374,40 @@ export default function MathsUnlockedBN() {
       )}
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
+
+      {rankJump && (() => {
+        const jt = TOPIC_BY_ID[rankJump.topicId];
+        const nextTopic = TOPICS.find((tp) => tp.id !== rankJump.topicId && isUnlocked(tp, profile) && !topicRankAtLeast(profile, tp.id, "S"));
+        const rc = RANK_COLOR[rankJump.rank] || "var(--amber)";
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ ...vars, width: "100%", maxWidth: 380, background: "var(--card)", color: "var(--ink)", border: `2px solid ${rc}`, borderRadius: 16, padding: "22px 20px", textAlign: "center", fontFamily: "Inter, sans-serif", boxShadow: "0 18px 50px rgba(0,0,0,0.5)" }}>
+              <div style={{ fontSize: 34 }}>{jt ? jt.icon : "🏆"}</div>
+              <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginTop: 6 }}>
+                <span style={{ color: rc }}>{rankJump.rank}</span> in {jt ? jt.name : "this topic"}!
+              </div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                {nextTopic ? "Move on to a new topic, or keep practising here?" : "You've reached S in every topic you've unlocked."}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+                {nextTopic && (
+                  <button onClick={() => { setRankJump(null); startTopic(nextTopic); }} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", background: "var(--blue)", color: "var(--on-accent)", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+                    ▶  Go to {nextTopic.icon} {nextTopic.name}
+                  </button>
+                )}
+                <button onClick={() => setRankJump(null)} style={{ width: "100%", padding: "12px", borderRadius: 10, border: "1px solid var(--grid)", background: "var(--paper)", color: "var(--ink)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  Stay on {jt ? jt.name : "this topic"}
+                </button>
+                {!nextTopic && (
+                  <button onClick={() => { setRankJump(null); setActiveTopic(null); setScreen("dashboard"); }} style={{ width: "100%", padding: "10px", borderRadius: 10, border: "none", background: "none", color: "var(--muted)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                    Back to menu
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
