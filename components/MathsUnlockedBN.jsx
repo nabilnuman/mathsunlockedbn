@@ -5425,14 +5425,14 @@ const LESSONS = {
         "= 10x⁷" ] },
       { k: "write", q: "Simplify  3x² × 4x⁵   (use ^ for the power, e.g.  5x^3 )", a: "12x^7", mode: "any", tips: ["Multiply the numbers:  3 × 4", "Add the powers:  2 + 5"] },
       { k: "teach", h: "Dividing: subtract the powers", b: [
-        "x⁷ ÷ x³ = x⁴.",
+        frac("x⁷", "x³") + "  =  x⁴.",
         "Same base? Subtract:  7 − 3 = 4." ] },
       { k: "eg", h: "Simplify  (12x⁶) ÷ (3x²)", lines: [
         frac("12x⁶", "3x²"),
         "Divide the numbers:  12 ÷ 3 = 4",
         "Subtract the powers:  x⁶ ÷ x² = x⁶⁻² = x⁴",
         "= 4x⁴" ] },
-      { k: "write", q: "Simplify  x⁷ ÷ x³   (use ^ for the power, e.g.  x^2 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
+      { k: "write", q: "Simplify  " + frac("x⁷", "x³") + "   (use ^ for the power, e.g.  x^2 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
       { k: "teach", h: "Power of a power: multiply", b: [
         "(x³)² = x⁶.",
         "Multiply the powers:  3 × 2 = 6." ] },
@@ -5442,9 +5442,9 @@ const LESSONS = {
         "So 7⁰ = 1 and (5x)⁰ = 1." ] },
       { k: "write", q: "What is  9⁰ ?", a: "1", tips: ["Remember the power-of-zero rule from the last card"] },
       { k: "teach", h: "Negative power: one over", b: [
-        "2⁻³ means 1 ÷ 2³.",
-        "2³ = 8, so 2⁻³ = 1/8." ] },
-      { k: "write", q: "What is  2⁻² ?   (write it as a fraction, e.g.  1/9 )", a: "1/4", mode: "any", tips: ["2⁻² = 1 ÷ 2²", "Work out 2²"] },
+        "A negative power means “1 over”.",
+        "2⁻³ = " + frac("1", "2³") + " = " + frac("1", "8") + "." ] },
+      { k: "write", q: "What is  2⁻² ?   (give a fraction, like " + frac("1", "9") + " )", a: "1/4", mode: "any", tips: ["2⁻² = " + frac("1", "2²"), "Work out 2²"] },
     ],
   },
 
@@ -5505,9 +5505,10 @@ const LESSONS = {
         "2√3 × 4√5 = (2 × 4)(√3 × √5) = 8√15." ] },
       { k: "write", q: "Simplify  √3 × √12", a: "6", tips: ["√3 × √12 = √36", "√36 = 6"] },
       { k: "teach", h: "Rationalising the denominator", b: [
-        "A root on the bottom of a fraction isn't tidy. Multiply the top and bottom by that root.",
-        "1/√2 = (1 × √2) / (√2 × √2) = √2 / 2." ] },
-      { k: "write", q: "Rationalise  6/√3.   (√3 × √3 = 3)", a: "2√3", mode: "any", check: (v) => checkSimplifiedSurd(v, "2√3"), tips: ["Multiply top and bottom by √3", "(6√3) ÷ 3 = 2√3"] },
+        "A root on the bottom of a fraction isn't tidy.",
+        "Multiply the top and bottom by that same root — it clears the root from the bottom.",
+        frac("1", "√2") + "  becomes  " + frac("√2", "2") + "     (√2 × √2 = 2)" ] },
+      { k: "write", q: "Rationalise  " + frac("6", "√3") + "   (√3 × √3 = 3)", a: "2√3", mode: "any", check: (v) => checkSimplifiedSurd(v, "2√3"), tips: ["Multiply the top and bottom by √3", frac("6√3", "3") + " = 2√3"] },
       { k: "write", q: "Simplify  √50", a: "5√2", mode: "any", check: (v) => checkSimplifiedSurd(v, "5√2"), tips: ["50 = 25 × 2", "√25 = 5"] },
     ],
   },
@@ -5719,10 +5720,10 @@ const LESSONS = {
       { k: "write", q: "y = k x.  When x = 2, y = 10.  What is k?", a: "5", tips: ["k = y ÷ x", "10 ÷ 2"] },
       { k: "write", q: "With k = 5, find y when x = 7.", a: "35", tips: ["y = 5x", "5 × 7"] },
       { k: "teach", h: "Inverse proportion", b: [
-        "“y is inversely proportional to x” means y = k ÷ x.",
-        "Double x → halve y.  Find k with k = y × x." ] },
-      { k: "write", q: "y = k ÷ x.  When x = 3, y = 4.  Find k.", a: "12", tips: ["k = y × x", "4 × 3"] },
-      { k: "write", q: "With k = 12, find y when x = 6.", a: "2", tips: ["y = 12 ÷ x", "12 ÷ 6"] },
+        "“y is inversely proportional to x” means  y = " + frac("k", "x") + ".",
+        "Double x → halve y.  Find k with  k = y × x." ] },
+      { k: "write", q: "y = " + frac("k", "x") + ".  When x = 3, y = 4.  Find k.", a: "12", tips: ["k = y × x", "4 × 3"] },
+      { k: "write", q: "With k = 12, find y when x = 6.", a: "2", tips: ["y = " + frac("12", "x"), "12 ÷ 6"] },
     ],
   },
 };
@@ -10578,7 +10579,7 @@ export default function MathsUnlockedBN() {
           const msgBox = lessonMsg ? (
             <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7, fontSize: lessonMsg.done ? 15 : 13, fontWeight: 800, color: lessonMsg.ok ? "var(--green)" : "var(--red)" }}>
               {lessonMsg.done && <span style={{ fontSize: 17 }}>{lessonMsg.ok ? "✓" : "✕"}</span>}
-              <span>{lessonMsg.text}</span>
+              <span><MathText text={lessonMsg.text} /></span>
             </div>
           ) : null;
           const primaryBtn = (label, onClick, dis) => (
