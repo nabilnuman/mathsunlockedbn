@@ -7324,7 +7324,7 @@ const emptyProfile = () => ({
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
-  sawRankJump: [], // topic ids where the "reached S — move on?" prompt has already shown
+  sawRankJump: {}, // sawRankJump[topicId] = highest rank ("S" / "S+") the "move on?" prompt has shown for
 });
 const slug = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "student";
 
@@ -9428,15 +9428,24 @@ export default function MathsUnlockedBN() {
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
 
-    // First time this topic crosses into S / S+ (in normal topic practice —
-    // not Mixed Review or a homework run): offer to move on to a new topic.
+    // Reaching S — and again reaching S+ — in normal topic practice (not
+    // Mixed Review or a homework run): offer to move on to a new topic.
+    // Once per rank per topic (so at most twice: S, then S+).
     const S_IDX = RANK_ORDER.indexOf("S");
-    let rankJumpTopic = null;
-    if (rankedUp && t.highestRank >= S_IDX && rankBefore < S_IDX &&
-        activeTopic && activeTopic.id === scoredId && activeTopic.id !== MIXED_TOPIC.id && !next.hwRun &&
-        !(next.sawRankJump || []).includes(scoredId)) {
-      next.sawRankJump = [...(next.sawRankJump || []), scoredId];
-      rankJumpTopic = scoredId;
+    let rankJumpTopic = null, rankJumpRank = null;
+    {
+      let seen = next.sawRankJump;
+      if (Array.isArray(seen)) seen = Object.fromEntries(seen.map((id) => [id, "S"])); // migrate old array form
+      if (!seen || typeof seen !== "object") seen = {};
+      next.sawRankJump = seen;
+      const newRank = RANK_ORDER[t.highestRank];
+      const shownIdx = seen[scoredId] ? RANK_ORDER.indexOf(seen[scoredId]) : S_IDX - 1;
+      if (rankedUp && t.highestRank >= S_IDX && t.highestRank > shownIdx &&
+          activeTopic && activeTopic.id === scoredId && activeTopic.id !== MIXED_TOPIC.id && !next.hwRun) {
+        seen[scoredId] = newRank;
+        rankJumpTopic = scoredId;
+        rankJumpRank = newRank;
+      }
     }
 
     const nowHour = new Date().getHours();
@@ -9548,7 +9557,7 @@ export default function MathsUnlockedBN() {
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
     if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
     else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
-    if (rankJumpTopic) setRankJump({ topicId: rankJumpTopic, rank: rankedUp.to });
+    if (rankJumpTopic) setRankJump({ topicId: rankJumpTopic, rank: rankJumpRank });
   }
 
   function doPrestige() {
