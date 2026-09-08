@@ -119,12 +119,14 @@ export async function GET(req) {
 
   // ---- 1. homework not done, due soon / overdue -----------------------
   {
+    // Nudge daily while an assignment is coming up (≤8 days out — the
+    // teacher form defaults to a week) or recently overdue (≤14 days).
     const { data: asg } = await sb
       .from("assignments")
       .select("id,class_id,title,count,due_at")
       .not("due_at", "is", null)
-      .gte("due_at", new Date(now - 7 * DAY).toISOString())
-      .lte("due_at", new Date(now + 3 * DAY).toISOString());
+      .gte("due_at", new Date(now - 14 * DAY).toISOString())
+      .lte("due_at", new Date(now + 8 * DAY).toISOString());
     if (asg && asg.length) {
       const classIds = [...new Set(asg.map((a) => a.class_id))];
       const { data: members } = await sb
@@ -152,11 +154,13 @@ export async function GET(req) {
         }
       }
       for (const [uid, list] of pendingByUid) {
-        const overdue = list.some((a) => new Date(a.due_at).getTime() < now);
+        const soonest = list.reduce((m, a) => Math.min(m, new Date(a.due_at).getTime()), Infinity);
+        const dLeft = Math.ceil((soonest - now) / DAY);
+        const when = dLeft < 0 ? "overdue" : dLeft === 0 ? "due today" : dLeft === 1 ? "due tomorrow" : `due in ${dLeft} days`;
         const body =
           list.length === 1
-            ? `“${list[0].title || `${list[0].count} questions`}” is ${overdue ? "overdue" : "due soon"} — open the app to submit it.`
-            : `You have ${list.length} assignments ${overdue ? "(some overdue)" : "due soon"} — open the app to catch up.`;
+            ? `“${list[0].title || `${list[0].count} questions`}” is ${when} — open the app to do it.`
+            : `${list.length} assignments not done (soonest ${when}) — open the app to catch up.`;
         hwJob.set(uid, { title: "Homework reminder", body, url: "/", tag: "hw-daily" });
       }
     }
