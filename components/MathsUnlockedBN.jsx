@@ -5453,25 +5453,30 @@ const LESSONS = {
     blurb: "Highest common factor and lowest common multiple.",
     cards: [
       { k: "teach", h: "Factors and multiples", b: [
-        "A factor divides in exactly — 1, 2, 3, 4, 6, 12 are the factors of 12.",
-        "A multiple is in the times table — 6, 12, 18, 24 are multiples of 6." ] },
+        "A factor divides in exactly.",
+        "Factors of 12:  1, 2, 3, 4, 6, 12.",
+        "A multiple is in the times table.",
+        "Multiples of 6:  6, 12, 18, 24, …" ] },
       { k: "teach", h: "HCF — Highest Common Factor", b: [
         "The biggest number that divides into both.",
-        "12: factors 1, 2, 3, 4, 6, 12.   18: factors 1, 2, 3, 6, 9, 18.   Biggest shared = 6." ] },
+        "Factors of 12:  1, 2, 3, 4, 6, 12",
+        "Factors of 18:  1, 2, 3, 6, 9, 18",
+        "The biggest one they share is 6." ] },
       { k: "tap", q: "Which is a common factor of 8 and 20?", opts: ["3", "4", "8"], a: 1, tip: "4 divides into both 8 and 20." },
-      { k: "write", q: "What is the HCF of 6 and 9?", a: "3", tips: ["Factors of 6: 1, 2, 3, 6", "Factors of 9: 1, 3, 9 — biggest shared"] },
-      { k: "teach", h: "Using prime factors", b: [
-        "Break each number into primes, then multiply the ones they share.",
-        "12 = 2 × 2 × 3,   18 = 2 × 3 × 3.   Shared: one 2 and one 3   →   HCF = 6." ] },
-      { k: "write", q: "HCF of 12 and 30?   (12 = 2×2×3,  30 = 2×3×5)", a: "6", tips: ["Shared primes: one 2 and one 3", "2 × 3"] },
+      { k: "write", q: "What is the HCF of 6 and 9?", a: "3", tips: ["Factors of 6:  1, 2, 3, 6", "Factors of 9:  1, 3, 9 — biggest shared"] },
       { k: "teach", h: "LCM — Lowest Common Multiple", b: [
-        "The smallest number both go into.",
-        "Multiples of 4: 4, 8, 12, 16…   of 6: 6, 12, 18…   Smallest shared = 12." ] },
+        "The smallest number that both go into.",
+        "Multiples of 4:  4, 8, 12, 16, 20, …",
+        "Multiples of 6:  6, 12, 18, 24, …",
+        "The smallest one they share is 12." ] },
       { k: "tap", q: "LCM of 3 and 5?", opts: ["8", "15", "30"], a: 1, tip: "The first number in both the 3 and 5 times tables." },
-      { k: "teach", h: "A quicker LCM", b: [
+      { k: "ladder", h: "The repeated-division method", pair: [24, 36], divisors: [2, 2, 3],
+        note: "Divide BOTH numbers by a common prime, again and again, until the bottom row shares no factor. Then the left column and the bottom row give you both answers:" },
+      { k: "write", q: "HCF of 12 and 30?   (divide both by 2, then by 3)", a: "6", tips: ["2 | 12  30  →  6  15", "3 | 6  15  →  2  5.   HCF = 2 × 3"] },
+      { k: "write", q: "LCM of 4 and 10?   (divide both by 2 → 2 and 5)", a: "20", tips: ["Left column: 2.   Bottom row: 2 and 5", "LCM = 2 × 2 × 5"] },
+      { k: "teach", h: "A shortcut for two numbers", b: [
         "LCM = (A × B) ÷ HCF.",
-        "For 4 and 6:  HCF = 2, so LCM = 24 ÷ 2 = 12." ] },
-      { k: "write", q: "LCM of 6 and 8?   (their HCF is 2)", a: "24", tips: ["6 × 8 = 48", "48 ÷ 2"] },
+        "For 6 and 8:  HCF = 2, so LCM = 48 ÷ 2 = 24." ] },
       { k: "write", q: "HCF of 20 and 25?", a: "5", tips: ["What divides into both?", "5 × 4 = 20 and 5 × 5 = 25"] },
     ],
   },
@@ -5600,7 +5605,8 @@ const LESSONS = {
       { k: "write", q: "Factorise  x² + 5x.", a: "x(x+5)", mode: "any", tips: ["Both terms share an x", "x × x  and  x × 5"] },
       { k: "teach", h: "Quadratics:  x² + bx + c", b: [
         "Find two numbers that multiply to c and add to b.",
-        "x² + 5x + 6:  2 and 3  (2 × 3 = 6, 2 + 3 = 5)  →  (x + 2)(x + 3)." ] },
+        "x² + 5x + 6:  2 and 3  (2 × 3 = 6,  2 + 3 = 5).",
+        "So it factorises to  (x + 2)(x + 3)." ] },
       { k: "tap", q: "For  x² + 7x + 12, which pair works?", opts: ["2 and 6", "3 and 4", "1 and 12"], a: 1, tip: "Multiply to 12, add to 7." },
       { k: "write", q: "Factorise  x² + 7x + 12.   (like  (x+1)(x+6) )", a: "(x+3)(x+4)", mode: "any", tips: ["3 × 4 = 12,  3 + 4 = 7"] },
       { k: "eg", h: "Factorise  x² − x − 6", lines: [
@@ -5642,7 +5648,8 @@ const LESSONS = {
         "One pair of values fits both:  x = 6, y = 4." ] },
       { k: "teach", h: "Elimination", b: [
         "Add or subtract the two equations to cancel one letter.",
-        "(x + y) + (x − y) = 10 + 2  →  2x = 12  →  x = 6." ] },
+        "(x + y) + (x − y)  gives  2x = 12.",
+        "So x = 6, then use either equation to get y." ] },
       { k: "tap", q: "x + y = 7  and  x − y = 1. Add them — what do you get?", opts: ["2y = 8", "2x = 8", "0 = 8"], a: 1, tip: "+y and −y cancel; x + x = 2x." },
       { k: "write", q: "From  2x = 8,  what is x?", a: "4", tips: ["Divide both sides by 2"] },
       { k: "write", q: "x + y = 7  and you've found  x = 4.  What is y?", a: "3", tips: ["Substitute x = 4:  4 + y = 7"] },
@@ -5671,8 +5678,10 @@ const LESSONS = {
         "The nth-term (position) rule lets you jump straight to any term." ] },
       { k: "write", q: "Next term:   2, 5, 8, 11, __", a: "14", tips: ["The rule is + 3", "11 + 3"] },
       { k: "teach", h: "Finding the nth term (linear)", b: [
-        "A constant difference d → the rule starts with “dn”.",
-        "Difference 3 → 3n. Then adjust: 3 × 1 = 3, but the first term is 2, so subtract 1 → 3n − 1." ] },
+        "A constant difference d means the rule starts with “dn”.",
+        "Difference of 3 → start with 3n.",
+        "Check n = 1:  3 × 1 = 3, but the term is 2, so subtract 1.",
+        "Rule:  3n − 1." ] },
       { k: "tap", q: "3, 5, 7, 9, …  the nth term starts with…", opts: ["2n", "3n", "5n"], a: 0, tip: "The difference is 2, so 2n." },
       { k: "write", q: "3, 5, 7, 9, …  the nth term is  2n + ?", a: "1", tips: ["2 × 1 = 2, but the first term is 3", "3 − 2 = 1"] },
       { k: "eg", h: "Find the nth term of  7, 12, 17, 22, …", lines: [
@@ -5694,7 +5703,9 @@ const LESSONS = {
     cards: [
       { k: "teach", h: "Sharing in a ratio", b: [
         "Share $20 between Sam and Joe in the ratio 2 : 3.",
-        "Total parts = 2 + 3 = 5.   One part = 20 ÷ 5 = $4.   Sam gets 2 × 4 = $8, Joe gets 3 × 4 = $12." ] },
+        "Total parts = 2 + 3 = 5.",
+        "One part = 20 ÷ 5 = $4.",
+        "Sam gets 2 × 4 = $8,  Joe gets 3 × 4 = $12." ] },
       { k: "tap", q: "Share something in the ratio 1 : 3. How many parts in total?", opts: ["3", "4", "12"], a: 1, tip: "Add the numbers in the ratio: 1 + 3." },
       { k: "write", q: "Share 12 sweets in the ratio 1 : 3. How many does the second person get?", a: "9", tips: ["4 parts, so 1 part = 12 ÷ 4 = 3", "Second person = 3 parts = 3 × 3"] },
       { k: "eg", h: "Share $35 between Ali and Mia in the ratio 3 : 4", lines: [
@@ -7351,6 +7362,43 @@ function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
         {Number(activeTotal || 0).toLocaleString()} students active this week  ·  mathsunlockedbn.vercel.app
       </text>
     </svg>
+  );
+}
+
+/* Repeated-division "ladder" for HCF / LCM — the diagram exam classes
+   use. `divisors` are the common primes taken out, one per row; the
+   bottom row is what's left (co-prime). Used by the `ladder` lesson card. */
+function LadderDivision({ pair, divisors }) {
+  const rows = [pair.slice()];
+  let cur = pair.slice();
+  for (const d of divisors) { cur = cur.map((n) => Math.round(n / d)); rows.push(cur.slice()); }
+  const hcf = divisors.reduce((a, b) => a * b, 1);
+  const lcm = hcf * cur.reduce((a, b) => a * b, 1);
+  const cell = { padding: "3px 16px", textAlign: "center" };
+  return (
+    <div>
+      <table className="mub-mono" style={{ borderCollapse: "collapse", fontSize: 16, margin: "2px 0 12px" }}>
+        <tbody>
+          {rows.map((r, i) => {
+            const lastDivRow = i === divisors.length;
+            return (
+              <tr key={i}>
+                <td style={{ ...cell, color: "var(--red)", fontWeight: 800, borderRight: "2px solid var(--red)", borderBottom: lastDivRow ? "none" : "1px solid var(--grid)" }}>
+                  {i < divisors.length ? divisors[i] : ""}
+                </td>
+                {r.map((n, j) => (
+                  <td key={j} style={{ ...cell, color: "var(--ink)", borderBottom: lastDivRow ? "none" : "1px solid var(--grid)" }}>{n}</td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ fontSize: 13, lineHeight: 1.7 }}>
+        <div><span style={{ color: "var(--red)", fontWeight: 800 }}>HCF</span> = multiply the left column&nbsp;&nbsp;{divisors.join(" × ")} = <strong>{hcf}</strong></div>
+        <div><span style={{ color: "var(--blue)", fontWeight: 800 }}>LCM</span> = left column × bottom row&nbsp;&nbsp;{[...divisors, ...cur].join(" × ")} = <strong>{lcm}</strong></div>
+      </div>
+    </div>
   );
 }
 
@@ -10572,6 +10620,13 @@ export default function MathsUnlockedBN() {
                 {lessonReveal < card.lines.length
                   ? primaryBtn("Next step", () => setLessonReveal(lessonReveal + 1))
                   : primaryBtn("Got it", lessonAdvance)}
+              </>)}
+
+              {lessonPhase === "card" && card && card.k === "ladder" && cardShell(<>
+                <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{card.h}</div>
+                {card.note && <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>{card.note}</div>}
+                <div style={{ overflowX: "auto" }}><LadderDivision pair={card.pair} divisors={card.divisors} /></div>
+                {primaryBtn("Got it", lessonAdvance)}
               </>)}
 
               {lessonPhase === "card" && card && card.k === "tap" && cardShell(<>
