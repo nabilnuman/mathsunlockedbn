@@ -8071,6 +8071,22 @@ export default function MathsUnlockedBN() {
       else setLessonMsg({ ok: false, text: "Not quite — try again." });
     }
   }
+  // What the current lesson step expects — drives the handwriting-pad mode
+  // and the keyboard type, so a numeric answer isn't read as letters ("16"→"Lb").
+  function lessonAnswerMode() {
+    const numeric = (a) => /^-?\d+(?:\.\d+)?$/.test(String(a == null ? "" : a).trim());
+    if (lessonPhase === "quiz" && lessonGuide) {
+      const st = lessonGuide.steps[lessonGuide.i];
+      return st && st.blank != null ? "number" : "any";
+    }
+    if (lessonPhase === "quiz") {
+      const q = lessonQuizQ;
+      return q && (numeric(q.answer) || numeric(q.answerDisplay)) ? "number" : "any";
+    }
+    const card = LESSONS[lessonId] && LESSONS[lessonId].cards[lessonIdx];
+    if (!card) return "any";
+    return card.mode ? card.mode : (numeric(card.a) ? "number" : "any");
+  }
   // WritePad "Submit" / on-screen check button routes here based on where we are.
   function lessonCheckNow(val) {
     if (lessonPhase === "quiz" && lessonGuide) return lessonGuideCheck(val);
@@ -12355,7 +12371,7 @@ export default function MathsUnlockedBN() {
 
       {writePad && screen === "lesson" && (
         <WritePad
-          mode="any"
+          mode={lessonAnswerMode()}
           onInsert={(t) => setLessonInput(t)}
           onConfirm={(t) => { setLessonInput(t); setTimeout(() => lessonCheckNow(t), 0); }}
           onClose={() => setWritePad(false)}
