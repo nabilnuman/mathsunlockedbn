@@ -7749,6 +7749,7 @@ export default function MathsUnlockedBN() {
   const [lessonGuide, setLessonGuide] = useState(null);     // { steps:[{text,blank}], i } while walking a wrong answer
   const [lessonEarnedXp, setLessonEarnedXp] = useState(0);
   const [lessonRun, setLessonRun] = useState(null);         // { id, phase, idx, right } — resumable in-progress lesson (localStorage-backed)
+  const lessonInputRef = useRef(null);
   const [dailyQ, setDailyQ] = useState(null);
   const [dailyInput, setDailyInput] = useState("");
   const [dailyElapsed, setDailyElapsed] = useState(0);
@@ -8426,13 +8427,37 @@ export default function MathsUnlockedBN() {
   // and the keyboard type, so a numeric answer isn't read as letters ("16"→"Lb").
   function lessonAnswerMode() {
     const numeric = (a) => /^-?\d+(?:\.\d+)?$/.test(String(a == null ? "" : a).trim());
+    const hasSurd = (s) => /√|sqrt/i.test(String(s || ""));
     if (lessonPhase === "quiz") {
       const q = lessonQuizQ;
+      if (q && (hasSurd(q.answer) || hasSurd(q.answerDisplay) || hasSurd(q.hint))) return "surd";
       return q && (numeric(q.answer) || numeric(q.answerDisplay)) ? "number" : "any";
     }
     const card = LESSONS[lessonId] && LESSONS[lessonId].cards[lessonIdx];
     if (!card) return "any";
+    if (hasSurd(card.a) || hasSurd(card.q)) return "surd";
     return card.mode ? card.mode : (numeric(card.a) ? "number" : "any");
+  }
+  // On-screen "insert" symbols for the current lesson step.
+  function lessonSymbols() {
+    let ctx = "";
+    if (lessonPhase === "quiz" && lessonQuizQ) ctx = `${lessonQuizQ.hint || ""} ${lessonQuizQ.answer || ""} ${lessonQuizQ.answerDisplay || ""}`;
+    else { const c = LESSONS[lessonId] && LESSONS[lessonId].cards[lessonIdx]; if (c) ctx = `${c.q || ""} ${c.a || ""}`; }
+    const s = [];
+    if (/√|sqrt/i.test(ctx)) s.push("√");
+    if (/π/.test(ctx)) s.push("π");
+    if (/10\^|10⁻|× 10|standard form/i.test(ctx)) s.push("×10^");
+    else if (/\^|[²³⁴⁵⁶⁷⁸⁹]/.test(ctx)) s.push("^");
+    if (/\//.test(ctx)) s.push("/");
+    return s;
+  }
+  function insertLessonSym(sym) {
+    const el = lessonInputRef.current;
+    if (!el) { setLessonInput((v) => v + sym); return; }
+    const st = el.selectionStart ?? lessonInput.length, en = el.selectionEnd ?? lessonInput.length;
+    const nv = lessonInput.slice(0, st) + sym + lessonInput.slice(en);
+    setLessonInput(nv);
+    requestAnimationFrame(() => { try { el.focus(); el.setSelectionRange(st + sym.length, st + sym.length); } catch (e) { /* noop */ } });
   }
   // WritePad "Submit" / on-screen check button routes here based on where we are.
   function lessonCheckNow(val) {
@@ -10563,16 +10588,29 @@ export default function MathsUnlockedBN() {
             ? (lessonIdx + 1 >= LESSON_QUIZ_COUNT ? "See results →" : "Next question →")
             : "Next →";
           const continueBtn = lessonMsg && lessonMsg.done ? primaryBtn(contLabel, lessonContinue) : null;
-          const answerRow = (onCheck) => (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <input value={lessonInput} onChange={(e) => setLessonInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
-                placeholder="your answer" autoComplete="off"
-                style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
-              <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
-              <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
-            </div>
-          );
+          const answerRow = (onCheck) => {
+            const syms = lessonSymbols();
+            return (
+              <>
+                {syms.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>insert:</span>
+                    {syms.map((s) => (
+                      <button key={s} type="button" onClick={() => insertLessonSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 34, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: syms.length ? 8 : 12 }}>
+                  <input ref={lessonInputRef} value={lessonInput} onChange={(e) => setLessonInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
+                    placeholder="your answer" autoComplete="off"
+                    style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
+                  <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
+                  <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
+                </div>
+              </>
+            );
+          };
           const cardShell = (children) => (
             <div className="mub-card" style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: "18px 16px", boxShadow: "0 6px 24px var(--shadow-soft)" }}>{children}</div>
           );
