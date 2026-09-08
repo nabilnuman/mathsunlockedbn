@@ -5453,16 +5453,10 @@ const LESSON_XP = 40;
 const LESSON_QUIZ_COUNT = 4;
 const strHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
 
-// A generated question's `steps` → interactive walk-through lines.
-// A step that ends "= <number>" becomes a fill-in-the-number prompt.
+// A generated question's `steps` → the lines of the walk-through shown
+// (with the original question above them) after a wrong checkpoint answer.
 function lessonGuideSteps(q) {
-  const steps = Array.isArray(q && q.steps) ? q.steps : [];
-  return steps.map((s) => {
-    const str = String(s);
-    const m = str.match(/=\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (m && m.index > 0) return { text: str.slice(0, m.index).replace(/[:\s]+$/, "") + "  =", blank: m[1] };
-    return { text: str, blank: null };
-  });
+  return Array.isArray(q && q.steps) ? q.steps.map(String).filter(Boolean) : [];
 }
 
 /* Subtopics a teacher can pick when setting homework. A topic listed here
@@ -8032,12 +8026,7 @@ export default function MathsUnlockedBN() {
     resetLessonCard();
   }
   function lessonContinue() {
-    if (lessonPhase === "quiz" && lessonGuide) {
-      const g = lessonGuide;
-      if (g.i + 1 >= g.steps.length) { setLessonGuide(null); resetLessonCard(); lessonAdvance(); }
-      else { setLessonGuide({ steps: g.steps, i: g.i + 1 }); setLessonInput(""); setLessonMsg(null); setLessonTries(0); }
-      return;
-    }
+    if (lessonPhase === "quiz" && lessonGuide) { setLessonGuide(null); resetLessonCard(); lessonAdvance(); return; }
     setLessonMsg(null);
     lessonAdvance();
   }
@@ -8085,30 +8074,13 @@ export default function MathsUnlockedBN() {
     } else {
       const steps = lessonGuideSteps(q);
       setLessonMsg(null); setLessonInput(""); setLessonTries(0);
-      setLessonGuide(steps.length ? { steps, i: 0 } : { steps: [{ text: `The answer is ${q.answerDisplay || q.answer}.`, blank: null }], i: 0 });
-    }
-  }
-  function lessonGuideCheck(val) {
-    const g = lessonGuide; if (!g) return;
-    const step = g.steps[g.i];
-    if (step.blank == null) return; // a non-blank step advances via the button
-    const v = String(val != null ? val : lessonInput).trim();
-    if (!v) return;
-    if (v === step.blank || Number(v) === Number(step.blank)) { playCorrect(); setLessonMsg({ ok: true, text: "That's right", done: true }); }
-    else {
-      const t = lessonTries + 1; setLessonTries(t);
-      if (t >= 2) setLessonMsg({ ok: false, text: `It's ${step.blank}.`, done: true });
-      else setLessonMsg({ ok: false, text: "Not quite — try again." });
+      setLessonGuide({ steps: steps.length ? steps : [`The answer is ${q.answerDisplay || q.answer}.`], i: 0 });
     }
   }
   // What the current lesson step expects — drives the handwriting-pad mode
   // and the keyboard type, so a numeric answer isn't read as letters ("16"→"Lb").
   function lessonAnswerMode() {
     const numeric = (a) => /^-?\d+(?:\.\d+)?$/.test(String(a == null ? "" : a).trim());
-    if (lessonPhase === "quiz" && lessonGuide) {
-      const st = lessonGuide.steps[lessonGuide.i];
-      return st && st.blank != null ? "number" : "any";
-    }
     if (lessonPhase === "quiz") {
       const q = lessonQuizQ;
       return q && (numeric(q.answer) || numeric(q.answerDisplay)) ? "number" : "any";
@@ -8119,7 +8091,7 @@ export default function MathsUnlockedBN() {
   }
   // WritePad "Submit" / on-screen check button routes here based on where we are.
   function lessonCheckNow(val) {
-    if (lessonPhase === "quiz" && lessonGuide) return lessonGuideCheck(val);
+    if (lessonPhase === "quiz" && lessonGuide) return; // walk-through is read-only
     if (lessonPhase === "quiz") return lessonQuizCheck(val);
     return lessonWriteCheck(val);
   }
@@ -10220,9 +10192,7 @@ export default function MathsUnlockedBN() {
           const primaryBtn = (label, onClick, dis) => (
             <button onClick={onClick} disabled={dis} style={{ width: "100%", padding: "12px 14px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: dis ? "default" : "pointer", border: "none", marginTop: 14, background: "var(--green)", color: "var(--on-accent)", opacity: dis ? 0.5 : 1 }}>{label}</button>
           );
-          const contLabel = lessonPhase === "quiz" && lessonGuide
-            ? (lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step →")
-            : lessonPhase === "quiz"
+          const contLabel = lessonPhase === "quiz"
             ? (lessonIdx + 1 >= LESSON_QUIZ_COUNT ? "See results →" : "Next question →")
             : "Next →";
           const continueBtn = lessonMsg && lessonMsg.done ? primaryBtn(contLabel, lessonContinue) : null;
@@ -10359,18 +10329,29 @@ export default function MathsUnlockedBN() {
               </>)}
 
               {lessonPhase === "quiz" && lessonGuide && (() => {
-                const step = lessonGuide.steps[lessonGuide.i];
-                const resolved = lessonMsg && lessonMsg.done;
+                const g = lessonGuide;
+                const last = g.i >= g.steps.length - 1;
+                const qq = lessonQuizQ ? splitPrompt(lessonQuizQ.prompt) : null;
                 return cardShell(<>
                   <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--blue)", marginBottom: 8 }}>
-                    Let&rsquo;s work through it &middot; step {lessonGuide.i + 1} of {lessonGuide.steps.length}
+                    Let&rsquo;s work through it
                   </div>
-                  <div className="mub-mono" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--ink)" }}><MathText text={step.text} /></div>
-                  {step.blank != null && !resolved && answerRow(() => lessonGuideCheck())}
-                  {msgBox}
-                  {step.blank == null
-                    ? primaryBtn(lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step →", lessonContinue)
-                    : continueBtn}
+                  {qq && (
+                    <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
+                      <div className="mub-mono" style={{ fontSize: qq.expr ? 12.5 : 15, lineHeight: 1.5, color: qq.expr ? "var(--muted)" : "var(--ink)" }}><MathText text={qq.lead} /></div>
+                      {qq.expr && <div className="mub-mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}><MathText text={qq.expr} /></div>}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {g.steps.slice(0, g.i + 1).map((ln, k) => (
+                      <div key={k} className="mub-mono" style={{ fontSize: 14.5, lineHeight: 1.5, padding: "7px 10px", borderRadius: 8, borderLeft: "2px solid var(--blue)", color: "var(--ink)", opacity: k === g.i ? 1 : 0.82 }}>
+                        <MathText text={ln} />
+                      </div>
+                    ))}
+                  </div>
+                  {last
+                    ? primaryBtn("Got it →", lessonContinue)
+                    : primaryBtn("Next step →", () => setLessonGuide({ steps: g.steps, i: g.i + 1 }))}
                 </>);
               })()}
 
