@@ -57,8 +57,27 @@ export async function GET(req) {
     return Response.json({ ok: false, error: "push not configured yet" }, { status: 503 });
   }
 
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
   const sb = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+  // ?check — non-destructive config probe (no push sent). Confirms the env
+  // vars are well-formed and shows how many subscriptions the DB holds.
+  if (new URL(req.url).searchParams.has("check")) {
+    const { count, error } = await sb
+      .from("push_subscriptions")
+      .select("*", { count: "exact", head: true });
+    const looksLikePub = /^B[A-Za-z0-9_-]{80,90}$/.test(VAPID_PUBLIC || "");
+    return Response.json({
+      supabaseUrl: SUPA_URL,
+      serviceKeyLen: SERVICE_KEY.length,
+      vapidPublicLen: (VAPID_PUBLIC || "").length,
+      vapidPublicLooksValid: looksLikePub,
+      vapidPrivateLen: (VAPID_PRIVATE || "").length,
+      vapidSubject: VAPID_SUBJECT,
+      pushSubscriptionRows: error ? `ERROR: ${error.message}` : count,
+    });
+  }
+
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
   const now = Date.now();
 
   // ---- who can we reach? (endpoints grouped by student) ----------------
