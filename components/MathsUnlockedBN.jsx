@@ -7133,6 +7133,8 @@ export default function MathsUnlockedBN() {
   const [schoolInput, setSchoolInput] = useState(SOLO_SCHOOL);
   const [schoolQuery, setSchoolQuery] = useState("");
   const [pinInput, setPinInput] = useState("");
+  const [rememberMe, setRememberMe] = useState(true); // stash name + PIN on this device for one-tap re-login
+  const [prefilledLogin, setPrefilledLogin] = useState(false); // the form was filled from a saved login
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState("");
   const [authUid, setAuthUid] = useState(null); // the signed-in user's real auth.uid()
@@ -7480,6 +7482,14 @@ export default function MathsUnlockedBN() {
           } catch (e) { /* ignore */ }
         } else {
           setPendingJoin(window.localStorage.getItem("mub_pendingjoin") || null);
+        }
+        // One-tap re-login: prefill the form from a saved "remember me" login.
+        const remembered = readRememberedLogin();
+        if (remembered) {
+          setNameInput(remembered.name);
+          setPinInput(remembered.pin);
+          setRememberMe(true);
+          setPrefilledLogin(true);
         }
       } catch (e) { /* defaults are fine */ }
 
@@ -8121,6 +8131,32 @@ export default function MathsUnlockedBN() {
   // from name + PIN). An existing name+PIN signs in and resumes that
   // student's saved progress; a new one creates the account and a fresh
   // profile with the chosen school.
+  // "Remember me on this device" — an opt-in local stash of name + PIN so a
+  // student who logs out can get back in with one tap. Personal-device
+  // convenience; the box should be left off on shared computers.
+  function readRememberedLogin() {
+    try {
+      const raw = window.localStorage.getItem("mub_remember");
+      if (!raw) return null;
+      const r = JSON.parse(raw);
+      if (r && r.name && /^\d{6}$/.test(String(r.pin || ""))) return { name: String(r.name), pin: String(r.pin) };
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  function writeRememberedLogin(name, pin) {
+    try { window.localStorage.setItem("mub_remember", JSON.stringify({ name, pin })); } catch (e) { /* ignore */ }
+  }
+  function clearRememberedLogin() {
+    try { window.localStorage.removeItem("mub_remember"); } catch (e) { /* ignore */ }
+  }
+  function forgetThisLogin() {
+    clearRememberedLogin();
+    setNameInput("");
+    setPinInput("");
+    setPrefilledLogin(false);
+    setRememberMe(true);
+  }
+
   async function startSession() {
     if (starting) return;
     const nm = nameInput.trim();
@@ -8158,6 +8194,7 @@ export default function MathsUnlockedBN() {
       // everything it already earned before this feature existed.
       if (!Array.isArray(prof.seenAch)) prof.seenAch = [...(prof.achievements || [])];
       await saveProfile(prof);
+      if (rememberMe) writeRememberedLogin(nm, pin); else clearRememberedLogin();
       loadCustomQuestions(); // shared reads need a session
       refreshFriends();
       refreshClasses();
@@ -8194,6 +8231,7 @@ export default function MathsUnlockedBN() {
       const nm = (user && user.user_metadata && user.user_metadata.display_name) || profile.name || nameInput.trim();
       if (!nm) throw new Error("Couldn't tell which account this is — sign in with your name + old PIN once, then try recovery again.");
       await completePinReset(nm, resetPin);
+      if (readRememberedLogin()) writeRememberedLogin(nm, resetPin); // keep one-tap login in sync
       if (user) {
         setAuthUid(user.id);
         try {
@@ -8220,6 +8258,7 @@ export default function MathsUnlockedBN() {
     setChangePinMsg(null);
     try {
       await changePin(profile.name, pin1);
+      if (readRememberedLogin()) writeRememberedLogin(profile.name, pin1); // keep one-tap login in sync
       const next = { ...profile, pin: pin1 };
       setProfile(next);
       await persistProfile(next);
@@ -8259,8 +8298,12 @@ export default function MathsUnlockedBN() {
     setProfile(emptyProfile());
     setActiveTopic(null);
     setScreen("login");
-    setNameInput("");
-    setPinInput("");
+    // Keep the login prefilled if "remember me" is on, so getting back in is one tap.
+    const remembered = readRememberedLogin();
+    setNameInput(remembered ? remembered.name : "");
+    setPinInput(remembered ? remembered.pin : "");
+    setRememberMe(true);
+    setPrefilledLogin(!!remembered);
     setStartError("");
     setForgotOpen(false);
     setForgotEmail("");
@@ -9437,6 +9480,28 @@ export default function MathsUnlockedBN() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: "var(--ink)", marginBottom: 12, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => { setRememberMe(e.target.checked); if (!e.target.checked) { clearRememberedLogin(); setPrefilledLogin(false); } }}
+                style={{ marginTop: 2, flexShrink: 0, cursor: "pointer" }}
+              />
+              <span>
+                Remember me on this device
+                <span style={{ display: "block", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>
+                  Skip typing your name and PIN next time. Leave this off on shared or school computers.
+                </span>
+              </span>
+            </label>
+            {prefilledLogin && (
+              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+                Signed in here before as <strong style={{ color: "var(--ink)" }}>{nameInput}</strong>.{" "}
+                <button type="button" onClick={forgetThisLogin} style={{ fontSize: 11.5, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+                  Not you?
+                </button>
               </div>
             )}
             {startError && (
