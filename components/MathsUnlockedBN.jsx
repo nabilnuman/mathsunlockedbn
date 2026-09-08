@@ -5344,7 +5344,7 @@ const LESSONS = {
         "Brackets → Orders (powers and roots) → Division and Multiplication → Addition and Subtraction.",
         "× and ÷ rank equally — do them left to right. Same for + and −." ] },
       { k: "tap", q: "In 4 + 6 × 2, what do you work out first?", opts: ["4 + 6", "6 × 2", "It doesn't matter"], a: 1, tip: "Multiplication is done before addition." },
-      { k: "write", q: "Now finish it:  4 + 6 × 2", a: "16", tips: ["6 × 2 = 12", "Then 4 + 12"] },
+      { k: "write", q: "Now finish it:  4 + 6 × 2", a: "16", tips: ["Do 6 × 2 first", "Then add 4"] },
       { k: "eg", h: "Work out (3 + 4) × 2²", lines: [
         "(3 + 4) × 2²",
         "Brackets first — work out what is inside",
@@ -5352,12 +5352,12 @@ const LESSONS = {
         "Now the power:  2² = 2 × 2 = 4",
         "= 7 × 4",
         "= 28" ] },
-      { k: "tap", q: "20 − 3 × 4 — which is right?", opts: ["17 × 4 = 68", "20 − 12 = 8", "Do it left to right"], a: 1, tip: "Work out 3 × 4 first, then subtract." },
-      { k: "write", q: "Work out  20 − 3 × 4", a: "8", tips: ["3 × 4 = 12", "20 − 12"] },
+      { k: "tap", q: "How do you start  20 − 3 × 4 ?", opts: ["Subtract 3, then multiply by 4", "Multiply 3 × 4, then subtract", "Work left to right"], a: 1, tip: "Multiplication comes before subtraction." },
+      { k: "write", q: "Work out  20 − 3 × 4", a: "8", tips: ["Do 3 × 4 first", "Then subtract that from 20"] },
       { k: "teach", h: "Left to right", b: [
         "When only × and ÷ are left, work left to right.",
         "12 ÷ 2 × 3 = 6 × 3 = 18 — not 12 ÷ 6." ] },
-      { k: "write", q: "Work out  12 ÷ 2 × 3", a: "18", tips: ["Left to right: 12 ÷ 2 = 6", "Then 6 × 3"] },
+      { k: "write", q: "Work out  12 ÷ 2 × 3", a: "18", tips: ["Left to right — start with 12 ÷ 2", "Then multiply by 3"] },
       { k: "eg", h: "Work out (−3) × (−4) + 5", lines: [
         "(−3) × (−4) + 5",
         "A negative times a negative is positive",
@@ -5377,13 +5377,13 @@ const LESSONS = {
         "Picture a balance scale with the two sides equal.",
         "Whatever you do to one side, do to the other — it stays balanced. That is how you get x on its own." ] },
       { k: "tap", q: "To solve x + 5 = 12, what do you do to both sides?", opts: ["Add 5", "Subtract 5", "Divide by 5"], a: 1, tip: "Undo “+ 5” by subtracting 5." },
-      { k: "write", q: "Solve  x + 5 = 12.    x =", a: "7", tips: ["Subtract 5 from both sides", "12 − 5"] },
-      { k: "write", q: "Solve  x − 4 = 9.    x =", a: "13", tips: ["The opposite of “− 4” is “+ 4”", "9 + 4"] },
+      { k: "write", q: "Solve  x + 5 = 12.    x =", a: "7", tips: ["Subtract 5 from both sides", "Work out 12 − 5"] },
+      { k: "write", q: "Solve  x − 4 = 9.    x =", a: "13", tips: ["The opposite of “− 4” is “+ 4”", "Add 4 to both sides"] },
       { k: "teach", h: "A number in front of x", b: [
         "3x means 3 × x.",
         "To undo “× 3”, divide both sides by 3." ] },
       { k: "tap", q: "To solve 4x = 20:", opts: ["Subtract 4", "Divide by 4", "Multiply by 4"], a: 1, tip: "Undo “× 4” with “÷ 4”." },
-      { k: "write", q: "Solve  4x = 20.    x =", a: "5", tips: ["Divide both sides by 4", "20 ÷ 4"] },
+      { k: "write", q: "Solve  4x = 20.    x =", a: "5", tips: ["Divide both sides by 4", "Work out 20 ÷ 4"] },
       { k: "eg", h: "Solve 2x + 3 = 11", lines: [
         "2x + 3 = 11",
         "Subtract 3 from both sides",
@@ -5402,8 +5402,8 @@ const LESSONS = {
         "x = 3" ] },
       { k: "order", q: "Put the steps to solve 4x − 1 = 11 in order:", items: [
         "Add 1 to both sides", "4x = 12", "Divide both sides by 4", "x = 3" ], tip: "Undo + and − before × and ÷." },
-      { k: "write", q: "Solve  2x + 3 = 11.    x =", a: "4", tips: ["Subtract 3:  2x = 8", "Divide by 2"] },
-      { k: "write", q: "Solve  3x − 5 = 7.    x =", a: "4", tips: ["Add 5:  3x = 12", "Divide by 3"] },
+      { k: "write", q: "Solve  2x + 4 = 14.    x =", a: "5", tips: ["Subtract 4 from both sides", "Then divide by 2"] },
+      { k: "write", q: "Solve  3x − 5 = 7.    x =", a: "4", tips: ["Add 5 to both sides", "Then divide by 3"] },
     ],
   },
   indices: {
@@ -5423,7 +5423,7 @@ const LESSONS = {
         "Multiply the numbers:  2 × 5 = 10",
         "Add the powers:  x³ × x⁴ = x³⁺⁴ = x⁷",
         "= 10x⁷" ] },
-      { k: "write", q: "Simplify  3x² × 4x⁵   (write it like  12x^7 )", a: "12x^7", mode: "any", tips: ["Multiply the numbers:  3 × 4 = 12", "Add the powers:  2 + 5"] },
+      { k: "write", q: "Simplify  3x² × 4x⁵   (use ^ for the power, e.g.  5x^3 )", a: "12x^7", mode: "any", tips: ["Multiply the numbers:  3 × 4", "Add the powers:  2 + 5"] },
       { k: "teach", h: "Dividing: subtract the powers", b: [
         "x⁷ ÷ x³ = x⁴.",
         "Same base? Subtract:  7 − 3 = 4." ] },
@@ -5432,7 +5432,7 @@ const LESSONS = {
         "Divide the numbers:  12 ÷ 3 = 4",
         "Subtract the powers:  x⁶ ÷ x² = x⁶⁻² = x⁴",
         "= 4x⁴" ] },
-      { k: "write", q: "Simplify  x⁷ ÷ x³   (write it like  x^4 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
+      { k: "write", q: "Simplify  x⁷ ÷ x³   (use ^ for the power, e.g.  x^2 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
       { k: "teach", h: "Power of a power: multiply", b: [
         "(x³)² = x⁶.",
         "Multiply the powers:  3 × 2 = 6." ] },
@@ -5440,11 +5440,11 @@ const LESSONS = {
       { k: "teach", h: "The power of zero", b: [
         "Anything except 0, to the power 0, is 1.",
         "So 7⁰ = 1 and (5x)⁰ = 1." ] },
-      { k: "write", q: "What is  9⁰ ?", a: "1", tips: ["Any non-zero number to the power 0 gives the same result…"] },
+      { k: "write", q: "What is  9⁰ ?", a: "1", tips: ["Remember the power-of-zero rule from the last card"] },
       { k: "teach", h: "Negative power: one over", b: [
         "2⁻³ means 1 ÷ 2³.",
         "2³ = 8, so 2⁻³ = 1/8." ] },
-      { k: "write", q: "What is  2⁻² ?   (write it as a fraction like  1/4 )", a: "1/4", mode: "any", tips: ["2⁻² = 1 ÷ 2²", "2² = 4"] },
+      { k: "write", q: "What is  2⁻² ?   (write it as a fraction, e.g.  1/9 )", a: "1/4", mode: "any", tips: ["2⁻² = 1 ÷ 2²", "Work out 2²"] },
     ],
   },
 };
