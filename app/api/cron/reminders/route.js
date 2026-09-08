@@ -70,27 +70,15 @@ export async function GET(req) {
     const { count, error } = await sb
       .from("push_subscriptions")
       .select("*", { count: "exact", head: true });
-    const looksLikePub = /^B[A-Za-z0-9_-]{80,90}$/.test(VAPID_PUBLIC || "");
-    const nowIso = new Date().toISOString();
-    const { data: subs } = await sb.from("push_subscriptions").select("uid,user_agent,created_at");
-    const { data: asg } = await sb
-      .from("assignments")
-      .select("id,class_id,title,count,due_at,created_at")
-      .order("created_at", { ascending: false })
-      .limit(10);
     return Response.json({
-      now: nowIso,
+      now: new Date().toISOString(),
       supabaseUrl: SUPA_URL,
       serviceKeyLen: SERVICE_KEY.length,
       vapidPublicLen: (VAPID_PUBLIC || "").length,
-      vapidPublicLooksValid: looksLikePub,
+      vapidPublicLooksValid: /^B[A-Za-z0-9_-]{80,90}$/.test(VAPID_PUBLIC || ""),
       vapidPrivateLen: (VAPID_PRIVATE || "").length,
       vapidSubject: VAPID_SUBJECT,
       pushSubscriptionRows: error ? `ERROR: ${error.message}` : count,
-      subs: (subs || []).map((s) => ({ uid: s.uid, ua: (s.user_agent || "").slice(0, 40), at: s.created_at })),
-      recentAssignments: (asg || []).map((a) => ({
-        id: a.id, class_id: a.class_id, title: a.title, due_at: a.due_at, created_at: a.created_at,
-      })),
     });
   }
 
