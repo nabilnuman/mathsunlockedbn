@@ -5447,6 +5447,273 @@ const LESSONS = {
       { k: "write", q: "What is  2⁻² ?   (write it as a fraction, e.g.  1/9 )", a: "1/4", mode: "any", tips: ["2⁻² = 1 ÷ 2²", "Work out 2²"] },
     ],
   },
+
+  hcflcm: {
+    title: "HCF and LCM",
+    blurb: "Highest common factor and lowest common multiple.",
+    cards: [
+      { k: "teach", h: "Factors and multiples", b: [
+        "A factor divides in exactly — 1, 2, 3, 4, 6, 12 are the factors of 12.",
+        "A multiple is in the times table — 6, 12, 18, 24 are multiples of 6." ] },
+      { k: "teach", h: "HCF — Highest Common Factor", b: [
+        "The biggest number that divides into both.",
+        "12: factors 1, 2, 3, 4, 6, 12.   18: factors 1, 2, 3, 6, 9, 18.   Biggest shared = 6." ] },
+      { k: "tap", q: "Which is a common factor of 8 and 20?", opts: ["3", "4", "8"], a: 1, tip: "4 divides into both 8 and 20." },
+      { k: "write", q: "What is the HCF of 6 and 9?", a: "3", tips: ["Factors of 6: 1, 2, 3, 6", "Factors of 9: 1, 3, 9 — biggest shared"] },
+      { k: "teach", h: "Using prime factors", b: [
+        "Break each number into primes, then multiply the ones they share.",
+        "12 = 2 × 2 × 3,   18 = 2 × 3 × 3.   Shared: one 2 and one 3   →   HCF = 6." ] },
+      { k: "write", q: "HCF of 12 and 30?   (12 = 2×2×3,  30 = 2×3×5)", a: "6", tips: ["Shared primes: one 2 and one 3", "2 × 3"] },
+      { k: "teach", h: "LCM — Lowest Common Multiple", b: [
+        "The smallest number both go into.",
+        "Multiples of 4: 4, 8, 12, 16…   of 6: 6, 12, 18…   Smallest shared = 12." ] },
+      { k: "tap", q: "LCM of 3 and 5?", opts: ["8", "15", "30"], a: 1, tip: "The first number in both the 3 and 5 times tables." },
+      { k: "teach", h: "A quicker LCM", b: [
+        "LCM = (A × B) ÷ HCF.",
+        "For 4 and 6:  HCF = 2, so LCM = 24 ÷ 2 = 12." ] },
+      { k: "write", q: "LCM of 6 and 8?   (their HCF is 2)", a: "24", tips: ["6 × 8 = 48", "48 ÷ 2"] },
+      { k: "write", q: "HCF of 20 and 25?", a: "5", tips: ["What divides into both?", "5 × 4 = 20 and 5 × 5 = 25"] },
+    ],
+  },
+
+  surds: {
+    title: "Surds",
+    blurb: "Roots left in exact form, like √2 and 3√5.",
+    cards: [
+      { k: "teach", h: "What a surd is", b: [
+        "A surd is a root that doesn't come out as a whole number: √2, √5, 2√3.",
+        "√9 = 3 is not a surd — it's exact." ] },
+      { k: "write", q: "What is  √25 ?", a: "5", tips: ["5 × 5 = 25"] },
+      { k: "teach", h: "Splitting a root", b: [
+        "√(a × b) = √a × √b.",
+        "So √12 = √4 × √3 = 2√3.   Pull out the biggest square factor." ] },
+      { k: "tap", q: "√20 = ?", opts: ["√4 × √5 = 2√5", "√10 × √2", "20"], a: 0, tip: "4 is the biggest square factor of 20." },
+      { k: "write", q: "Simplify  √8.   (8 = 4 × 2)", a: "2√2", mode: "any", check: (v) => checkSimplifiedSurd(v, "2√2"), tips: ["√8 = √4 × √2", "√4 = 2"] },
+      { k: "eg", h: "Simplify √45", lines: [
+        "√45",
+        "Biggest square factor of 45 is 9   (45 = 9 × 5)",
+        "√45 = √9 × √5",
+        "√9 = 3",
+        "= 3√5" ] },
+      { k: "teach", h: "Multiplying surds", b: [
+        "Multiply the numbers, and multiply the roots.",
+        "2√3 × 4√5 = (2 × 4)(√3 × √5) = 8√15." ] },
+      { k: "write", q: "Simplify  √3 × √12", a: "6", tips: ["√3 × √12 = √36", "√36 = 6"] },
+      { k: "teach", h: "Rationalising the denominator", b: [
+        "A root on the bottom of a fraction isn't tidy. Multiply the top and bottom by that root.",
+        "1/√2 = (1 × √2) / (√2 × √2) = √2 / 2." ] },
+      { k: "write", q: "Rationalise  6/√3.   (√3 × √3 = 3)", a: "2√3", mode: "any", check: (v) => checkSimplifiedSurd(v, "2√3"), tips: ["Multiply top and bottom by √3", "(6√3) ÷ 3 = 2√3"] },
+      { k: "write", q: "Simplify  √50", a: "5√2", mode: "any", check: (v) => checkSimplifiedSurd(v, "5√2"), tips: ["50 = 25 × 2", "√25 = 5"] },
+    ],
+  },
+
+  standardform: {
+    title: "Standard form",
+    blurb: "Writing very big or very small numbers as A × 10ⁿ.",
+    cards: [
+      { k: "teach", h: "The idea", b: [
+        "A tidy way to write huge or tiny numbers: one digit before the point, times a power of 10.",
+        "3000 = 3 × 10³.   0.004 = 4 × 10⁻³." ] },
+      { k: "teach", h: "The rules", b: [
+        "The first part must be at least 1 and less than 10.",
+        "The power of 10 = how many places the decimal point moves." ] },
+      { k: "tap", q: "Which is written correctly in standard form?", opts: ["25 × 10³", "2.5 × 10⁴", "0.25 × 10⁵"], a: 1, tip: "The first part must be between 1 and 10." },
+      { k: "write", q: "Write 4000 in standard form.   (use ^ , e.g.  3*10^2 )", a: "4*10^3", mode: "any", check: (v) => isStdForm(v, 4000), tips: ["First part: 4", "3 zeros → power of 3"] },
+      { k: "eg", h: "Write 52000 in standard form", lines: [
+        "52000",
+        "Put the point after the first digit:  5.2",
+        "Count the places moved:  5 2 0 0 0  →  4 places",
+        "= 5.2 × 10⁴" ] },
+      { k: "teach", h: "Small numbers use a negative power", b: [
+        "A number below 1 has a negative power.",
+        "0.006 = 6 × 10⁻³   (the point moves 3 places to get from 0.006 to 6)." ] },
+      { k: "write", q: "Write 0.0007 in standard form.   (e.g.  3*10^-2 )", a: "7*10^-4", mode: "any", check: (v) => isStdForm(v, 0.0007), tips: ["First part: 7", "Below 1 → negative power; 4 places"] },
+      { k: "teach", h: "Back to an ordinary number", b: [
+        "Positive power → move the point right.   Negative power → move it left.",
+        "3.1 × 10⁴ = 31000.   2 × 10⁻³ = 0.002." ] },
+      { k: "write", q: "Write  5 × 10³  as an ordinary number.", a: "5000", check: (v) => isOrdinary(v, 5000), tips: ["Move the point 3 places right"] },
+      { k: "write", q: "Write  8.4 × 10⁴  as an ordinary number.", a: "84000", check: (v) => isOrdinary(v, 84000), tips: ["Point moves 4 places right:  8.4 → 84000"] },
+    ],
+  },
+
+  sigfig: {
+    title: "Rounding",
+    blurb: "Decimal places, significant figures, and nearest values.",
+    cards: [
+      { k: "teach", h: "Round up or round down", b: [
+        "Look at the next digit. 5 or more → round up. Less than 5 → leave it.",
+        "47 to the nearest 10 → 50.   43 → 40." ] },
+      { k: "write", q: "Round 68 to the nearest 10.", a: "70", tips: ["The next digit is 8 — round up"] },
+      { k: "write", q: "Round 4.72 to 1 decimal place.", a: "4.7", tips: ["Keep 1 digit after the point", "The next digit is 2 — round down"] },
+      { k: "teach", h: "Significant figures", b: [
+        "Count from the first non-zero digit.",
+        "In 0.00408 the first significant figure is 4.   In 5300 it's 5." ] },
+      { k: "tap", q: "The first significant figure of 0.0062 is…", opts: ["0", "6", "2"], a: 1, tip: "Start at the first non-zero digit." },
+      { k: "eg", h: "Round 3847 to 2 significant figures", lines: [
+        "3847",
+        "The first 2 significant figures are 3 and 8",
+        "Next digit is 4 — round down, so the 8 stays",
+        "Fill the rest with zeros to keep the size",
+        "= 3800" ] },
+      { k: "write", q: "Round 519 to 1 significant figure.", a: "500", tips: ["First significant figure is 5", "Next digit is 1 — round down; keep the zeros"] },
+      { k: "write", q: "Round 0.03471 to 2 significant figures.", a: "0.035", tips: ["Significant figures start at the 3", "3, then 4, then next digit 7 → round up"] },
+      { k: "write", q: "Round 6249 to the nearest hundred.", a: "6200", tips: ["The hundreds digit is 2", "Next digit is 4 — round down"] },
+    ],
+  },
+
+  limits: {
+    title: "Limits of accuracy",
+    blurb: "Upper and lower bounds of a rounded measurement.",
+    quizFilter: (q) => q.sub === "single",
+    cards: [
+      { k: "teach", h: "Measurements aren't exact", b: [
+        "“12 cm to the nearest cm” means the true length is somewhere between 11.5 cm and 12.5 cm.",
+        "Those two values are the lower and upper bounds." ] },
+      { k: "teach", h: "Half the rounding unit", b: [
+        "The bound is half the rounding unit on each side.",
+        "Nearest cm → ± 0.5.   Nearest 10 → ± 5.   Nearest 0.1 → ± 0.05." ] },
+      { k: "tap", q: "“40 kg to the nearest 10 kg” — the true mass is at least…", opts: ["30 kg", "35 kg", "39 kg"], a: 1, tip: "Half of 10 is 5, so 40 − 5." },
+      { k: "write", q: "A length is 8 cm, to the nearest cm. Lower bound?   (± 0.5)", a: "7.5", tips: ["8 − 0.5"] },
+      { k: "write", q: "Upper bound of that same 8 cm?", a: "8.5", tips: ["8 + 0.5"] },
+      { k: "eg", h: "A time is 25 s, to the nearest 5 s. Find the bounds.", lines: [
+        "Rounding unit is 5, so ± 2.5",
+        "Lower bound = 25 − 2.5 = 22.5 s",
+        "Upper bound = 25 + 2.5 = 27.5 s" ] },
+      { k: "teach", h: "Bounds in a sum", b: [
+        "For a sum, add the upper bounds together for the upper bound, and the lower bounds for the lower bound." ] },
+      { k: "write", q: "A = 12 cm and B = 8 cm, both to the nearest cm. Upper bound of A + B?", a: "21", tips: ["Upper A = 12.5, upper B = 8.5", "12.5 + 8.5"] },
+      { k: "write", q: "Lower bound of A + B for that same 12 cm and 8 cm?", a: "19", tips: ["11.5 + 7.5"] },
+    ],
+  },
+
+  factorization: {
+    title: "Factorising",
+    blurb: "Turning an expression back into brackets.",
+    cards: [
+      { k: "teach", h: "Factorising is un-expanding", b: [
+        "Expanding:  3(x + 2) = 3x + 6.",
+        "Factorising goes the other way:  3x + 6 = 3(x + 2)." ] },
+      { k: "teach", h: "Common factor", b: [
+        "Find what every term shares, and take it outside a bracket.",
+        "6x + 9 → both share 3 → 3(2x + 3)." ] },
+      { k: "write", q: "Factorise  4x + 12.   (write like  3(x+2) )", a: "4(x+3)", mode: "any", tips: ["Both terms share 4", "4 × x  and  4 × 3"] },
+      { k: "write", q: "Factorise  x² + 5x.", a: "x(x+5)", mode: "any", tips: ["Both terms share an x", "x × x  and  x × 5"] },
+      { k: "teach", h: "Quadratics:  x² + bx + c", b: [
+        "Find two numbers that multiply to c and add to b.",
+        "x² + 5x + 6:  2 and 3  (2 × 3 = 6, 2 + 3 = 5)  →  (x + 2)(x + 3)." ] },
+      { k: "tap", q: "For  x² + 7x + 12, which pair works?", opts: ["2 and 6", "3 and 4", "1 and 12"], a: 1, tip: "Multiply to 12, add to 7." },
+      { k: "write", q: "Factorise  x² + 7x + 12.   (like  (x+1)(x+6) )", a: "(x+3)(x+4)", mode: "any", tips: ["3 × 4 = 12,  3 + 4 = 7"] },
+      { k: "eg", h: "Factorise  x² − x − 6", lines: [
+        "Two numbers: multiply to −6, add to −1",
+        "−3 and +2:   (−3)(2) = −6,   (−3) + (2) = −1",
+        "= (x − 3)(x + 2)" ] },
+      { k: "teach", h: "Difference of two squares", b: [
+        "a² − b² = (a + b)(a − b).",
+        "x² − 9 = x² − 3² = (x + 3)(x − 3)." ] },
+      { k: "write", q: "Factorise  x² − 16.   (like  (x+2)(x-2) )", a: "(x+4)(x-4)", mode: "any", tips: ["16 = 4²", "(x + 4)(x − 4)"] },
+      { k: "write", q: "Factorise  x² − 2x − 8.", a: "(x-4)(x+2)", mode: "any", tips: ["Multiply to −8, add to −2", "−4 and +2"] },
+    ],
+  },
+
+  simultaneous: {
+    title: "Simultaneous equations",
+    blurb: "Solving two equations to find two unknowns.",
+    quiz: () => {
+      const x = randInt(-6, 6), y = randInt(-6, 6);
+      let a = randInt(1, 4), b = randInt(1, 4), c = randInt(1, 4), d = randInt(1, 4), t = 0;
+      while (a * d - b * c === 0 && t++ < 40) { c = randInt(1, 4); d = randInt(1, 4); }
+      const e = a * x + b * y, f = c * x + d * y;
+      const co = (n) => (n === 1 ? "" : `${n}`);
+      const ask = Math.random() < 0.5 ? "x" : "y";
+      return {
+        prompt: `Solve, then give ${ask}:\n${co(a)}x + ${co(b)}y = ${e}\n${co(c)}x + ${co(d)}y = ${f}`,
+        answer: `${ask === "x" ? x : y}`,
+        hint: "a whole number",
+        steps: [
+          "Line up one letter's coefficients (multiply an equation if you need to), then add or subtract to remove that letter",
+          "Solve for the letter left, then substitute back into either equation",
+          `x = ${x},  y = ${y}`,
+        ],
+      };
+    },
+    cards: [
+      { k: "teach", h: "Two equations, two unknowns", b: [
+        "x + y = 10  and  x − y = 2.",
+        "One pair of values fits both:  x = 6, y = 4." ] },
+      { k: "teach", h: "Elimination", b: [
+        "Add or subtract the two equations to cancel one letter.",
+        "(x + y) + (x − y) = 10 + 2  →  2x = 12  →  x = 6." ] },
+      { k: "tap", q: "x + y = 7  and  x − y = 1. Add them — what do you get?", opts: ["2y = 8", "2x = 8", "0 = 8"], a: 1, tip: "+y and −y cancel; x + x = 2x." },
+      { k: "write", q: "From  2x = 8,  what is x?", a: "4", tips: ["Divide both sides by 2"] },
+      { k: "write", q: "x + y = 7  and you've found  x = 4.  What is y?", a: "3", tips: ["Substitute x = 4:  4 + y = 7"] },
+      { k: "eg", h: "Solve  3x + y = 11  and  x + y = 5", lines: [
+        "Subtract the second equation from the first:",
+        "(3x + y) − (x + y) = 11 − 5",
+        "2x = 6,  so  x = 3",
+        "Substitute into  x + y = 5:   3 + y = 5",
+        "y = 2" ] },
+      { k: "teach", h: "When nothing cancels yet", b: [
+        "2x + 3y = 13  and  x + y = 5.",
+        "Multiply the second by 2:  2x + 2y = 10.  Now subtract:  y = 3." ] },
+      { k: "order", q: "Put the method in order:", items: [
+        "Make one letter's numbers match", "Add or subtract to remove that letter", "Solve for the letter left", "Substitute back for the other letter" ], tip: "You can only substitute once you know one value." },
+      { k: "write", q: "2x + y = 8  and  x + y = 5.  Subtract — what is x?", a: "3", tips: ["(2x + y) − (x + y) = 8 − 5", "x = 3"] },
+    ],
+  },
+
+  sequences: {
+    title: "Number sequences",
+    blurb: "Spotting the pattern and finding the nth term.",
+    quizFilter: (q) => q.sub !== "nth",
+    cards: [
+      { k: "teach", h: "Term-to-term vs position", b: [
+        "2, 5, 8, 11, …   The term-to-term rule is “+ 3”.",
+        "The nth-term (position) rule lets you jump straight to any term." ] },
+      { k: "write", q: "Next term:   2, 5, 8, 11, __", a: "14", tips: ["The rule is + 3", "11 + 3"] },
+      { k: "teach", h: "Finding the nth term (linear)", b: [
+        "A constant difference d → the rule starts with “dn”.",
+        "Difference 3 → 3n. Then adjust: 3 × 1 = 3, but the first term is 2, so subtract 1 → 3n − 1." ] },
+      { k: "tap", q: "3, 5, 7, 9, …  the nth term starts with…", opts: ["2n", "3n", "5n"], a: 0, tip: "The difference is 2, so 2n." },
+      { k: "write", q: "3, 5, 7, 9, …  the nth term is  2n + ?", a: "1", tips: ["2 × 1 = 2, but the first term is 3", "3 − 2 = 1"] },
+      { k: "eg", h: "Find the nth term of  7, 12, 17, 22, …", lines: [
+        "Difference is 5 → start with 5n",
+        "5 × 1 = 5, but the first term is 7",
+        "7 − 5 = 2, so add 2",
+        "nth term = 5n + 2" ] },
+      { k: "write", q: "Using nth term  5n + 2,  find the 10th term.", a: "52", tips: ["Substitute n = 10", "5 × 10 + 2"] },
+      { k: "teach", h: "Other kinds of sequence", b: [
+        "Multiplying by the same number each time (2, 4, 8, 16) is geometric.",
+        "If the second differences are constant, the rule involves n²." ] },
+      { k: "write", q: "Next term:   3, 6, 12, 24, __", a: "48", tips: ["Each term doubles", "24 × 2"] },
+    ],
+  },
+
+  proportionality: {
+    title: "Ratio and proportion",
+    blurb: "Sharing in a ratio, and direct / inverse proportion.",
+    cards: [
+      { k: "teach", h: "Sharing in a ratio", b: [
+        "Share $20 between Sam and Joe in the ratio 2 : 3.",
+        "Total parts = 2 + 3 = 5.   One part = 20 ÷ 5 = $4.   Sam gets 2 × 4 = $8, Joe gets 3 × 4 = $12." ] },
+      { k: "tap", q: "Share something in the ratio 1 : 3. How many parts in total?", opts: ["3", "4", "12"], a: 1, tip: "Add the numbers in the ratio: 1 + 3." },
+      { k: "write", q: "Share 12 sweets in the ratio 1 : 3. How many does the second person get?", a: "9", tips: ["4 parts, so 1 part = 12 ÷ 4 = 3", "Second person = 3 parts = 3 × 3"] },
+      { k: "eg", h: "Share $35 between Ali and Mia in the ratio 3 : 4", lines: [
+        "Total parts = 3 + 4 = 7",
+        "One part = 35 ÷ 7 = 5",
+        "Ali = 3 × 5 = $15",
+        "Mia = 4 × 5 = $20" ] },
+      { k: "teach", h: "Direct proportion", b: [
+        "“y is directly proportional to x” means y = k x for a fixed number k.",
+        "Double x → double y.  Find k from a known pair, then use it." ] },
+      { k: "write", q: "y = k x.  When x = 2, y = 10.  What is k?", a: "5", tips: ["k = y ÷ x", "10 ÷ 2"] },
+      { k: "write", q: "With k = 5, find y when x = 7.", a: "35", tips: ["y = 5x", "5 × 7"] },
+      { k: "teach", h: "Inverse proportion", b: [
+        "“y is inversely proportional to x” means y = k ÷ x.",
+        "Double x → halve y.  Find k with k = y × x." ] },
+      { k: "write", q: "y = k ÷ x.  When x = 3, y = 4.  Find k.", a: "12", tips: ["k = y × x", "4 × 3"] },
+      { k: "write", q: "With k = 12, find y when x = 6.", a: "2", tips: ["y = 12 ÷ x", "12 ÷ 6"] },
+    ],
+  },
 };
 const LESSON_IDS = Object.keys(LESSONS);
 const LESSON_XP = 40;
@@ -8012,12 +8279,24 @@ export default function MathsUnlockedBN() {
     setScreen("dashboard");
   }
   function makeLessonQuizQ(id) {
+    const L = LESSONS[id] || {};
+    // A lesson can supply its own checkpoint generator (for topics whose
+    // real generator only makes multi-field questions, e.g. simultaneous).
+    if (typeof L.quiz === "function") {
+      for (let i = 0; i < 25; i++) {
+        let q; try { q = L.quiz(); } catch (e) { continue; }
+        if (q && q.prompt && (q.answer != null || q.check)) return q;
+      }
+    }
     const gen = TOPIC_BY_ID[id] && TOPIC_BY_ID[id].generate;
     if (!gen) return null;
-    for (let i = 0; i < 40; i++) {
+    const ok = (q) => q && q.prompt && (q.answer != null || q.check) &&
+      Array.isArray(q.steps) && q.steps.length &&
+      !q.fields && !q.venn && !q.figure && !q.graph && !q.solid && !q.choices &&
+      (!L.quizFilter || L.quizFilter(q));
+    for (let i = 0; i < 60; i++) {
       let q; try { q = gen(); } catch (e) { continue; }
-      if (q && q.prompt && (q.answer != null || q.check) && Array.isArray(q.steps) && q.steps.length &&
-          !q.fields && !q.venn && !q.figure && !q.graph && !q.solid && !q.choices) return q;
+      if (ok(q)) return q;
     }
     try { return gen(); } catch (e) { return null; }
   }
@@ -8073,7 +8352,8 @@ export default function MathsUnlockedBN() {
     const card = LESSONS[lessonId].cards[lessonIdx];
     const v = String(val != null ? val : lessonInput).trim();
     if (!v) return;
-    if (checkEquivalent(v, card.a)) { playCorrect(); setLessonMsg({ ok: true, text: "Correct!", done: true }); return; }
+    const right = card.check ? !!card.check(v) : checkEquivalent(v, card.a);
+    if (right) { playCorrect(); setLessonMsg({ ok: true, text: "Correct!", done: true }); return; }
     const t = lessonTries + 1; setLessonTries(t);
     const tips = card.tips || [];
     if (t >= 3) setLessonMsg({ ok: false, text: `The answer is ${card.a}.`, done: true });
