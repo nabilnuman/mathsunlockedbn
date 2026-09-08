@@ -7439,6 +7439,7 @@ export default function MathsUnlockedBN() {
   const [lessonRight, setLessonRight] = useState(0);        // checkpoint questions right (unaided)
   const [lessonGuide, setLessonGuide] = useState(null);     // { steps:[{text,blank}], i } while walking a wrong answer
   const [lessonEarnedXp, setLessonEarnedXp] = useState(0);
+  const [lessonRun, setLessonRun] = useState(null);         // { id, phase, idx, right } — resumable in-progress lesson (localStorage-backed)
   const [dailyQ, setDailyQ] = useState(null);
   const [dailyInput, setDailyInput] = useState("");
   const [dailyElapsed, setDailyElapsed] = useState(0);
@@ -7729,6 +7730,23 @@ export default function MathsUnlockedBN() {
     }
   }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
 
+  // Remember an in-progress guided lesson (per device) so a page reload
+  // resumes where the student left off instead of restarting.
+  useEffect(() => {
+    try { const r = JSON.parse(window.localStorage.getItem("mub_lessonrun") || "null"); if (r && LESSONS[r.id] && r.phase !== "done") setLessonRun(r); } catch (e) { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    if (screen !== "lesson" || !lessonId) return;
+    if (lessonPhase === "done") {
+      try { window.localStorage.removeItem("mub_lessonrun"); } catch (e) { /* ignore */ }
+      setLessonRun(null);
+      return;
+    }
+    const r = { id: lessonId, phase: lessonPhase, idx: lessonIdx, right: lessonRight };
+    try { window.localStorage.setItem("mub_lessonrun", JSON.stringify(r)); } catch (e) { /* ignore */ }
+    setLessonRun(r);
+  }, [screen, lessonId, lessonPhase, lessonIdx, lessonRight]);
+
   // Roll over the daily tasks at (local) midnight / on a new day, and the
   // weekly-XP bucket on a new week.
   useEffect(() => {
@@ -7958,15 +7976,27 @@ export default function MathsUnlockedBN() {
     setLessonPick(null); setLessonInput(""); setLessonMsg(null);
     setLessonTries(0); setLessonReveal(1); setLessonOrder([]);
   }
-  function startLesson(id) {
-    if (!LESSONS[id]) return;
-    setLessonId(id); setLessonPhase("card"); setLessonIdx(0);
-    setLessonRight(0); setLessonGuide(null); setLessonQuizQ(null); setLessonEarnedXp(0);
+  function startLesson(id, fresh) {
+    const L = LESSONS[id];
+    if (!L) return;
+    let phase = "card", idx = 0, right = 0;
+    const run = lessonRun;
+    if (!fresh && run && run.id === id && run.phase !== "done") {
+      phase = run.phase === "quiz" ? "quiz" : "card";
+      idx = Math.max(0, run.idx | 0);
+      right = Math.max(0, run.right | 0);
+      if (phase === "card" && idx >= L.cards.length) { phase = "quiz"; idx = 0; }
+      if (phase === "quiz") idx = Math.min(idx, LESSON_QUIZ_COUNT - 1);
+    }
+    setLessonId(id); setLessonPhase(phase); setLessonIdx(idx);
+    setLessonRight(right); setLessonGuide(null); setLessonEarnedXp(0);
+    setLessonQuizQ(phase === "quiz" ? makeLessonQuizQ(id) : null);
     resetLessonCard();
     setWritePad(false); setModesOpen(false); setLessonPickerOpen(false);
     setScreen("lesson");
   }
   function exitLesson() {
+    // keep the in-progress run so re-entering resumes where they left off
     setWritePad(false); setLessonGuide(null); setLessonId(null);
     setScreen("dashboard");
   }
@@ -12325,8 +12355,10 @@ export default function MathsUnlockedBN() {
                   <span style={{ fontSize: 28 }}>🎓</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Learn</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      Step-by-step lessons that walk you through a topic from scratch, then check what stuck.
+                    <span style={{ display: "block", fontSize: 12, color: lessonRun && LESSONS[lessonRun.id] ? "var(--amber)" : "var(--muted)" }}>
+                      {lessonRun && LESSONS[lessonRun.id]
+                        ? `Resume: ${LESSONS[lessonRun.id].title}`
+                        : "Step-by-step lessons that walk you through a topic from scratch, then check what stuck."}
                     </span>
                   </span>
                   <span style={{ flexShrink: 0, fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>
@@ -12351,16 +12383,29 @@ export default function MathsUnlockedBN() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {LESSON_IDS.map((id) => {
                 const L = LESSONS[id]; const t = TOPIC_BY_ID[id]; const st = (profile.lessons || {})[id] || {};
+                const run = lessonRun && lessonRun.id === id && lessonRun.phase !== "done" ? lessonRun : null;
+                const runStep = run ? (run.phase === "quiz"
+                  ? `checkpoint Q${Math.min((run.idx | 0) + 1, LESSON_QUIZ_COUNT)}`
+                  : `step ${Math.min((run.idx | 0) + 1, L.cards.length)} of ${L.cards.length}`) : null;
                 return (
-                  <button key={id} onClick={() => startLesson(id)} className="mub-card" style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 13, padding: "13px 14px", borderRadius: 14, border: `1px solid ${st.done ? "var(--green)" : "var(--blue)"}`, background: "var(--card)" }}>
-                    <span style={{ fontSize: 26, flexShrink: 0 }}>{t ? t.icon : "🎓"}</span>
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{st.done ? "✓ " : ""}{L.title}</span>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{L.blurb}</span>
-                      {st.done && <span style={{ display: "block", fontSize: 11, color: "var(--green)", fontWeight: 700, marginTop: 2 }}>Best {st.best}/{LESSON_QUIZ_COUNT}{st.full ? " · full marks" : ""}</span>}
-                    </span>
-                    <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 20 }}>›</span>
-                  </button>
+                  <div key={id} style={{ borderRadius: 14, border: `1px solid ${run ? "var(--amber)" : st.done ? "var(--green)" : "var(--blue)"}`, background: "var(--card)", overflow: "hidden" }}>
+                    <button onClick={() => startLesson(id)} className="mub-card" style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 13, padding: "13px 14px", border: "none", background: "transparent" }}>
+                      <span style={{ fontSize: 26, flexShrink: 0 }}>{t ? t.icon : "🎓"}</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{st.done ? "✓ " : ""}{L.title}</span>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{L.blurb}</span>
+                        {run
+                          ? <span style={{ display: "block", fontSize: 11, color: "var(--amber)", fontWeight: 700, marginTop: 2 }}>Resume — {runStep}</span>
+                          : st.done && <span style={{ display: "block", fontSize: 11, color: "var(--green)", fontWeight: 700, marginTop: 2 }}>Best {st.best}/{LESSON_QUIZ_COUNT}{st.full ? " · full marks" : ""}</span>}
+                      </span>
+                      <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 20 }}>›</span>
+                    </button>
+                    {run && (
+                      <button onClick={() => startLesson(id, true)} style={{ width: "100%", textAlign: "center", padding: "7px 0", border: "none", borderTop: "1px solid var(--grid)", background: "transparent", color: "var(--muted)", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+                        ↻ Start over
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
