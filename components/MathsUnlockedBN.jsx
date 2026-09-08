@@ -7988,7 +7988,7 @@ export default function MathsUnlockedBN() {
     if (lessonMsg && lessonMsg.done) return;
     const card = LESSONS[lessonId].cards[lessonIdx];
     setLessonPick(i);
-    if (i === card.a) setLessonMsg({ ok: true, text: "Correct!", done: true });
+    if (i === card.a) { playCorrect(); setLessonMsg({ ok: true, text: "Correct!", done: true }); }
     else setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not quite — try another." });
   }
   function lessonOrderTap(item) {
@@ -7999,7 +7999,7 @@ export default function MathsUnlockedBN() {
     setLessonOrder(placed);
     if (placed.length === card.items.length) {
       if (placed.every((it, idx) => it === card.items[idx])) {
-        setLessonMsg({ ok: true, text: "Nice — right order!", done: true });
+        playCorrect(); setLessonMsg({ ok: true, text: "Nice — right order!", done: true });
       } else {
         setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not in order — resetting." });
         setTimeout(() => { setLessonOrder([]); setLessonMsg(null); }, 1600);
@@ -8010,7 +8010,7 @@ export default function MathsUnlockedBN() {
     const card = LESSONS[lessonId].cards[lessonIdx];
     const v = String(val != null ? val : lessonInput).trim();
     if (!v) return;
-    if (checkEquivalent(v, card.a)) { setLessonMsg({ ok: true, text: "Correct!", done: true }); return; }
+    if (checkEquivalent(v, card.a)) { playCorrect(); setLessonMsg({ ok: true, text: "Correct!", done: true }); return; }
     const t = lessonTries + 1; setLessonTries(t);
     const tips = card.tips || [];
     if (t >= 3) setLessonMsg({ ok: false, text: `The answer is ${card.a}.`, done: true });
@@ -8022,6 +8022,7 @@ export default function MathsUnlockedBN() {
     if (!v) return;
     const ok = q.check ? !!q.check(v) : checkEquivalent(v, q.answer);
     if (ok) {
+      playCorrect();
       setLessonRight(lessonRight + 1);
       setLessonMsg({ ok: true, text: "Correct!", done: true });
     } else {
@@ -8036,7 +8037,7 @@ export default function MathsUnlockedBN() {
     if (step.blank == null) return; // a non-blank step advances via the button
     const v = String(val != null ? val : lessonInput).trim();
     if (!v) return;
-    if (v === step.blank || Number(v) === Number(step.blank)) setLessonMsg({ ok: true, text: "That's right", done: true });
+    if (v === step.blank || Number(v) === Number(step.blank)) { playCorrect(); setLessonMsg({ ok: true, text: "That's right", done: true }); }
     else {
       const t = lessonTries + 1; setLessonTries(t);
       if (t >= 2) setLessonMsg({ ok: false, text: `It's ${step.blank}.`, done: true });
