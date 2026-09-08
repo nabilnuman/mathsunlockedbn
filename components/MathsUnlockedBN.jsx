@@ -5539,9 +5539,21 @@ const LESSONS = {
       { k: "teach", h: "Back to an ordinary number", b: [
         "The power tells you how many places to hop the point.",
         "Positive power → hop right.   Negative power → hop left.",
-        "3.1 × 10⁴:  3.1 → 31 → 310 → 3100 → 31000   (4 hops right)." ] },
-      { k: "write", q: "Write  5 × 10³  as an ordinary number.", a: "5000", check: (v) => isOrdinary(v, 5000), tips: ["Move the point 3 places right"] },
-      { k: "write", q: "Write  8.4 × 10⁴  as an ordinary number.", a: "84000", check: (v) => isOrdinary(v, 84000), tips: ["Point moves 4 places right:  8.4 → 84000"] },
+        "3.1 × 10⁴:   3.1 → 31 → 310 → 3100 → 31000   (4 hops right).",
+        "2 × 10⁻³:   2 → 0.2 → 0.02 → 0.002   (3 hops left)." ] },
+      { k: "write", q: "Write  5 × 10³  as an ordinary number.", a: "5000", check: (v) => isOrdinary(v, 5000), tips: ["Hop the point 3 places right"] },
+      { k: "write", q: "Write  8.4 × 10⁴  as an ordinary number.", a: "84000", check: (v) => isOrdinary(v, 84000), tips: ["Hop 4 places right:  8.4 → 84 → 840 → 8400 → 84000"] },
+      { k: "teach", h: "Multiplying in standard form", b: [
+        "Multiply the front numbers.  Add the powers of 10.",
+        "(3 × 10⁴) × (2 × 10³):   3 × 2 = 6,   4 + 3 = 7   →   6 × 10⁷.",
+        "If the front ends up 10 or more, hop it once more:  20 × 10⁵ → 2 × 10⁶." ] },
+      { k: "write", q: "(2 × 10³) × (4 × 10²) in standard form.   (e.g.  6*10^5 )", a: "8*10^5", mode: "any", check: (v) => isStdForm(v, 800000), tips: ["Front numbers:  2 × 4 = 8", "Powers:  3 + 2 = 5"] },
+      { k: "eg", h: "Adding:  5 × 10³ + 2 × 10³", lines: [
+        "The powers match (both 10³), so just add the front numbers:",
+        "5 + 2 = 7",
+        "= 7 × 10³",
+        "If the powers DON'T match, rewrite one first —",
+        "e.g.  3 × 10³ = 0.3 × 10⁴,  then add the fronts." ] },
     ],
   },
 
