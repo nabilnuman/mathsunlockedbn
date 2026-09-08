@@ -2,7 +2,7 @@
    Kept deliberately thin: no offline caching (the app needs Supabase to be
    useful anyway), just enough to be installable and to receive push. */
 
-const SW_VERSION = "v1";
+const SW_VERSION = "v2"; // v2: monochrome notification badge
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -19,7 +19,7 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/badge-96.png",   // MUST be white-on-transparent — a colour PNG shows as a white box
     data: { url: data.url || "/" },
     tag: data.tag || undefined,
     renotify: !!data.tag,
