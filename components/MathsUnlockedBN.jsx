@@ -5504,10 +5504,12 @@ const LESSONS = {
         "Multiply the numbers, and multiply the roots.",
         "2√3 × 4√5 = (2 × 4)(√3 × √5) = 8√15." ] },
       { k: "write", q: "Simplify  √3 × √12", a: "6", tips: ["√3 × √12 = √36", "√36 = 6"] },
+      { k: "write", q: "Simplify  2√3 × 5√2", a: "10√6", mode: "any", check: (v) => checkSimplifiedSurd(v, "10√6"), tips: ["Numbers:  2 × 5 = 10", "Roots:  √3 × √2 = √6"] },
       { k: "teach", h: "Rationalising the denominator", b: [
         "A root on the bottom of a fraction isn't tidy.",
         "Multiply the top and bottom by that same root — it clears the root from the bottom.",
-        frac("1", "√2") + "  becomes  " + frac("√2", "2") + "     (√2 × √2 = 2)" ] },
+        frac("1", "√2") + "  becomes  " + frac("√2", "2") + "     (√2 × √2 = 2)",
+        "If the fraction won't fully cancel, just leave it — e.g.  " + frac("3", "√6") + "  becomes  " + frac("3√6", "6") + "  =  " + frac("√6", "2") + "." ] },
       { k: "write", q: "Rationalise  " + frac("6", "√3") + "   (√3 × √3 = 3)", a: "2√3", mode: "any", check: (v) => checkSimplifiedSurd(v, "2√3"), tips: ["Multiply the top and bottom by √3", frac("6√3", "3") + " = 2√3"] },
       { k: "write", q: "Simplify  √50", a: "5√2", mode: "any", check: (v) => checkSimplifiedSurd(v, "5√2"), tips: ["50 = 25 × 2", "√25 = 5"] },
     ],
@@ -5578,7 +5580,12 @@ const LESSONS = {
         "= 3800" ] },
       { k: "write", q: "Round 519 to 1 significant figure.", a: "500", tips: ["First significant figure is 5", "Next digit is 1 — round down; keep the zeros"] },
       { k: "write", q: "Round 0.03471 to 2 significant figures.", a: "0.035", tips: ["Significant figures start at the 3", "3, then 4, then next digit 7 → round up"] },
+      { k: "teach", h: "“Nearest tenth”, “nearest hundredth”…", b: [
+        "“Nearest tenth” means 1 decimal place.",
+        "“Nearest hundredth” means 2 decimal places.",
+        "“Nearest ten / hundred / thousand” round to the left of the point in the same way." ] },
       { k: "write", q: "Round 6249 to the nearest hundred.", a: "6200", tips: ["The hundreds digit is 2", "Next digit is 4 — round down"] },
+      { k: "write", q: "Round 8.361 to the nearest hundredth.", a: "8.36", tips: ["Nearest hundredth = 2 decimal places", "Next digit is 1 — round down"] },
     ],
   },
 
@@ -5592,7 +5599,8 @@ const LESSONS = {
         "Those two values are the lower and upper bounds." ] },
       { k: "teach", h: "Half the rounding unit", b: [
         "The bound is half the rounding unit on each side.",
-        "Nearest cm → ± 0.5.   Nearest 10 → ± 5.   Nearest 0.1 → ± 0.05." ] },
+        "Nearest cm → ± 0.5.   Nearest 10 → ± 5.",
+        "Nearest 0.1 → ± 0.05.   Nearest 0.5 → ± 0.25." ] },
       { k: "tap", q: "“40 kg to the nearest 10 kg” — the true mass is at least…", opts: ["30 kg", "35 kg", "39 kg"], a: 1, tip: "Half of 10 is 5, so 40 − 5." },
       { k: "write", q: "A length is 8 cm, to the nearest cm. Lower bound?   (± 0.5)", a: "7.5", tips: ["8 − 0.5"] },
       { k: "write", q: "Upper bound of that same 8 cm?", a: "8.5", tips: ["8 + 0.5"] },
@@ -5610,6 +5618,7 @@ const LESSONS = {
   factorization: {
     title: "Factorising",
     blurb: "Turning an expression back into brackets.",
+    quizFilter: (q) => !/^\([23]x/.test(String(q.answer || "")), // no leading-coefficient quadratics
     cards: [
       { k: "teach", h: "Factorising is un-expanding", b: [
         "Expanding:  3(x + 2) = 3x + 6.",
@@ -5619,6 +5628,7 @@ const LESSONS = {
         "6x + 9 → both share 3 → 3(2x + 3)." ] },
       { k: "write", q: "Factorise  4x + 12.   (write like  3(x+2) )", a: "4(x+3)", mode: "any", tips: ["Both terms share 4", "4 × x  and  4 × 3"] },
       { k: "write", q: "Factorise  x² + 5x.", a: "x(x+5)", mode: "any", tips: ["Both terms share an x", "x × x  and  x × 5"] },
+      { k: "write", q: "Factorise  6x² − 9x.   (take out a number AND an x)", a: "3x(2x-3)", mode: "any", tips: ["Both terms share 3 and x → take out 3x", "6x² ÷ 3x = 2x,   9x ÷ 3x = 3"] },
       { k: "teach", h: "Quadratics:  x² + bx + c", b: [
         "Find two numbers that multiply to c and add to b.",
         "x² + 5x + 6:  2 and 3  (2 × 3 = 6,  2 + 3 = 5).",
@@ -5634,6 +5644,14 @@ const LESSONS = {
         "x² − 9 = x² − 3² = (x + 3)(x − 3)." ] },
       { k: "write", q: "Factorise  x² − 16.   (like  (x+2)(x-2) )", a: "(x+4)(x-4)", mode: "any", tips: ["16 = 4²", "(x + 4)(x − 4)"] },
       { k: "write", q: "Factorise  x² − 2x − 8.", a: "(x-4)(x+2)", mode: "any", tips: ["Multiply to −8, add to −2", "−4 and +2"] },
+      { k: "eg", h: "Solving by factorising:  x² + 5x + 6 = 0", lines: [
+        "Factorise the left side:  (x + 2)(x + 3) = 0",
+        "If two things multiply to 0, one of them must BE 0:",
+        "x + 2 = 0   →   x = −2",
+        "x + 3 = 0   →   x = −3",
+        "Solutions:  x = −2  or  x = −3" ] },
+      { k: "write", q: "(x + 4)(x − 3) = 0.  One solution is x = −4.  What is the other?", a: "3", tips: ["Set the other bracket to 0:  x − 3 = 0"] },
+      { k: "write", q: "Solve  x² − x − 6 = 0.   Give the POSITIVE solution.", a: "3", mode: "any", tips: ["Factorises to (x − 3)(x + 2) = 0", "x = 3  or  x = −2"] },
     ],
   },
 
@@ -5687,7 +5705,17 @@ const LESSONS = {
   sequences: {
     title: "Number sequences",
     blurb: "Spotting the pattern and finding the nth term.",
-    quizFilter: (q) => q.sub !== "nth",
+    // "next term" of any kind, plus "kth term" only for arithmetic (constant
+    // first difference) — a far term of a quadratic/geometric sequence needs
+    // rule-finding this lesson doesn't cover.
+    quizFilter: (q) => {
+      if (q.sub === "nth") return false;
+      if (/next term/i.test(q.prompt)) return true;
+      const seq = (q.prompt.match(/-?\d+/g) || []).map(Number).slice(1, 6);
+      if (seq.length < 3) return false;
+      const d = seq[1] - seq[0];
+      return seq.every((v, i) => i === 0 || v - seq[i - 1] === d);
+    },
     cards: [
       { k: "teach", h: "Term-to-term vs position", b: [
         "2, 5, 8, 11, …   The term-to-term rule is “+ 3”.",
@@ -5708,8 +5736,10 @@ const LESSONS = {
       { k: "write", q: "Using nth term  5n + 2,  find the 10th term.", a: "52", tips: ["Substitute n = 10", "5 × 10 + 2"] },
       { k: "teach", h: "Other kinds of sequence", b: [
         "Multiplying by the same number each time (2, 4, 8, 16) is geometric.",
-        "If the second differences are constant, the rule involves n²." ] },
+        "If the differences aren't constant, look at the differences of the differences.",
+        "For the NEXT term, just keep whatever pattern you spot going." ] },
       { k: "write", q: "Next term:   3, 6, 12, 24, __", a: "48", tips: ["Each term doubles", "24 × 2"] },
+      { k: "write", q: "Next term:   2, 5, 10, 17, __   (differences 3, 5, 7, …)", a: "26", tips: ["The differences go up by 2, so the next difference is 9", "17 + 9"] },
     ],
   },
 
@@ -5739,6 +5769,20 @@ const LESSONS = {
         "Double x → halve y.  Find k with  k = y × x." ] },
       { k: "write", q: "y = " + frac("k", "x") + ".  When x = 3, y = 4.  Find k.", a: "12", tips: ["k = y × x", "4 × 3"] },
       { k: "write", q: "With k = 12, find y when x = 6.", a: "2", tips: ["y = " + frac("12", "x"), "12 ÷ 6"] },
+      { k: "teach", h: "Proportional to x², √x or x³", b: [
+        "Same method — only the middle bit changes.",
+        "“y proportional to x²” means y = k x².  Find k from a pair, then use it.",
+        "Always find k first, then substitute the new x." ] },
+      { k: "eg", h: "y is proportional to x².  x = 3 gives y = 18.  Find y when x = 5.", lines: [
+        "y = k x²",
+        "Put in the pair:  18 = k × 3²  =  k × 9",
+        "k = 18 ÷ 9 = 2",
+        "Now x = 5:   y = 2 × 5²  =  2 × 25",
+        "y = 50" ] },
+      { k: "write", q: "y is proportional to x².  When x = 2, y = 12.  Find k.", a: "3", tips: ["y = k x², so k = y ÷ x²", "x² = 2² = 4, then 12 ÷ 4"] },
+      { k: "write", q: "y is proportional to x², with k = 3.  Find y when x = 4.", a: "48", tips: ["y = 3 x²", "x² = 16, then 3 × 16"] },
+      { k: "write", q: "y is proportional to √x.  When x = 9, y = 6.  Find k.", a: "2", tips: ["y = k√x, so k = y ÷ √x", "√9 = 3, then 6 ÷ 3"] },
+      { k: "write", q: "y is inversely proportional to x².  When x = 2, y = 5.  Find k.", a: "20", tips: ["y = k ÷ x², so k = y × x²", "5 × 2² = 5 × 4"] },
     ],
   },
 };
