@@ -5347,10 +5347,11 @@ const LESSONS = {
       { k: "write", q: "Now finish it:  4 + 6 × 2", a: "16", tips: ["6 × 2 = 12", "Then 4 + 12"] },
       { k: "eg", h: "Work out (3 + 4) × 2²", lines: [
         "(3 + 4) × 2²",
-        "Brackets first:  3 + 4 = 7",
-        "7 × 2²",
-        "Orders next:  2² = 4",
-        "7 × 4 = 28" ] },
+        "Brackets first — work out what is inside",
+        "= (7) × 2²",
+        "Now the power:  2² = 2 × 2 = 4",
+        "= 7 × 4",
+        "= 28" ] },
       { k: "tap", q: "20 − 3 × 4 — which is right?", opts: ["17 × 4 = 68", "20 − 12 = 8", "Do it left to right"], a: 1, tip: "Work out 3 × 4 first, then subtract." },
       { k: "write", q: "Work out  20 − 3 × 4", a: "8", tips: ["3 × 4 = 12", "20 − 12"] },
       { k: "teach", h: "Left to right", b: [
@@ -5360,8 +5361,8 @@ const LESSONS = {
       { k: "eg", h: "Work out (−3) × (−4) + 5", lines: [
         "(−3) × (−4) + 5",
         "A negative times a negative is positive",
-        "(−3) × (−4) = 12",
-        "12 + 5 = 17" ] },
+        "= (+12) + 5",
+        "= 17" ] },
       { k: "tap", q: "What is 8 − 10?", opts: ["2", "−2", "0"], a: 1, tip: "Going below zero gives a negative number." },
     ],
   },
@@ -5386,11 +5387,21 @@ const LESSONS = {
       { k: "eg", h: "Solve 2x + 3 = 11", lines: [
         "2x + 3 = 11",
         "Subtract 3 from both sides",
+        "2x + 3 − 3  =  11 − 3",
         "2x = 8",
         "Divide both sides by 2",
+        frac("2x", "2") + "  =  " + frac("8", "2"),
         "x = 4" ] },
-      { k: "order", q: "Put the steps to solve 5x − 2 = 13 in order:", items: [
-        "Add 2 to both sides", "5x = 15", "Divide both sides by 5", "x = 3" ], tip: "Undo + and − before × and ÷." },
+      { k: "eg", h: "Solve 5x − 2 = 13", lines: [
+        "5x − 2 = 13",
+        "Add 2 to both sides",
+        "5x − 2 + 2  =  13 + 2",
+        "5x = 15",
+        "Divide both sides by 5",
+        frac("5x", "5") + "  =  " + frac("15", "5"),
+        "x = 3" ] },
+      { k: "order", q: "Put the steps to solve 4x − 1 = 11 in order:", items: [
+        "Add 1 to both sides", "4x = 12", "Divide both sides by 4", "x = 3" ], tip: "Undo + and − before × and ÷." },
       { k: "write", q: "Solve  2x + 3 = 11.    x =", a: "4", tips: ["Subtract 3:  2x = 8", "Divide by 2"] },
       { k: "write", q: "Solve  3x − 5 = 7.    x =", a: "4", tips: ["Add 5:  3x = 12", "Divide by 3"] },
     ],
@@ -5407,10 +5418,20 @@ const LESSONS = {
         "x³ × x² = x⁵.",
         "Same base? Add the powers:  3 + 2 = 5." ] },
       { k: "tap", q: "x⁵ × x³ = ?", opts: ["x⁸", "x¹⁵", "x²"], a: 0, tip: "Add the powers:  5 + 3 = 8." },
+      { k: "eg", h: "Simplify 2x³ × 5x⁴", lines: [
+        "2x³ × 5x⁴",
+        "Multiply the numbers:  2 × 5 = 10",
+        "Add the powers:  x³ × x⁴ = x³⁺⁴ = x⁷",
+        "= 10x⁷" ] },
       { k: "write", q: "Simplify  3x² × 4x⁵   (write it like  12x^7 )", a: "12x^7", mode: "any", tips: ["Multiply the numbers:  3 × 4 = 12", "Add the powers:  2 + 5"] },
       { k: "teach", h: "Dividing: subtract the powers", b: [
         "x⁷ ÷ x³ = x⁴.",
         "Same base? Subtract:  7 − 3 = 4." ] },
+      { k: "eg", h: "Simplify  (12x⁶) ÷ (3x²)", lines: [
+        frac("12x⁶", "3x²"),
+        "Divide the numbers:  12 ÷ 3 = 4",
+        "Subtract the powers:  x⁶ ÷ x² = x⁶⁻² = x⁴",
+        "= 4x⁴" ] },
       { k: "write", q: "Simplify  x⁷ ÷ x³   (write it like  x^4 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
       { k: "teach", h: "Power of a power: multiply", b: [
         "(x³)² = x⁶.",
@@ -7974,6 +7995,12 @@ export default function MathsUnlockedBN() {
   // Outcomes never auto-advance — the student taps a "Next" button so they
   // actually see they got it right (or read the answer). lessonMsg.done
   // means "this step is resolved" and drives that button in the render.
+  function lessonBack() {
+    if (lessonPhase !== "card" || lessonIdx <= 0) return;
+    setLessonGuide(null);
+    setLessonIdx(lessonIdx - 1);
+    resetLessonCard();
+  }
   function lessonContinue() {
     if (lessonPhase === "quiz" && lessonGuide) {
       const g = lessonGuide;
@@ -10176,9 +10203,20 @@ export default function MathsUnlockedBN() {
                 <span style={{ fontSize: 20 }}>{topic ? topic.icon : "🎓"}</span>
                 <span className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{L.title}</span>
               </div>
-              <div style={{ height: 6, borderRadius: 999, background: "var(--grid)", overflow: "hidden", marginBottom: 18 }}>
+              <div style={{ height: 6, borderRadius: 999, background: "var(--grid)", overflow: "hidden", marginBottom: 12 }}>
                 <div style={{ width: `${pct}%`, height: "100%", background: "var(--blue)", transition: "width .3s" }} />
               </div>
+
+              {lessonPhase === "card" && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, minHeight: 22 }}>
+                  {lessonIdx > 0 ? (
+                    <button onClick={lessonBack} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "1px solid var(--grid)", borderRadius: 999, padding: "3px 11px", color: "var(--muted)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      <ArrowLeft size={13} /> Back
+                    </button>
+                  ) : <span />}
+                  <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700, letterSpacing: 0.4 }}>Step {lessonIdx + 1} of {nCards}</span>
+                </div>
+              )}
 
               {/* ---- teaching cards ---- */}
               {lessonPhase === "card" && card && card.k === "teach" && cardShell(<>
