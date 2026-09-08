@@ -10510,12 +10510,14 @@ export default function MathsUnlockedBN() {
                     : p.complete ? `best ${p.best}/${p.total} · retry to improve`
                     : `mark out of ${p.total}`;
                   const due = a.due_at ? ` · ${p.overdue ? "overdue" : `due ${new Date(a.due_at).toLocaleDateString()}`}` : "";
+                  const needsDoing = !locked && !p.complete;
                   return (
                     <button key={a.id} onClick={() => !locked && startHomework(a)} disabled={locked}
-                      style={{ width: "100%", textAlign: "left", borderRadius: 10, padding: "11px 13px", cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1,
+                      style={{ position: "relative", width: "100%", textAlign: "left", borderRadius: 10, padding: "11px 13px", cursor: locked ? "default" : "pointer", opacity: locked ? 0.6 : 1,
                         background: p.complete && !p.running ? "color-mix(in srgb, var(--green) 8%, var(--paper))" : "var(--card)",
                         border: `1px solid ${p.overdue ? "var(--red)" : p.complete && !p.running ? "var(--green)" : "var(--grid)"}` }}>
-                      <div style={{ fontSize: 13 }}>
+                      {needsDoing && <span style={{ position: "absolute", top: 9, right: 10, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--card)", boxSizing: "border-box" }} />}
+                      <div style={{ fontSize: 13, paddingRight: needsDoing ? 14 : 0 }}>
                         <strong>{p.complete && !p.running ? "✓ " : ""}{topic ? `${topic.icon} ` : ""}{a.title || `${a.count} questions`}</strong>
                       </div>
                       <div style={{ fontSize: 11.5, color: p.overdue ? "var(--red)" : "var(--muted)", marginTop: 2, lineHeight: 1.4 }}>{status}{due}</div>
