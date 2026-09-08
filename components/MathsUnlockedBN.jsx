@@ -5322,6 +5322,128 @@ const TOPICS = [
 ];
 const TOPIC_BY_ID = Object.fromEntries(TOPICS.map((t) => [t.id, t]));
 
+/* ---- Guided lessons (Special Modes → Learn) -----------------------
+   A lesson is an ordered list of cards the student taps or writes
+   through, then a short checkpoint quiz drawn from the topic's own
+   generator. Get a checkpoint question wrong and its `steps` become
+   an interactive walk-through. Card kinds:
+     teach  { h, b:[paragraphs] }              read, then "Got it"
+     eg     { h, lines:[...] }                 worked example, one line per tap
+     tap    { q, opts:[...], a, tip }          pick the right option (a = index)
+     write  { q, a, tips:[...], mode? }        type / handwrite the answer
+     order  { q, items:[...in order], tip }    tap the steps into order      */
+const LESSONS = {
+  arithmetic: {
+    title: "Order of operations (BODMAS)",
+    blurb: "Which part of a calculation to do first.",
+    cards: [
+      { k: "teach", h: "One calculation, one answer", b: [
+        "What is 5 + 2 × 3? Going left to right gives 21. Multiplying first gives 11.",
+        "So everyone agrees on the same answer, we all follow one order. The answer here is 11." ] },
+      { k: "teach", h: "BODMAS", b: [
+        "Brackets → Orders (powers and roots) → Division and Multiplication → Addition and Subtraction.",
+        "× and ÷ rank equally — do them left to right. Same for + and −." ] },
+      { k: "tap", q: "In 4 + 6 × 2, what do you work out first?", opts: ["4 + 6", "6 × 2", "It doesn't matter"], a: 1, tip: "Multiplication is done before addition." },
+      { k: "write", q: "Now finish it:  4 + 6 × 2", a: "16", tips: ["6 × 2 = 12", "Then 4 + 12"] },
+      { k: "eg", h: "Work out (3 + 4) × 2²", lines: [
+        "(3 + 4) × 2²",
+        "Brackets first:  3 + 4 = 7",
+        "7 × 2²",
+        "Orders next:  2² = 4",
+        "7 × 4 = 28" ] },
+      { k: "tap", q: "20 − 3 × 4 — which is right?", opts: ["17 × 4 = 68", "20 − 12 = 8", "Do it left to right"], a: 1, tip: "Work out 3 × 4 first, then subtract." },
+      { k: "write", q: "Work out  20 − 3 × 4", a: "8", tips: ["3 × 4 = 12", "20 − 12"] },
+      { k: "teach", h: "Left to right", b: [
+        "When only × and ÷ are left, work left to right.",
+        "12 ÷ 2 × 3 = 6 × 3 = 18 — not 12 ÷ 6." ] },
+      { k: "write", q: "Work out  12 ÷ 2 × 3", a: "18", tips: ["Left to right: 12 ÷ 2 = 6", "Then 6 × 3"] },
+      { k: "eg", h: "Work out (−3) × (−4) + 5", lines: [
+        "(−3) × (−4) + 5",
+        "A negative times a negative is positive",
+        "(−3) × (−4) = 12",
+        "12 + 5 = 17" ] },
+      { k: "tap", q: "What is 8 − 10?", opts: ["2", "−2", "0"], a: 1, tip: "Going below zero gives a negative number." },
+    ],
+  },
+  algebra: {
+    title: "Solving linear equations",
+    blurb: "Finding the number that x stands for.",
+    cards: [
+      { k: "teach", h: "What an equation is", b: [
+        "x + 3 = 7 means “some number, plus 3, makes 7”.",
+        "Solving means finding that number. Here it is 4." ] },
+      { k: "teach", h: "Keep it balanced", b: [
+        "Picture a balance scale with the two sides equal.",
+        "Whatever you do to one side, do to the other — it stays balanced. That is how you get x on its own." ] },
+      { k: "tap", q: "To solve x + 5 = 12, what do you do to both sides?", opts: ["Add 5", "Subtract 5", "Divide by 5"], a: 1, tip: "Undo “+ 5” by subtracting 5." },
+      { k: "write", q: "Solve  x + 5 = 12.    x =", a: "7", tips: ["Subtract 5 from both sides", "12 − 5"] },
+      { k: "write", q: "Solve  x − 4 = 9.    x =", a: "13", tips: ["The opposite of “− 4” is “+ 4”", "9 + 4"] },
+      { k: "teach", h: "A number in front of x", b: [
+        "3x means 3 × x.",
+        "To undo “× 3”, divide both sides by 3." ] },
+      { k: "tap", q: "To solve 4x = 20:", opts: ["Subtract 4", "Divide by 4", "Multiply by 4"], a: 1, tip: "Undo “× 4” with “÷ 4”." },
+      { k: "write", q: "Solve  4x = 20.    x =", a: "5", tips: ["Divide both sides by 4", "20 ÷ 4"] },
+      { k: "eg", h: "Solve 2x + 3 = 11", lines: [
+        "2x + 3 = 11",
+        "Subtract 3 from both sides",
+        "2x = 8",
+        "Divide both sides by 2",
+        "x = 4" ] },
+      { k: "order", q: "Put the steps to solve 5x − 2 = 13 in order:", items: [
+        "Add 2 to both sides", "5x = 15", "Divide both sides by 5", "x = 3" ], tip: "Undo + and − before × and ÷." },
+      { k: "write", q: "Solve  2x + 3 = 11.    x =", a: "4", tips: ["Subtract 3:  2x = 8", "Divide by 2"] },
+      { k: "write", q: "Solve  3x − 5 = 7.    x =", a: "4", tips: ["Add 5:  3x = 12", "Divide by 3"] },
+    ],
+  },
+  indices: {
+    title: "The laws of indices",
+    blurb: "Powers like x² and x⁵, and the shortcuts for combining them.",
+    cards: [
+      { k: "teach", h: "What an index is", b: [
+        "2⁴ means 2 × 2 × 2 × 2 — four 2s multiplied together.",
+        "The small raised number is the index (or power)." ] },
+      { k: "write", q: "What is  2⁴ ?", a: "16", tips: ["2 × 2 × 2 × 2", "4 × 4"] },
+      { k: "teach", h: "Multiplying: add the powers", b: [
+        "x³ × x² = x⁵.",
+        "Same base? Add the powers:  3 + 2 = 5." ] },
+      { k: "tap", q: "x⁵ × x³ = ?", opts: ["x⁸", "x¹⁵", "x²"], a: 0, tip: "Add the powers:  5 + 3 = 8." },
+      { k: "write", q: "Simplify  3x² × 4x⁵   (write it like  12x^7 )", a: "12x^7", mode: "any", tips: ["Multiply the numbers:  3 × 4 = 12", "Add the powers:  2 + 5"] },
+      { k: "teach", h: "Dividing: subtract the powers", b: [
+        "x⁷ ÷ x³ = x⁴.",
+        "Same base? Subtract:  7 − 3 = 4." ] },
+      { k: "write", q: "Simplify  x⁷ ÷ x³   (write it like  x^4 )", a: "x^4", mode: "any", tips: ["Same base — subtract the powers", "7 − 3"] },
+      { k: "teach", h: "Power of a power: multiply", b: [
+        "(x³)² = x⁶.",
+        "Multiply the powers:  3 × 2 = 6." ] },
+      { k: "tap", q: "(x⁴)³ = ?", opts: ["x⁷", "x¹²", "x⁶⁴"], a: 1, tip: "Multiply:  4 × 3 = 12." },
+      { k: "teach", h: "The power of zero", b: [
+        "Anything except 0, to the power 0, is 1.",
+        "So 7⁰ = 1 and (5x)⁰ = 1." ] },
+      { k: "write", q: "What is  9⁰ ?", a: "1", tips: ["Any non-zero number to the power 0 gives the same result…"] },
+      { k: "teach", h: "Negative power: one over", b: [
+        "2⁻³ means 1 ÷ 2³.",
+        "2³ = 8, so 2⁻³ = 1/8." ] },
+      { k: "write", q: "What is  2⁻² ?   (write it as a fraction like  1/4 )", a: "1/4", mode: "any", tips: ["2⁻² = 1 ÷ 2²", "2² = 4"] },
+    ],
+  },
+};
+const LESSON_IDS = Object.keys(LESSONS);
+const LESSON_XP = 40;
+const LESSON_QUIZ_COUNT = 4;
+const strHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+
+// A generated question's `steps` → interactive walk-through lines.
+// A step that ends "= <number>" becomes a fill-in-the-number prompt.
+function lessonGuideSteps(q) {
+  const steps = Array.isArray(q && q.steps) ? q.steps : [];
+  return steps.map((s) => {
+    const str = String(s);
+    const m = str.match(/=\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (m && m.index > 0) return { text: str.slice(0, m.index).replace(/[:\s]+$/, "") + "  =", blank: m[1] };
+    return { text: str, blank: null };
+  });
+}
+
 /* Subtopics a teacher can pick when setting homework. A topic listed here
    tags every generated question with `q.sub` (one of these keys); the
    homework generator then only keeps questions whose `sub` is in the
@@ -5562,6 +5684,12 @@ const ACHIEVEMENTS = [
     check: (p) => (p.keyedTopics || []).length > 0 },
   { id: "oldschool", tier: "Bronze", name: "Old School", icon: "✍️", desc: "Submit 10 answers with handwriting",
     check: (p) => (p.writtenAnswers || 0) >= 10 },
+  { id: "scholar1", tier: "Bronze", name: "Back to School", icon: "📚", desc: "Finish a guided lesson in Learn",
+    check: (p) => Object.values(p.lessons || {}).some((l) => l && l.done) },
+  { id: "scholar2", tier: "Silver", name: "Straight A's", icon: "💯", desc: "Score full marks on a lesson checkpoint",
+    check: (p) => Object.values(p.lessons || {}).some((l) => l && l.full) },
+  { id: "scholar3", tier: "Gold", name: "Self-Taught", icon: "🧠", desc: "Finish every guided lesson",
+    check: (p) => LESSON_IDS.length > 0 && LESSON_IDS.every((id) => (p.lessons || {})[id] && p.lessons[id].done) },
   { id: "practicemakesperfect", tier: "Bronze", name: "Practice Makes Perfect", icon: "🎰", desc: "Play 7 days in a row",
     check: (p) => (p.playStreak || 0) >= 7 },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
@@ -6840,6 +6968,7 @@ const emptyProfile = () => ({
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0, writtenAnswers: 0,
+  lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
 });
@@ -7274,6 +7403,21 @@ export default function MathsUnlockedBN() {
   const [fbInbox, setFbInbox] = useState(null); // teacher: null=unloaded, []=loaded
   const [groupOpen, setGroupOpen] = useState(null); // dashboard: which of the 5 topic groups is expanded
   const [modesOpen, setModesOpen] = useState(false); // dashboard: Special Modes overlay
+  // Guided lessons (Special Modes → Learn)
+  const [lessonPickerOpen, setLessonPickerOpen] = useState(false);
+  const [lessonId, setLessonId] = useState(null);
+  const [lessonPhase, setLessonPhase] = useState("card");   // card | quiz | done
+  const [lessonIdx, setLessonIdx] = useState(0);            // card index, or checkpoint question index
+  const [lessonReveal, setLessonReveal] = useState(1);      // eg card: lines shown so far
+  const [lessonPick, setLessonPick] = useState(null);       // tap card: chosen option
+  const [lessonInput, setLessonInput] = useState("");       // write card / blank input
+  const [lessonMsg, setLessonMsg] = useState(null);         // { ok, text }
+  const [lessonTries, setLessonTries] = useState(0);
+  const [lessonOrder, setLessonOrder] = useState([]);       // order card: items placed so far
+  const [lessonQuizQ, setLessonQuizQ] = useState(null);     // current generated checkpoint question
+  const [lessonRight, setLessonRight] = useState(0);        // checkpoint questions right (unaided)
+  const [lessonGuide, setLessonGuide] = useState(null);     // { steps:[{text,blank}], i } while walking a wrong answer
+  const [lessonEarnedXp, setLessonEarnedXp] = useState(0);
   const [dailyQ, setDailyQ] = useState(null);
   const [dailyInput, setDailyInput] = useState("");
   const [dailyElapsed, setDailyElapsed] = useState(0);
@@ -7559,7 +7703,10 @@ export default function MathsUnlockedBN() {
     if (screen === "assignments" && !(assignments.length || studentClasses.some((c) => !c.archived))) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-  }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses]);
+    if (screen === "lesson" && (!profile.name || !LESSONS[lessonId])) {
+      setScreen(profile.name ? "dashboard" : "login");
+    }
+  }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
 
   // Roll over the daily tasks at (local) midnight / on a new day, and the
   // weekly-XP bucket on a new week.
@@ -7783,6 +7930,139 @@ export default function MathsUnlockedBN() {
     const pool = TOPICS.filter((t) => isUnlocked(t, profile));
     const topic = pool[randInt(0, Math.max(0, pool.length - 1))] || TOPICS[0];
     return pickQuestion(topic);
+  }
+
+  // ---- Guided lessons ----
+  function resetLessonCard() {
+    setLessonPick(null); setLessonInput(""); setLessonMsg(null);
+    setLessonTries(0); setLessonReveal(1); setLessonOrder([]);
+  }
+  function startLesson(id) {
+    if (!LESSONS[id]) return;
+    setLessonId(id); setLessonPhase("card"); setLessonIdx(0);
+    setLessonRight(0); setLessonGuide(null); setLessonQuizQ(null); setLessonEarnedXp(0);
+    resetLessonCard();
+    setWritePad(false); setModesOpen(false); setLessonPickerOpen(false);
+    setScreen("lesson");
+  }
+  function exitLesson() {
+    setWritePad(false); setLessonGuide(null); setLessonId(null);
+    setScreen("dashboard");
+  }
+  function makeLessonQuizQ(id) {
+    const gen = TOPIC_BY_ID[id] && TOPIC_BY_ID[id].generate;
+    if (!gen) return null;
+    for (let i = 0; i < 40; i++) {
+      let q; try { q = gen(); } catch (e) { continue; }
+      if (q && q.prompt && (q.answer != null || q.check) && Array.isArray(q.steps) && q.steps.length &&
+          !q.fields && !q.venn && !q.figure && !q.graph && !q.solid && !q.choices) return q;
+    }
+    try { return gen(); } catch (e) { return null; }
+  }
+  function lessonAdvance() {
+    const L = LESSONS[lessonId];
+    if (lessonPhase === "card") {
+      if (lessonIdx + 1 < L.cards.length) { setLessonIdx(lessonIdx + 1); resetLessonCard(); }
+      else { setLessonPhase("quiz"); setLessonIdx(0); resetLessonCard(); setLessonQuizQ(makeLessonQuizQ(lessonId)); }
+      return;
+    }
+    // checkpoint → next question or finish
+    if (lessonIdx + 1 >= LESSON_QUIZ_COUNT) { finishLesson(lessonRight); return; }
+    setLessonIdx(lessonIdx + 1); resetLessonCard(); setLessonGuide(null);
+    setLessonQuizQ(makeLessonQuizQ(lessonId));
+  }
+  function lessonTapPick(i) {
+    if (lessonMsg && lessonMsg.ok) return;
+    const card = LESSONS[lessonId].cards[lessonIdx];
+    setLessonPick(i);
+    if (i === card.a) { setLessonMsg({ ok: true, text: "Correct!" }); setTimeout(lessonAdvance, 700); }
+    else setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not quite — try another." });
+  }
+  function lessonOrderTap(item) {
+    if (lessonMsg && lessonMsg.ok) return;
+    const card = LESSONS[lessonId].cards[lessonIdx];
+    if (lessonOrder.includes(item)) return;
+    const placed = [...lessonOrder, item];
+    setLessonOrder(placed);
+    if (placed.length === card.items.length) {
+      if (placed.every((it, idx) => it === card.items[idx])) {
+        setLessonMsg({ ok: true, text: "Perfect order!" }); setTimeout(lessonAdvance, 850);
+      } else {
+        setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not in order — resetting." });
+        setTimeout(() => { setLessonOrder([]); setLessonMsg(null); }, 1600);
+      }
+    }
+  }
+  function lessonWriteCheck(val) {
+    const card = LESSONS[lessonId].cards[lessonIdx];
+    const v = String(val != null ? val : lessonInput).trim();
+    if (!v) return;
+    if (checkEquivalent(v, card.a)) { setLessonMsg({ ok: true, text: "Correct!" }); setTimeout(lessonAdvance, 650); return; }
+    const t = lessonTries + 1; setLessonTries(t);
+    const tips = card.tips || [];
+    if (t >= 3) { setLessonMsg({ ok: false, text: `The answer is ${card.a}.` }); setTimeout(lessonAdvance, 1500); }
+    else { const tip = tips[Math.min(t - 1, tips.length - 1)]; setLessonMsg({ ok: false, text: tip ? `Hint: ${tip}` : "Not quite — try again." }); }
+  }
+  function lessonQuizCheck(val) {
+    const q = lessonQuizQ; if (!q) return;
+    const v = String(val != null ? val : lessonInput).trim();
+    if (!v) return;
+    const ok = q.check ? !!q.check(v) : checkEquivalent(v, q.answer);
+    if (ok) {
+      const right = lessonRight + 1;
+      setLessonRight(right); setLessonMsg({ ok: true, text: "Correct!" });
+      setTimeout(() => {
+        if (lessonIdx + 1 >= LESSON_QUIZ_COUNT) finishLesson(right);
+        else { setLessonIdx(lessonIdx + 1); resetLessonCard(); setLessonGuide(null); setLessonQuizQ(makeLessonQuizQ(lessonId)); }
+      }, 700);
+    } else {
+      const steps = lessonGuideSteps(q);
+      setLessonMsg(null); setLessonInput(""); setLessonTries(0);
+      setLessonGuide(steps.length ? { steps, i: 0 } : { steps: [{ text: `The answer is ${q.answerDisplay || q.answer}.`, blank: null }], i: 0 });
+    }
+  }
+  function lessonGuideStep(val) {
+    const g = lessonGuide; if (!g) return;
+    const step = g.steps[g.i];
+    const done = () => {
+      if (g.i + 1 >= g.steps.length) { setLessonGuide(null); resetLessonCard(); lessonAdvance(); }
+      else { setLessonGuide({ steps: g.steps, i: g.i + 1 }); setLessonInput(""); setLessonMsg(null); setLessonTries(0); }
+    };
+    if (step.blank == null) { done(); return; }
+    const v = String(val != null ? val : lessonInput).trim();
+    if (!v) return;
+    if (v === step.blank || Number(v) === Number(step.blank)) { setLessonMsg({ ok: true, text: "Yes" }); setTimeout(done, 550); }
+    else {
+      const t = lessonTries + 1; setLessonTries(t);
+      if (t >= 2) { setLessonMsg({ ok: false, text: `It's ${step.blank}.` }); setTimeout(done, 1100); }
+      else setLessonMsg({ ok: false, text: "Not quite — try again." });
+    }
+  }
+  // WritePad "Submit" / on-screen check button routes here based on where we are.
+  function lessonCheckNow(val) {
+    if (lessonPhase === "quiz" && lessonGuide) return lessonGuideStep(val);
+    if (lessonPhase === "quiz") return lessonQuizCheck(val);
+    return lessonWriteCheck(val);
+  }
+  function finishLesson(right) {
+    const full = right >= LESSON_QUIZ_COUNT;
+    const next = JSON.parse(JSON.stringify(profile));
+    const prev = (next.lessons || {})[lessonId] || null;
+    const firstTime = !(prev && prev.done);
+    next.lessons = { ...(next.lessons || {}), [lessonId]: {
+      done: true,
+      full: full || !!(prev && prev.full),
+      best: Math.max(right, (prev && prev.best) || 0),
+      at: (prev && prev.at) || Date.now(),
+    } };
+    let xp = 0;
+    if (firstTime) { xp = LESSON_XP; next.bonusExp = (next.bonusExp || 0) + xp; }
+    const unlocked = awardAchievements(next);
+    saveProfile(next);
+    setLessonEarnedXp(xp);
+    setLessonPhase("done");
+    try { if (soundOn) playJingle(true); } catch (e) { /* ignore */ }
+    if (unlocked.length) unlocked.forEach((a) => flash(`🏆 ${a.name}`));
   }
 
   function startMixed() {
@@ -9840,6 +10120,177 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
+        {/* GUIDED LESSON (Learn) */}
+        {screen === "lesson" && LESSONS[lessonId] && (() => {
+          const L = LESSONS[lessonId];
+          const topic = TOPIC_BY_ID[lessonId];
+          const nCards = L.cards.length;
+          const total = nCards + LESSON_QUIZ_COUNT;
+          const doneUnits = lessonPhase === "done" ? total
+            : lessonPhase === "quiz" ? nCards + lessonIdx
+            : lessonIdx;
+          const pct = Math.round((doneUnits / total) * 100);
+          const card = lessonPhase === "card" ? L.cards[lessonIdx] : null;
+
+          const msgBox = lessonMsg ? (
+            <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: lessonMsg.ok ? "var(--green)" : "var(--red)" }}>{lessonMsg.text}</div>
+          ) : null;
+          const primaryBtn = (label, onClick, dis) => (
+            <button onClick={onClick} disabled={dis} style={{ width: "100%", padding: "12px 14px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: dis ? "default" : "pointer", border: "none", marginTop: 14, background: "var(--green)", color: "var(--on-accent)", opacity: dis ? 0.5 : 1 }}>{label}</button>
+          );
+          const answerRow = (onCheck) => (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <input value={lessonInput} onChange={(e) => setLessonInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
+                placeholder="your answer" autoComplete="off"
+                style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
+              <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
+              <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
+            </div>
+          );
+          const cardShell = (children) => (
+            <div className="mub-card" style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: "18px 16px", boxShadow: "0 6px 24px var(--shadow-soft)" }}>{children}</div>
+          );
+
+          return (
+            <div style={{ maxWidth: 560, margin: "0 auto" }}>
+              <button onClick={exitLesson} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
+                <ArrowLeft size={14} /> {lessonPhase === "done" ? "back" : "exit"}
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 20 }}>{topic ? topic.icon : "🎓"}</span>
+                <span className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{L.title}</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 999, background: "var(--grid)", overflow: "hidden", marginBottom: 18 }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: "var(--blue)", transition: "width .3s" }} />
+              </div>
+
+              {/* ---- teaching cards ---- */}
+              {lessonPhase === "card" && card && card.k === "teach" && cardShell(<>
+                <div className="mub-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>{card.h}</div>
+                {card.b.map((p, i) => (
+                  <div key={i} className="mub-mono" style={{ fontSize: 14, lineHeight: 1.6, color: "var(--ink)", marginBottom: 8 }}><MathText text={p} /></div>
+                ))}
+                {primaryBtn("Got it", lessonAdvance)}
+              </>)}
+
+              {lessonPhase === "card" && card && card.k === "eg" && cardShell(<>
+                <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{card.h}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {card.lines.slice(0, lessonReveal).map((ln, i) => (
+                    <div key={i} className="mub-mono" style={{ fontSize: 15, lineHeight: 1.5, padding: "7px 10px", borderRadius: 8, background: i === 0 ? "var(--paper)" : "transparent", borderLeft: i === 0 ? "none" : "2px solid var(--blue)", color: "var(--ink)", opacity: i === lessonReveal - 1 && i > 0 ? 1 : 0.92 }}>
+                      <MathText text={ln} />
+                    </div>
+                  ))}
+                </div>
+                {lessonReveal < card.lines.length
+                  ? primaryBtn("Next step", () => setLessonReveal(lessonReveal + 1))
+                  : primaryBtn("Got it", lessonAdvance)}
+              </>)}
+
+              {lessonPhase === "card" && card && card.k === "tap" && cardShell(<>
+                <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, marginBottom: 14 }}><MathText text={card.q} /></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {card.opts.map((o, i) => {
+                    const picked = lessonPick === i;
+                    const good = lessonMsg && lessonMsg.ok && i === card.a;
+                    const bad = picked && lessonMsg && !lessonMsg.ok;
+                    return (
+                      <button key={i} onClick={() => lessonTapPick(i)} style={{
+                        width: "100%", textAlign: "left", padding: "11px 13px", borderRadius: 10, fontSize: 14, cursor: "pointer",
+                        border: `1px solid ${good ? "var(--green)" : bad ? "var(--red)" : "var(--grid)"}`,
+                        background: good ? "color-mix(in srgb, var(--green) 12%, var(--card))" : bad ? "color-mix(in srgb, var(--red) 10%, var(--card))" : "var(--card)",
+                        color: "var(--ink)", fontWeight: 600,
+                      }}><MathText text={o} /></button>
+                    );
+                  })}
+                </div>
+                {msgBox}
+              </>)}
+
+              {lessonPhase === "card" && card && card.k === "write" && cardShell(<>
+                <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, marginBottom: 4 }}><MathText text={card.q} /></div>
+                {answerRow(() => lessonWriteCheck())}
+                {msgBox}
+              </>)}
+
+              {lessonPhase === "card" && card && card.k === "order" && (() => {
+                const remaining = [...card.items].filter((it) => !lessonOrder.includes(it))
+                  .sort((a, b) => strHash(a + lessonId) - strHash(b + lessonId));
+                return cardShell(<>
+                  <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, marginBottom: 12 }}><MathText text={card.q} /></div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                    {lessonOrder.map((it, i) => (
+                      <div key={i} className="mub-mono" style={{ fontSize: 14, padding: "8px 11px", borderRadius: 8, background: "var(--paper)", border: "1px solid var(--blue)" }}>
+                        <span style={{ color: "var(--muted)", fontWeight: 700 }}>{i + 1}. </span><MathText text={it} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {remaining.map((it) => (
+                      <button key={it} onClick={() => lessonOrderTap(it)} className="mub-mono" style={{ fontSize: 13, padding: "8px 11px", borderRadius: 8, border: "1px solid var(--grid)", background: "var(--card)", cursor: "pointer", color: "var(--ink)" }}>
+                        <MathText text={it} />
+                      </button>
+                    ))}
+                  </div>
+                  {msgBox}
+                </>);
+              })()}
+
+              {/* ---- checkpoint ---- */}
+              {lessonPhase === "quiz" && !lessonGuide && cardShell(<>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 8 }}>
+                  Check · {lessonIdx + 1} of {LESSON_QUIZ_COUNT}
+                </div>
+                {lessonQuizQ ? (() => {
+                  const { lead, expr } = splitPrompt(lessonQuizQ.prompt);
+                  return (
+                    <div style={{ marginBottom: 4 }}>
+                      <div className="mub-mono" style={{ fontSize: expr ? 13 : 16, lineHeight: 1.5, color: expr ? "var(--muted)" : "var(--ink)" }}><MathText text={lead} /></div>
+                      {expr && <div className="mub-mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}><MathText text={expr} /></div>}
+                    </div>
+                  );
+                })() : <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>}
+                {lessonQuizQ && answerRow(() => lessonQuizCheck())}
+                {msgBox}
+              </>)}
+
+              {lessonPhase === "quiz" && lessonGuide && (() => {
+                const step = lessonGuide.steps[lessonGuide.i];
+                return cardShell(<>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--blue)", marginBottom: 8 }}>
+                    Let's work through it · step {lessonGuide.i + 1} of {lessonGuide.steps.length}
+                  </div>
+                  <div className="mub-mono" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--ink)" }}><MathText text={step.text} /></div>
+                  {step.blank != null
+                    ? (<>{answerRow(() => lessonGuideStep())}{msgBox}</>)
+                    : (<>{msgBox}{primaryBtn(lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step", () => lessonGuideStep())}</>)}
+                </>);
+              })()}
+
+              {/* ---- done ---- */}
+              {lessonPhase === "done" && (
+                <div style={{ position: "relative", textAlign: "center", padding: "10px 0" }}>
+                  <Confetti count={110} duration={2200} />
+                  <div style={{ fontSize: 52 }}>🎓</div>
+                  <div className="mub-display" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>Lesson complete</div>
+                  <div style={{ fontSize: 14, color: "var(--muted)", marginTop: 6 }}>
+                    Checkpoint: <strong style={{ color: "var(--ink)" }}>{lessonRight}/{LESSON_QUIZ_COUNT}</strong>
+                    {lessonRight >= LESSON_QUIZ_COUNT ? " — full marks!" : ""}
+                  </div>
+                  {lessonEarnedXp > 0 && (
+                    <div style={{ fontSize: 13, color: "var(--green)", fontWeight: 700, marginTop: 6 }}>+{lessonEarnedXp} XP</div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+                    <button onClick={() => { setScreen("dashboard"); setLessonId(null); setLessonPickerOpen(true); }} style={{ width: "100%", padding: "12px 14px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer", border: "1px solid var(--grid)", background: "var(--paper)", color: "var(--ink)" }}>More lessons</button>
+                    <button onClick={exitLesson} style={{ width: "100%", padding: "12px 14px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer", border: "none", background: "var(--green)", color: "var(--on-accent)" }}>Back to menu</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* DAILY CHALLENGE */}
         {screen === "daily" && (() => {
           const rows = dailyBoardRows || [];
@@ -11537,7 +11988,7 @@ export default function MathsUnlockedBN() {
           onClose={() => setWritePad(false)}
         />
       )}
-      {writePad && screen !== "daily" && question && (
+      {writePad && screen === "quiz" && question && (
         <WritePad
           mode={/^[\s\d.,/+−-]+$/.test(String(question.answerDisplay || question.answer || "").trim()) && /\d/.test(String(question.answer || "")) ? "number" : "any"}
           onInsert={(t) => { setAnswerInput(t); setTimeout(() => answerRef.current && answerRef.current.focus(), 0); }}
@@ -11759,6 +12210,19 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => setModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => { setModesOpen(false); setLessonPickerOpen(true); }} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
+                  {LESSON_IDS.some((id) => !((profile.lessons || {})[id] || {}).done) && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--blue)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                  <span style={{ fontSize: 28 }}>🎓</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Learn</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      Step-by-step lessons that walk you through a topic from scratch, then check what stuck.
+                    </span>
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>
+                    {LESSON_IDS.filter((id) => ((profile.lessons || {})[id] || {}).done).length}/{LESSON_IDS.length}
+                  </span>
+                </button>
                 <button onClick={() => go(startDaily)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
                   {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                   <span style={{ fontSize: 28 }}>📅</span>
@@ -11798,6 +12262,45 @@ export default function MathsUnlockedBN() {
           </div>
         );
       })()}
+
+      {/* Learn — lesson picker */}
+      {lessonPickerOpen && (
+        <div onClick={() => setLessonPickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 440, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>🎓 Learn</span>
+              <button onClick={() => setLessonPickerOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Guided, step-by-step. Start anywhere — no earlier topics assumed.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {LESSON_IDS.map((id) => {
+                const L = LESSONS[id]; const t = TOPIC_BY_ID[id]; const st = (profile.lessons || {})[id] || {};
+                return (
+                  <button key={id} onClick={() => startLesson(id)} className="mub-card" style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 13, padding: "13px 14px", borderRadius: 14, border: `1px solid ${st.done ? "var(--green)" : "var(--blue)"}`, background: "var(--card)" }}>
+                    <span style={{ fontSize: 26, flexShrink: 0 }}>{t ? t.icon : "🎓"}</span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{st.done ? "✓ " : ""}{L.title}</span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>{L.blurb}</span>
+                      {st.done && <span style={{ display: "block", fontSize: 11, color: "var(--green)", fontWeight: 700, marginTop: 2 }}>Best {st.best}/{LESSON_QUIZ_COUNT}{st.full ? " · full marks" : ""}</span>}
+                    </span>
+                    <span style={{ flexShrink: 0, color: "var(--muted)", fontSize: 20 }}>›</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 14 }}>More topics coming. Tell your teacher which you want next.</div>
+          </div>
+        </div>
+      )}
+
+      {writePad && screen === "lesson" && (
+        <WritePad
+          mode="any"
+          onInsert={(t) => setLessonInput(t)}
+          onConfirm={(t) => { setLessonInput(t); setTimeout(() => lessonCheckNow(t), 0); }}
+          onClose={() => setWritePad(false)}
+        />
+      )}
 
       {achOpen && (
         <div onClick={closeAch} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
