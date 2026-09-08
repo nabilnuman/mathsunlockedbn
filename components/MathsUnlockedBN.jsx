@@ -7971,22 +7971,35 @@ export default function MathsUnlockedBN() {
     setLessonIdx(lessonIdx + 1); resetLessonCard(); setLessonGuide(null);
     setLessonQuizQ(makeLessonQuizQ(lessonId));
   }
+  // Outcomes never auto-advance — the student taps a "Next" button so they
+  // actually see they got it right (or read the answer). lessonMsg.done
+  // means "this step is resolved" and drives that button in the render.
+  function lessonContinue() {
+    if (lessonPhase === "quiz" && lessonGuide) {
+      const g = lessonGuide;
+      if (g.i + 1 >= g.steps.length) { setLessonGuide(null); resetLessonCard(); lessonAdvance(); }
+      else { setLessonGuide({ steps: g.steps, i: g.i + 1 }); setLessonInput(""); setLessonMsg(null); setLessonTries(0); }
+      return;
+    }
+    setLessonMsg(null);
+    lessonAdvance();
+  }
   function lessonTapPick(i) {
-    if (lessonMsg && lessonMsg.ok) return;
+    if (lessonMsg && lessonMsg.done) return;
     const card = LESSONS[lessonId].cards[lessonIdx];
     setLessonPick(i);
-    if (i === card.a) { setLessonMsg({ ok: true, text: "Correct!" }); setTimeout(lessonAdvance, 700); }
+    if (i === card.a) setLessonMsg({ ok: true, text: "Correct!", done: true });
     else setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not quite — try another." });
   }
   function lessonOrderTap(item) {
-    if (lessonMsg && lessonMsg.ok) return;
+    if (lessonMsg && lessonMsg.done) return;
     const card = LESSONS[lessonId].cards[lessonIdx];
     if (lessonOrder.includes(item)) return;
     const placed = [...lessonOrder, item];
     setLessonOrder(placed);
     if (placed.length === card.items.length) {
       if (placed.every((it, idx) => it === card.items[idx])) {
-        setLessonMsg({ ok: true, text: "Perfect order!" }); setTimeout(lessonAdvance, 850);
+        setLessonMsg({ ok: true, text: "Nice — right order!", done: true });
       } else {
         setLessonMsg({ ok: false, text: card.tip ? `Hint: ${card.tip}` : "Not in order — resetting." });
         setTimeout(() => { setLessonOrder([]); setLessonMsg(null); }, 1600);
@@ -7997,10 +8010,10 @@ export default function MathsUnlockedBN() {
     const card = LESSONS[lessonId].cards[lessonIdx];
     const v = String(val != null ? val : lessonInput).trim();
     if (!v) return;
-    if (checkEquivalent(v, card.a)) { setLessonMsg({ ok: true, text: "Correct!" }); setTimeout(lessonAdvance, 650); return; }
+    if (checkEquivalent(v, card.a)) { setLessonMsg({ ok: true, text: "Correct!", done: true }); return; }
     const t = lessonTries + 1; setLessonTries(t);
     const tips = card.tips || [];
-    if (t >= 3) { setLessonMsg({ ok: false, text: `The answer is ${card.a}.` }); setTimeout(lessonAdvance, 1500); }
+    if (t >= 3) setLessonMsg({ ok: false, text: `The answer is ${card.a}.`, done: true });
     else { const tip = tips[Math.min(t - 1, tips.length - 1)]; setLessonMsg({ ok: false, text: tip ? `Hint: ${tip}` : "Not quite — try again." }); }
   }
   function lessonQuizCheck(val) {
@@ -8009,38 +8022,30 @@ export default function MathsUnlockedBN() {
     if (!v) return;
     const ok = q.check ? !!q.check(v) : checkEquivalent(v, q.answer);
     if (ok) {
-      const right = lessonRight + 1;
-      setLessonRight(right); setLessonMsg({ ok: true, text: "Correct!" });
-      setTimeout(() => {
-        if (lessonIdx + 1 >= LESSON_QUIZ_COUNT) finishLesson(right);
-        else { setLessonIdx(lessonIdx + 1); resetLessonCard(); setLessonGuide(null); setLessonQuizQ(makeLessonQuizQ(lessonId)); }
-      }, 700);
+      setLessonRight(lessonRight + 1);
+      setLessonMsg({ ok: true, text: "Correct!", done: true });
     } else {
       const steps = lessonGuideSteps(q);
       setLessonMsg(null); setLessonInput(""); setLessonTries(0);
       setLessonGuide(steps.length ? { steps, i: 0 } : { steps: [{ text: `The answer is ${q.answerDisplay || q.answer}.`, blank: null }], i: 0 });
     }
   }
-  function lessonGuideStep(val) {
+  function lessonGuideCheck(val) {
     const g = lessonGuide; if (!g) return;
     const step = g.steps[g.i];
-    const done = () => {
-      if (g.i + 1 >= g.steps.length) { setLessonGuide(null); resetLessonCard(); lessonAdvance(); }
-      else { setLessonGuide({ steps: g.steps, i: g.i + 1 }); setLessonInput(""); setLessonMsg(null); setLessonTries(0); }
-    };
-    if (step.blank == null) { done(); return; }
+    if (step.blank == null) return; // a non-blank step advances via the button
     const v = String(val != null ? val : lessonInput).trim();
     if (!v) return;
-    if (v === step.blank || Number(v) === Number(step.blank)) { setLessonMsg({ ok: true, text: "Yes" }); setTimeout(done, 550); }
+    if (v === step.blank || Number(v) === Number(step.blank)) setLessonMsg({ ok: true, text: "That's right", done: true });
     else {
       const t = lessonTries + 1; setLessonTries(t);
-      if (t >= 2) { setLessonMsg({ ok: false, text: `It's ${step.blank}.` }); setTimeout(done, 1100); }
+      if (t >= 2) setLessonMsg({ ok: false, text: `It's ${step.blank}.`, done: true });
       else setLessonMsg({ ok: false, text: "Not quite — try again." });
     }
   }
   // WritePad "Submit" / on-screen check button routes here based on where we are.
   function lessonCheckNow(val) {
-    if (lessonPhase === "quiz" && lessonGuide) return lessonGuideStep(val);
+    if (lessonPhase === "quiz" && lessonGuide) return lessonGuideCheck(val);
     if (lessonPhase === "quiz") return lessonQuizCheck(val);
     return lessonWriteCheck(val);
   }
@@ -10133,11 +10138,20 @@ export default function MathsUnlockedBN() {
           const card = lessonPhase === "card" ? L.cards[lessonIdx] : null;
 
           const msgBox = lessonMsg ? (
-            <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: lessonMsg.ok ? "var(--green)" : "var(--red)" }}>{lessonMsg.text}</div>
+            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7, fontSize: lessonMsg.done ? 15 : 13, fontWeight: 800, color: lessonMsg.ok ? "var(--green)" : "var(--red)" }}>
+              {lessonMsg.done && <span style={{ fontSize: 17 }}>{lessonMsg.ok ? "✓" : "✕"}</span>}
+              <span>{lessonMsg.text}</span>
+            </div>
           ) : null;
           const primaryBtn = (label, onClick, dis) => (
             <button onClick={onClick} disabled={dis} style={{ width: "100%", padding: "12px 14px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: dis ? "default" : "pointer", border: "none", marginTop: 14, background: "var(--green)", color: "var(--on-accent)", opacity: dis ? 0.5 : 1 }}>{label}</button>
           );
+          const contLabel = lessonPhase === "quiz" && lessonGuide
+            ? (lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step →")
+            : lessonPhase === "quiz"
+            ? (lessonIdx + 1 >= LESSON_QUIZ_COUNT ? "See results →" : "Next question →")
+            : "Next →";
+          const continueBtn = lessonMsg && lessonMsg.done ? primaryBtn(contLabel, lessonContinue) : null;
           const answerRow = (onCheck) => (
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input value={lessonInput} onChange={(e) => setLessonInput(e.target.value)}
@@ -10206,12 +10220,14 @@ export default function MathsUnlockedBN() {
                   })}
                 </div>
                 {msgBox}
+                {continueBtn}
               </>)}
 
               {lessonPhase === "card" && card && card.k === "write" && cardShell(<>
                 <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.5, marginBottom: 4 }}><MathText text={card.q} /></div>
-                {answerRow(() => lessonWriteCheck())}
+                {!(lessonMsg && lessonMsg.done) && answerRow(() => lessonWriteCheck())}
                 {msgBox}
+                {continueBtn}
               </>)}
 
               {lessonPhase === "card" && card && card.k === "order" && (() => {
@@ -10234,6 +10250,7 @@ export default function MathsUnlockedBN() {
                     ))}
                   </div>
                   {msgBox}
+                  {continueBtn}
                 </>);
               })()}
 
@@ -10251,20 +10268,24 @@ export default function MathsUnlockedBN() {
                     </div>
                   );
                 })() : <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>}
-                {lessonQuizQ && answerRow(() => lessonQuizCheck())}
+                {lessonQuizQ && !(lessonMsg && lessonMsg.done) && answerRow(() => lessonQuizCheck())}
                 {msgBox}
+                {continueBtn}
               </>)}
 
               {lessonPhase === "quiz" && lessonGuide && (() => {
                 const step = lessonGuide.steps[lessonGuide.i];
+                const resolved = lessonMsg && lessonMsg.done;
                 return cardShell(<>
                   <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--blue)", marginBottom: 8 }}>
-                    Let's work through it · step {lessonGuide.i + 1} of {lessonGuide.steps.length}
+                    Let&rsquo;s work through it &middot; step {lessonGuide.i + 1} of {lessonGuide.steps.length}
                   </div>
                   <div className="mub-mono" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--ink)" }}><MathText text={step.text} /></div>
-                  {step.blank != null
-                    ? (<>{answerRow(() => lessonGuideStep())}{msgBox}</>)
-                    : (<>{msgBox}{primaryBtn(lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step", () => lessonGuideStep())}</>)}
+                  {step.blank != null && !resolved && answerRow(() => lessonGuideCheck())}
+                  {msgBox}
+                  {step.blank == null
+                    ? primaryBtn(lessonGuide.i + 1 >= lessonGuide.steps.length ? "Got it →" : "Next step →", lessonContinue)
+                    : continueBtn}
                 </>);
               })()}
 
@@ -12210,19 +12231,6 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => setModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button onClick={() => { setModesOpen(false); setLessonPickerOpen(true); }} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
-                  {LESSON_IDS.some((id) => !((profile.lessons || {})[id] || {}).done) && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--blue)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                  <span style={{ fontSize: 28 }}>🎓</span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Learn</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      Step-by-step lessons that walk you through a topic from scratch, then check what stuck.
-                    </span>
-                  </span>
-                  <span style={{ flexShrink: 0, fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>
-                    {LESSON_IDS.filter((id) => ((profile.lessons || {})[id] || {}).done).length}/{LESSON_IDS.length}
-                  </span>
-                </button>
                 <button onClick={() => go(startDaily)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
                   {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                   <span style={{ fontSize: 28 }}>📅</span>
@@ -12256,6 +12264,19 @@ export default function MathsUnlockedBN() {
                       <span className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--blue)" }}>{profile.blitzBest || 0}</span>
                     </span>
                   )}
+                </button>
+                <button onClick={() => { setModesOpen(false); setLessonPickerOpen(true); }} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
+                  {LESSON_IDS.some((id) => !((profile.lessons || {})[id] || {}).done) && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--blue)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                  <span style={{ fontSize: 28 }}>🎓</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Learn</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      Step-by-step lessons that walk you through a topic from scratch, then check what stuck.
+                    </span>
+                  </span>
+                  <span style={{ flexShrink: 0, fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>
+                    {LESSON_IDS.filter((id) => ((profile.lessons || {})[id] || {}).done).length}/{LESSON_IDS.length}
+                  </span>
                 </button>
               </div>
             </div>
