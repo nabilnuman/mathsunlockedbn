@@ -9000,6 +9000,7 @@ export default function MathsUnlockedBN() {
     if (!forgiven) {
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
       t.streak = correct ? (t.streak || 0) + 1 : 0;
+      t.wrongRun = correct ? 0 : (t.wrongRun || 0) + 1; // consecutive wrong in this topic — drives the "try Learn" nudge
       if (scoredId === "trigonometry") next.bestTrigStreak = Math.max(next.bestTrigStreak || 0, t.streak); // "Triple Threat"
     }
     let candidateIdx = rankIndexForAvg(avgFromHistory(t.history));
@@ -9099,13 +9100,21 @@ export default function MathsUnlockedBN() {
 
     if (viaWrite) next.writtenAnswers = (next.writtenAnswers || 0) + 1; // "Old School"
 
+    // Struggling in a topic that has a guided lesson? Offer it — once per
+    // day per topic so a bad run doesn't nag.
+    let learnNudge = null;
+    if (!correct && !forgiven && (t.wrongRun || 0) >= 3 && LESSONS[scoredId]) {
+      const nudged = d.learnNudged || [];
+      if (!nudged.includes(scoredId)) { d.learnNudged = [...nudged, scoredId]; learnNudge = scoredId; }
+    }
+
     const unlocked = awardAchievements(next);
     const bonusSound = unlocked.length > 0 || leveledTo;
     if (bonusSound) playJingle(!!leveledTo);
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -11154,6 +11163,19 @@ export default function MathsUnlockedBN() {
                               : `Your best stays ${h.best}/${h.count}.`}
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>You can retry as many times as you like — your mark only ever goes up.</div>
+                      </div>
+                    );
+                  })()}
+                  {feedback.learnNudge && LESSONS[feedback.learnNudge] && (() => {
+                    const lt = TOPIC_BY_ID[feedback.learnNudge];
+                    return (
+                      <div style={{ marginBottom: 12, background: "var(--paper)", border: "1px solid var(--amber)", borderRadius: 10, padding: "11px 13px" }}>
+                        <div style={{ fontSize: 12.5, color: "var(--ink)", marginBottom: 8 }}>
+                          A few tricky ones in a row. Want a step-by-step walk-through of <strong>{lt ? lt.name : "this topic"}</strong>?
+                        </div>
+                        <button onClick={() => startLesson(feedback.learnNudge)} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                          🎓 Open the lesson
+                        </button>
                       </div>
                     );
                   })()}
