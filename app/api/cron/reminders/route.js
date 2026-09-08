@@ -57,7 +57,12 @@ export async function GET(req) {
     return Response.json({ ok: false, error: "push not configured yet" }, { status: 503 });
   }
 
-  const sb = createClient(SUPA_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  // Force every PostgREST request past Next.js's fetch cache — otherwise a
+  // GET that once returned an empty table stays "empty" on later runs.
+  const sb = createClient(SUPA_URL, SERVICE_KEY, {
+    auth: { persistSession: false },
+    global: { fetch: (url, opts = {}) => fetch(url, { ...opts, cache: "no-store" }) },
+  });
 
   // ?check — non-destructive config probe (no push sent). Confirms the env
   // vars are well-formed and shows how many subscriptions the DB holds.
