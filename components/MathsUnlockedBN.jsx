@@ -6170,6 +6170,267 @@ const LESSONS = {
       { k: "write", q: "Two similar shapes have matching sides 3 cm and 9 cm. The smaller has area 5 cm². Find the area of the larger, in cm².", a: "45", tips: ["Length scale factor = 9 ÷ 3 = 3", "Area scale factor = 3² = 9, then 5 × 9"] },
     ],
   },
+
+  circles: {
+    title: "Arcs and sectors",
+    blurb: "A sector is a slice of a circle — a fraction of the whole.",
+    cards: [
+      { k: "teach", h: "A sector is a fraction of the circle", b: [
+        "The whole circle is 360°. A sector with angle θ is  θ/360  of the circle.",
+        "Arc length =  θ/360 × (full circumference) =  θ/360 × 2πr.",
+        "Sector area =  θ/360 × (full area) =  θ/360 × πr²." ] },
+      { k: "eg", h: "Radius 6 cm, angle 60°. Arc length in terms of π?", lines: [
+        "The sector is  60/360  =  1/6  of the circle",
+        "Full circumference = 2πr = 2 × π × 6 = 12π",
+        "Arc length = 1/6 × 12π",
+        "= 2π cm" ] },
+      { k: "write", q: "A sector has radius 12 cm and angle 30°. Find the arc length in terms of π.  (cm)", a: "2π", mode: "any", tips: ["30/360 = 1/12 of the circle", "1/12 × 2π × 12 = 1/12 × 24π"] },
+      { k: "eg", h: "Radius 6 cm, angle 40°. Sector area in terms of π?", lines: [
+        "The sector is  40/360  =  1/9  of the circle",
+        "Full area = πr² = π × 6² = 36π",
+        "Sector area = 1/9 × 36π",
+        "= 4π cm²" ] },
+      { k: "write", q: "A sector has radius 9 cm and angle 40°. Find the sector area in terms of π.  (cm²)", a: "9π", mode: "any", tips: ["40/360 = 1/9 of the circle", "1/9 × π × 9² = 1/9 × 81π"] },
+      { k: "teach", h: "Working backwards for the angle", b: [
+        "If you know the arc length and the radius, rearrange:",
+        "arc = θ/360 × 2πr  →  θ = arc ÷ (2πr) × 360." ] },
+      { k: "eg", h: "Radius 6 cm, arc length 5π cm. Find the angle θ.", lines: [
+        "arc = θ/360 × 2πr",
+        "5π = θ/360 × 2π × 6  =  θ/360 × 12π",
+        "5π ÷ 12π = θ/360  →  5/12 = θ/360",
+        "θ = 5/12 × 360 = 150°" ] },
+      { k: "write", q: "A sector has radius 12 cm and arc length 4π cm. Find the angle θ, in degrees.", a: "60", tips: ["4π = θ/360 × 2π × 12 = θ/360 × 24π", "4/24 = θ/360, so θ = 1/6 × 360"] },
+      { k: "teach", h: "Working backwards for the radius", b: [
+        "Given the angle and the arc length:  arc = θ/360 × 2πr,  so  r = arc ÷ (θ/360 × 2π).",
+        "Cancel the π's — they're on both sides." ] },
+      { k: "write", q: "A sector has angle 72° and arc length 4π cm. Find the radius, in cm.", a: "10", tips: ["72/360 = 1/5", "4π = 1/5 × 2πr → 4 = 2r/5 → r = 10"] },
+    ],
+    quizFilter: (q) => q.sub === "arc" || q.sub === "sector",
+  },
+
+  sets: {
+    title: "Counting with sets",
+    blurb: "How many elements are in A ∩ B, A ∪ B, and the 'only' regions.",
+    cards: [
+      { k: "teach", h: "The symbols", b: [
+        "A ∩ B — the intersection: elements in BOTH A and B.",
+        "A ∪ B — the union: elements in A OR B (or both).",
+        "A′ — the complement: everything NOT in A." ] },
+      { k: "teach", h: "Picture the two overlapping circles", b: [
+        "Three regions inside: A only, the overlap (A ∩ B), and B only.",
+        "n(A) counts 'A only' + 'the overlap'. n(B) counts 'B only' + 'the overlap'." ] },
+      { k: "eg", h: "n(A) = 15, n(B) = 10, n(A ∩ B) = 8. Find n(A only).", lines: [
+        "n(A) = (A only) + (A ∩ B)",
+        "15 = (A only) + 8",
+        "A only = 15 − 8",
+        "= 7" ] },
+      { k: "write", q: "Set A has 14 elements, Set B has 8, and 6 are in both. Find n(A ∩ B′)  (in A but not B).", a: "8", tips: ["That's the 'A only' region", "n(A) − n(A ∩ B) = 14 − 6"] },
+      { k: "write", q: "Set A has 9 elements, Set B has 15, and 6 are in both. Find n(A′ ∩ B)  (in B but not A).", a: "9", tips: ["That's the 'B only' region", "n(B) − n(A ∩ B) = 15 − 6"] },
+      { k: "teach", h: "Union — don't double-count the middle", b: [
+        "n(A ∪ B) = n(A) + n(B) − n(A ∩ B).",
+        "You subtract the overlap once because adding n(A) and n(B) counts it twice." ] },
+      { k: "eg", h: "n(A) = 8, n(B) = 15, n(A ∩ B) = 4. Find n(A ∪ B).", lines: [
+        "n(A ∪ B) = n(A) + n(B) − n(A ∩ B)",
+        "= 8 + 15 − 4",
+        "= 19" ] },
+      { k: "write", q: "Set A has 17 elements, Set B has 16, and 3 are in both. Find n(A ∪ B).", a: "30", tips: ["n(A) + n(B) − n(A ∩ B)", "17 + 16 − 3"] },
+      { k: "write", q: "Set A has 10 elements, Set B has 18, and 2 are in both. Find n(A ∩ B).", a: "2", tips: ["n(A ∩ B) is the overlap — it's given directly here", "It's the '2 in both'"] },
+    ],
+    quizFilter: (q) => /^Set [A-Z] has \d/.test(q.prompt),
+  },
+
+  mensuration: {
+    title: "Area and volume",
+    blurb: "The standard formulas for the shapes you'll be asked about.",
+    cards: [
+      { k: "teach", h: "Areas of flat shapes", b: [
+        "Rectangle:  length × width.   Triangle:  ½ × base × perpendicular height.",
+        "Parallelogram:  base × perpendicular height.   Circle:  π r²." ] },
+      { k: "write", q: "A rectangle is 7 cm by 4 cm. Find its area, in cm².", a: "28", tips: ["length × width", "7 × 4"] },
+      { k: "write", q: "A triangle has base 10 cm and perpendicular height 6 cm. Find its area, in cm².", a: "30", tips: ["½ × base × height", "½ × 10 × 6"] },
+      { k: "eg", h: "A circle has radius 5 cm. Area in terms of π?", lines: [
+        "Area = π r²",
+        "= π × 5²",
+        "= π × 25",
+        "= 25π cm²" ] },
+      { k: "write", q: "A circle has radius 3 cm. Find its area in terms of π.  (cm²)", a: "9π", mode: "any", tips: ["Area = π r²", "π × 3²"] },
+      { k: "teach", h: "Perimeter", b: [
+        "Perimeter is the distance all the way round.",
+        "Rectangle:  2 × (length + width).   Circle (circumference):  2 π r  or  π × diameter." ] },
+      { k: "write", q: "A rectangle is 12 cm by 8 cm. Find its perimeter, in cm.", a: "40", tips: ["2 × (length + width)", "2 × (12 + 8)"] },
+      { k: "teach", h: "Volumes of solids", b: [
+        "Cuboid:  length × width × height.",
+        "Prism or cylinder:  (area of the cross-section) × length.  So a cylinder is  π r² × height." ] },
+      { k: "eg", h: "A cylinder has radius 3 cm, height 5 cm. Volume in terms of π?", lines: [
+        "Volume = π r² × height",
+        "= π × 3² × 5",
+        "= π × 9 × 5",
+        "= 45π cm³" ] },
+      { k: "write", q: "A cuboid measures 3 cm by 4 cm by 5 cm. Find its volume, in cm³.", a: "60", tips: ["length × width × height", "3 × 4 × 5"] },
+      { k: "write", q: "A cylinder has radius 2 cm and height 10 cm. Find its volume in terms of π.  (cm³)", a: "40π", mode: "any", tips: ["π r² × height", "π × 2² × 10"] },
+    ],
+    quiz: () => {
+      const R = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      const r = Math.random();
+      if (r < 0.22) { const w = R(3, 12), h = R(3, 12); return { prompt: `A rectangle is ${w} cm by ${h} cm. Find its area, in cm².`, answer: String(w * h), steps: ["Area of a rectangle = length × width", `= ${w} × ${h} = ${w * h} cm²`] }; }
+      if (r < 0.42) { const w = R(3, 12), h = R(3, 12); return { prompt: `A rectangle is ${w} cm by ${h} cm. Find its perimeter, in cm.`, answer: String(2 * (w + h)), steps: ["Perimeter = 2 × (length + width)", `= 2 × (${w} + ${h}) = ${2 * (w + h)} cm`] }; }
+      if (r < 0.62) { const b = R(3, 14), h = R(2, 10) * 2; return { prompt: `A triangle has base ${b} cm and perpendicular height ${h} cm. Find its area, in cm².`, answer: String(b * h / 2), steps: ["Area of a triangle = ½ × base × height", `= ½ × ${b} × ${h} = ${b * h / 2} cm²`] }; }
+      if (r < 0.8) { const rad = R(2, 10); return { prompt: `A circle has radius ${rad} cm. Find its area, in terms of π.`, answer: `${rad * rad}π`, steps: ["Area = π r²", `= π × ${rad}² = ${rad * rad}π cm²`] }; }
+      const l = R(2, 6), w = R(2, 6), h = R(2, 6); return { prompt: `A cuboid measures ${l} cm by ${w} cm by ${h} cm. Find its volume, in cm³.`, answer: String(l * w * h), steps: ["Volume = length × width × height", `= ${l} × ${w} × ${h} = ${l * w * h} cm³`] };
+    },
+  },
+
+  symmetry: {
+    title: "Lines of symmetry and rotational symmetry",
+    blurb: "Two kinds of symmetry, and how to count each.",
+    cards: [
+      { k: "teach", h: "Line symmetry", b: [
+        "A line of symmetry is a fold line where the two halves land exactly on each other.",
+        "A square has 4, a (non-square) rectangle has 2, an equilateral triangle has 3." ] },
+      { k: "tap", q: "How many lines of symmetry does a (non-square) rectangle have?", opts: ["2", "4", "0"], a: 0, tip: "One through the middle each way — the two diagonals are NOT lines of symmetry for a rectangle." },
+      { k: "teach", h: "A regular polygon has n of each", b: [
+        "A regular polygon with n sides has n lines of symmetry AND rotational symmetry of order n.",
+        "Regular pentagon → 5 and 5.  Regular hexagon → 6 and 6." ] },
+      { k: "write", q: "How many lines of symmetry does a regular octagon have?", a: "8", tips: ["A regular n-sided polygon has n lines of symmetry", "n = 8"] },
+      { k: "teach", h: "Rotational symmetry", b: [
+        "The order of rotational symmetry is how many times a shape looks identical during one full 360° turn.",
+        "It's always at least 1 (every shape looks the same after a full turn)." ] },
+      { k: "tap", q: "What is the order of rotational symmetry of a parallelogram?", opts: ["2", "0", "4"], a: 0, tip: "Turn it 180° and it lands on itself — order 2. But it has 0 lines of symmetry." },
+      { k: "write", q: "What is the order of rotational symmetry of an equilateral triangle?", a: "3", tips: ["It looks the same after turning 120°, 240°, and 360°", "That's 3 positions"] },
+      { k: "teach", h: "Letters catch people out", b: [
+        "The letter S has 0 lines of symmetry but rotational symmetry of order 2 (turn it 180°).",
+        "The letter H has 2 lines of symmetry and rotational order 2." ] },
+      { k: "tap", q: "How many lines of symmetry does the letter S have?", opts: ["0", "1", "2"], a: 0, tip: "None — but it does have rotational symmetry of order 2." },
+    ],
+    quiz: () => {
+      const shapes = [
+        { n: "square", lines: 4, rot: 4 }, { n: "rectangle", lines: 2, rot: 2 },
+        { n: "parallelogram", lines: 0, rot: 2 }, { n: "rhombus", lines: 2, rot: 2 },
+        { n: "equilateral triangle", lines: 3, rot: 3 }, { n: "isosceles triangle", lines: 1, rot: 1 },
+        { n: "regular pentagon", lines: 5, rot: 5 }, { n: "regular hexagon", lines: 6, rot: 6 },
+        { n: "regular octagon", lines: 8, rot: 8 }, { n: "kite", lines: 1, rot: 1 },
+        { n: "letter H", lines: 2, rot: 2 }, { n: "letter T", lines: 1, rot: 1 },
+        { n: "letter S", lines: 0, rot: 2 }, { n: "letter A", lines: 1, rot: 1 },
+        { n: "letter N", lines: 0, rot: 2 },
+      ];
+      const s = shapes[Math.floor(Math.random() * shapes.length)];
+      const art = /^letter/.test(s.n) ? "the " : "a ";
+      if (Math.random() < 0.5) return { prompt: `How many lines of symmetry does ${art}${s.n} have?`, answer: String(s.lines), steps: ["A line of symmetry is a fold where the two halves match.", `${art.trim()[0].toUpperCase() + art.slice(1)}${s.n} has ${s.lines}.`] };
+      return { prompt: `What is the order of rotational symmetry of ${art}${s.n}?`, answer: String(s.rot), steps: ["Order = how many times it looks the same in one full turn.", `For ${art}${s.n} it is ${s.rot}.`] };
+    },
+  },
+
+  graphicalsolutions: {
+    title: "Solving equations with graphs",
+    blurb: "Where two graphs cross is where their equations are equal.",
+    cards: [
+      { k: "teach", h: "Crossing points are solutions", b: [
+        "If y = x² and y = 5 are both drawn, they cross where x² = 5.",
+        "The x-values at the crossing points are the solutions of that equation." ] },
+      { k: "teach", h: "Adding a line to solve a quadratic", b: [
+        "Say the curve y = x² is already drawn and you want to solve  x² = 2x + 3.",
+        "Draw the line  y = 2x + 3.  Where it meets the curve, x² and 2x + 3 are equal — read off those x-values." ] },
+      { k: "tap", q: "The graph of y = x² is drawn. To solve  x² = x + 6, which line do you add?", opts: ["y = x + 6", "y = x² + 6", "y = 6"], a: 0, tip: "Add the line that is the right-hand side of the equation:  y = x + 6." },
+      { k: "eg", h: "Solve  x² = 3x  from the graph of y = x²", lines: [
+        "Add the line  y = 3x",
+        "It meets the curve where  x² = 3x",
+        "x² − 3x = 0  →  x(x − 3) = 0",
+        "So the crossing points are at  x = 0  and  x = 3" ] },
+      { k: "write", q: "The graph of y = x² is drawn. Which line do you add to solve  x² = 4x + 5?  Give it as  y = ...", a: "y = 4x + 5", mode: "any", tips: ["Use the right-hand side of the equation", "y = (that expression)"] },
+      { k: "teach", h: "Rearrange first if you need to", b: [
+        "To solve  x² − 2x − 3 = 0  from  y = x², first get x² on its own:",
+        "x² = 2x + 3.  Now it's clear — add the line  y = 2x + 3." ] },
+      { k: "write", q: "You have the graph of y = x². Which line solves  x² − x − 2 = 0?  Give it as  y = ...", a: "y = x + 2", mode: "any", tips: ["Rearrange to x² = x + 2", "Add y = x + 2"] },
+      { k: "tap", q: "Two graphs are drawn and they cross at x = 4. What does x = 4 represent?", opts: ["A solution to the equation formed by setting the two expressions equal", "The gradient of one line", "The y-intercept"], a: 0, tip: "At a crossing point the two y-values are equal, so that x is a solution." },
+    ],
+    quiz: () => {
+      const R = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      const m = R(2, 5), c = R(1, 9);
+      return {
+        prompt: `The graph of  y = x²  is already drawn. To solve  x² = ${m}x + ${c}, which straight line should you add?  Give it as  y = ...`,
+        answer: `y = ${m}x + ${c}`,
+        steps: [`The solutions are the x-values where the curve  y = x²  meets your line.`, `The right-hand side is  ${m}x + ${c}, so add the line  y = ${m}x + ${c}.`],
+      };
+    },
+  },
+
+  transformations: {
+    title: "Transformations of points",
+    blurb: "What translation, reflection and rotation do to a coordinate.",
+    cards: [
+      { k: "teach", h: "Translation — add the vector", b: [
+        "A translation by the vector (a, b) moves every point a to the right and b up.",
+        "So (x, y) → (x + a, y + b).  A negative means left or down." ] },
+      { k: "eg", h: "Translate (2, 5) by the vector (−3, 1)", lines: [
+        "New x = 2 + (−3) = −1",
+        "New y = 5 + 1 = 6",
+        "Image point = (−1, 6)" ] },
+      { k: "write", q: "The point (4, 1) is translated by the vector (2, −5). Find its new coordinates.", a: "(6, -4)", mode: "any", tips: ["Add the vector: (4 + 2, 1 + (−5))", "(6, −4)"] },
+      { k: "teach", h: "Reflection — flip one coordinate", b: [
+        "Reflect in the x-axis:  (x, y) → (x, −y)  (y flips).",
+        "Reflect in the y-axis:  (x, y) → (−x, y)  (x flips)." ] },
+      { k: "tap", q: "Reflect (5, 2) in the x-axis. Where does it go?", opts: ["(5, −2)", "(−5, 2)", "(2, 5)"], a: 0, tip: "x-axis reflection keeps x, flips y." },
+      { k: "write", q: "Reflect the point (−3, 4) in the y-axis. Find its new coordinates.", a: "(3, 4)", mode: "any", tips: ["y-axis reflection flips x, keeps y", "(−(−3), 4) = (3, 4)"] },
+      { k: "teach", h: "Rotation of 180° about the origin", b: [
+        "A half-turn about (0, 0) flips the sign of BOTH coordinates:  (x, y) → (−x, −y).",
+        "It doesn't matter whether you call it clockwise or anticlockwise — a half-turn is a half-turn." ] },
+      { k: "write", q: "Rotate the point (2, −6) by 180° about the origin. Find its new coordinates.", a: "(-2, 6)", mode: "any", tips: ["Flip both signs", "(−2, 6)"] },
+      { k: "teach", h: "Enlargement — scale factor", b: [
+        "Scale factor = image length ÷ object length.",
+        "A side that goes from 3 cm to 12 cm has scale factor 12 ÷ 3 = 4." ] },
+      { k: "write", q: "A shape is enlarged so a 5 cm side becomes 15 cm. Find the scale factor.", a: "3", tips: ["new ÷ old", "15 ÷ 5"] },
+    ],
+    quiz: () => {
+      const R = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+      const x = R(-6, 6), y = R(-6, 6);
+      const r = Math.random();
+      if (r < 0.28) { const dx = R(-5, 5), dy = R(-5, 5); return { prompt: `The point (${x}, ${y}) is translated by the vector (${dx}, ${dy}). Find its new coordinates.`, answer: `(${x + dx}, ${y + dy})`, steps: ["Add the vector to the coordinates:", `(${x} + ${dx},  ${y} + ${dy}) = (${x + dx}, ${y + dy})`] }; }
+      if (r < 0.46) return { prompt: `Reflect the point (${x}, ${y}) in the x-axis. Find its new coordinates.`, answer: `(${x}, ${-y})`, steps: ["Reflecting in the x-axis keeps x and flips the sign of y.", `(${x}, ${-y})`] };
+      if (r < 0.64) return { prompt: `Reflect the point (${x}, ${y}) in the y-axis. Find its new coordinates.`, answer: `(${-x}, ${y})`, steps: ["Reflecting in the y-axis flips the sign of x and keeps y.", `(${-x}, ${y})`] };
+      if (r < 0.84) return { prompt: `Rotate the point (${x}, ${y}) by 180° about the origin. Find its new coordinates.`, answer: `(${-x}, ${-y})`, steps: ["A 180° rotation about the origin flips the sign of both coordinates.", `(${-x}, ${-y})`] };
+      const s = R(2, 4), side = R(2, 6); return { prompt: `A shape is enlarged so that a side of length ${side} cm becomes ${side * s} cm. Find the scale factor.`, answer: String(s), steps: ["Scale factor = new length ÷ old length", `= ${side * s} ÷ ${side} = ${s}`] };
+    },
+  },
+
+  trigonometry: {
+    title: "Right-angled triangle trig",
+    blurb: "Pythagoras for sides, and SOH-CAH-TOA for angles.",
+    cards: [
+      { k: "teach", h: "Pythagoras", b: [
+        "In a right-angled triangle:  (hypotenuse)² = (one side)² + (other side)².",
+        "The hypotenuse is the longest side, always opposite the right angle." ] },
+      { k: "eg", h: "Legs 6 cm and 8 cm. Find the hypotenuse.", lines: [
+        "hyp² = 6² + 8²",
+        "= 36 + 64",
+        "= 100",
+        "hyp = √100 = 10 cm" ] },
+      { k: "write", q: "A right-angled triangle has the two shorter sides 5 cm and 12 cm. Find the hypotenuse, in cm.", a: "13", tips: ["hyp² = 5² + 12²", "√(25 + 144) = √169"] },
+      { k: "teach", h: "Finding a shorter side", b: [
+        "Rearrange:  (side)² = (hypotenuse)² − (other side)².",
+        "You subtract because the hypotenuse is the biggest." ] },
+      { k: "write", q: "A right-angled triangle has hypotenuse 17 cm and one shorter side 8 cm. Find the other shorter side, in cm.", a: "15", tips: ["side² = 17² − 8²", "√(289 − 64) = √225"] },
+      { k: "teach", h: "SOH-CAH-TOA", b: [
+        "Label the sides from the angle you're using:  opposite, adjacent, hypotenuse.",
+        "sin = opp/hyp,   cos = adj/hyp,   tan = opp/adj." ] },
+      { k: "eg", h: "A 4 m ladder leans at 65° to the ground. How high does it reach?", lines: [
+        "The height is opposite the 65° angle; the ladder is the hypotenuse",
+        "opp and hyp → use sin:  sin 65° = height ÷ 4",
+        "height = 4 × sin 65°",
+        "≈ 3.63 m" ] },
+      { k: "tap", q: "You know the hypotenuse and want the side opposite the angle. Which do you use?", opts: ["sin", "cos", "tan"], a: 0, tip: "Opposite and Hypotenuse → SOH → sine." },
+      { k: "tap", q: "You know the opposite and adjacent sides and want the angle. Which do you use?", opts: ["tan⁻¹", "sin⁻¹", "cos⁻¹"], a: 0, tip: "Opposite over Adjacent → TOA → tan (and inverse tan to get the angle)." },
+      { k: "teach", h: "Angles in the triangle", b: [
+        "The three angles still add to 180°, and one of them is the 90°.",
+        "So the other two must add to 90°." ] },
+    ],
+    quiz: () => {
+      const trip = [[3, 4, 5], [5, 12, 13], [8, 15, 17], [6, 8, 10], [9, 12, 15], [7, 24, 25], [20, 21, 29], [12, 16, 20], [10, 24, 26]];
+      const r = Math.random();
+      if (r < 0.4) { const [a, b, c] = trip[Math.floor(Math.random() * trip.length)]; return { prompt: `A right-angled triangle has the two shorter sides ${a} cm and ${b} cm. Find the hypotenuse, in cm.`, answer: String(c), steps: [`Pythagoras:  hyp² = ${a}² + ${b}²`, `= ${a * a} + ${b * b} = ${c * c}`, `hyp = √${c * c} = ${c} cm`] }; }
+      if (r < 0.78) { const [a, b, c] = trip[Math.floor(Math.random() * trip.length)]; return { prompt: `A right-angled triangle has hypotenuse ${c} cm and one shorter side ${a} cm. Find the other shorter side, in cm.`, answer: String(b), steps: [`Pythagoras:  side² = ${c}² − ${a}²`, `= ${c * c} − ${a * a} = ${b * b}`, `side = √${b * b} = ${b} cm`] }; }
+      const A = 20 + Math.floor(Math.random() * 12) * 5; return { prompt: `In a right-angled triangle, one of the non-right angles is ${A}°. Find the other non-right angle, in degrees.`, answer: String(90 - A), steps: [`The two non-right angles add up to 90°`, `Other angle = 90 − ${A}`, `= ${90 - A}°`] };
+    },
+  },
 };
 const LESSON_IDS = Object.keys(LESSONS);
 const LESSON_XP = 40;
