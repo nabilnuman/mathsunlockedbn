@@ -6203,6 +6203,11 @@ function levelFromExp(exp) {
   }
   return Math.min(level, LEVEL_CAP);
 }
+// A level-gated unlock stays yours after prestige: prestige only happens
+// at the level cap, so a prestiged player has passed every level.
+function hasLevelUnlock(profile, reqLv) {
+  return (profile && (profile.prestige || 0) > 0) || levelFromExp(totalExp(profile)) >= (reqLv || 1);
+}
 function levelProgress(exp) {
   const level = levelFromExp(exp);
   if (level >= LEVEL_CAP) return { level, into: 0, need: 0, pct: 100, capped: true };
@@ -6565,9 +6570,10 @@ export const CALC_SKINS = {
 const CALC_SKIN_IDS = Object.keys(CALC_SKINS);
 const calcSkinOf = (p) => CALC_SKINS[(p && p.calcSkin)] || CALC_SKINS.classic;
 // A skin is locked until its level (or, for secret skins, its achievement).
+// Level skins stay unlocked once earned — prestige doesn't take them back.
 const calcSkinLocked = (sk, p) =>
   sk.ach ? !((p && p.achievements) || []).includes(sk.ach)
-         : levelFromExp(totalExp(p)) < sk.lv;
+         : !hasLevelUnlock(p, sk.lv);
 // The pixel font has no accented glyphs — strip diacritics for the LCD label.
 const calcSkinLabel = (skin) =>
   ((skin && skin.name) || "Classic").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -6609,14 +6615,15 @@ const topicGoldAvatarId = (topicId) => `topicgold:${topicId}`;
 // their level, then one per earned achievement, then one per topic ranked
 // S / S+. Used for the "new" dots.
 function unlockedAvatarIds(profile) {
-  const lv = levelFromExp(totalExp(profile));
-  const base = Object.keys(AVATARS).filter((id) => lv >= (AVATAR_LV[id] || 1));
+  const base = Object.keys(AVATARS).filter((id) => hasLevelUnlock(profile, AVATAR_LV[id] || 1));
   const ach = (profile.achievements || [])
     .filter((id) => ACHIEVEMENTS.some((a) => a.id === id))
     .map((id) => achAvatarId(id));
-  const topicIds = Object.keys(profile.topics || {}).filter((id) => TOPIC_BY_ID[id]);
-  const topicS = topicIds.filter((id) => topicRankAtLeast(profile, id, "S")).map(topicAvatarId);
-  const topicSPlus = topicIds.filter((id) => topicRankAtLeast(profile, id, "S+")).map(topicGoldAvatarId);
+  // Topic icons unlock at S / S+ and use the lifetime best, so prestige
+  // (which wipes profile.topics) doesn't take them away.
+  const S_IDX = RANK_ORDER.indexOf("S"), SP_IDX = RANK_ORDER.indexOf("S+");
+  const topicS = TOPICS.filter((t) => bestRankOf(profile, t.id) >= S_IDX).map((t) => topicAvatarId(t.id));
+  const topicSPlus = TOPICS.filter((t) => bestRankOf(profile, t.id) >= SP_IDX).map((t) => topicGoldAvatarId(t.id));
   return [...base, ...ach, ...topicS, ...topicSPlus];
 }
 const avatarChar = (p) => {
@@ -6904,7 +6911,6 @@ function EditSheet({ title, onClose, children }) {
 }
 
 function IconPickerModal({ profile, onChange, onClose }) {
-  const level = levelFromExp(totalExp(profile));
   const Head = ({ children }) => (
     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>{children}</div>
   );
@@ -6912,17 +6918,17 @@ function IconPickerModal({ profile, onChange, onClose }) {
     <span style={{ position: "absolute", bottom: -7, left: "50%", transform: "translateX(-50%)", fontSize: 8, fontWeight: 800, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "0 4px", whiteSpace: "nowrap" }}>Lv {lv}</span>
   );
   const seen = profile.seenIcons || [];
-  const rankedTopicIds = Object.keys(profile.topics || {}).filter((id) => TOPIC_BY_ID[id]);
+  const S_IDX = RANK_ORDER.indexOf("S"), SP_IDX = RANK_ORDER.indexOf("S+");
   const iconItems = [
     ...Object.keys(AVATARS)
       .sort((a, b) => avatarLevel(a) - avatarLevel(b))
       .map((id) => ({ id, char: AVATARS[id], lv: avatarLevel(id), border: "var(--grid)" })),
     ...ACHIEVEMENTS.filter((a) => (profile.achievements || []).includes(a.id))
       .map((a) => ({ id: achAvatarId(a.id), char: a.icon, lv: 0, border: TIER_COLOR[a.tier], title: `${a.name} · ${a.tier}` })),
-    ...rankedTopicIds.filter((id) => topicRankAtLeast(profile, id, "S"))
-      .map((id) => ({ id: topicAvatarId(id), char: TOPIC_BY_ID[id].icon, lv: 0, border: "var(--grid)", title: `${TOPIC_BY_ID[id].name} · Rank S` })),
-    ...rankedTopicIds.filter((id) => topicRankAtLeast(profile, id, "S+"))
-      .map((id) => ({ id: topicGoldAvatarId(id), char: TOPIC_BY_ID[id].icon, lv: 0, border: "#D9A73B", gold: true, title: `${TOPIC_BY_ID[id].name} · Rank S+` })),
+    ...TOPICS.filter((t) => bestRankOf(profile, t.id) >= S_IDX)
+      .map((t) => ({ id: topicAvatarId(t.id), char: t.icon, lv: 0, border: "var(--grid)", title: `${t.name} · Rank S` })),
+    ...TOPICS.filter((t) => bestRankOf(profile, t.id) >= SP_IDX)
+      .map((t) => ({ id: topicGoldAvatarId(t.id), char: t.icon, lv: 0, border: "#D9A73B", gold: true, title: `${t.name} · Rank S+` })),
   ];
   return (
     <EditSheet title="Profile icon" onClose={onClose}>
@@ -6930,7 +6936,7 @@ function IconPickerModal({ profile, onChange, onClose }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 22 }}>
         {iconItems.map((it) => {
           const on = (profile.avatar || "grad") === it.id;
-          const locked = it.lv > 0 && level < it.lv;
+          const locked = it.lv > 0 && !hasLevelUnlock(profile, it.lv);
           const isNew = !locked && !seen.includes(it.id);
           return (
             <div key={it.id} style={{ position: "relative" }}>
@@ -6953,7 +6959,7 @@ function IconPickerModal({ profile, onChange, onClose }) {
         {FRAME_IDS.map((id) => {
           const on = (profile.avatarFrame || "plain") === id;
           const lv = frameLevel(id);
-          const locked = level < lv;
+          const locked = !hasLevelUnlock(profile, lv);
           return (
             <div key={id} style={{ position: "relative" }}>
               <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ avatarFrame: id }))} style={{
@@ -7010,7 +7016,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
           {FRAME_IDS.map((id) => {
             const lv = frameLevel(id);
-            const locked = level < lv;
+            const locked = !hasLevelUnlock(profile, lv);
             const on = (profile.bannerColor || "plain") === id;
             return (
               <div key={id} style={{ position: "relative" }}>
@@ -7034,7 +7040,6 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 
 /* Sound pack / title / name style / card background picker. */
 function StyleModal({ profile, onChange, onClose, previewPack }) {
-  const level = levelFromExp(totalExp(profile));
   const prestige = profile.prestige || 0;
   const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
@@ -7051,7 +7056,7 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       <Head>Sound pack</Head>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {Object.entries(SOUND_PACKS).map(([id, p]) => {
-          const locked = p.ach ? !hasAch(p.ach) : level < p.lv;
+          const locked = p.ach ? !hasAch(p.ach) : !hasLevelUnlock(profile, p.lv);
           const on = (profile.soundPack || "default") === id;
           return (
             <button key={id} type="button" disabled={locked} style={pill(on, locked)}
@@ -7062,7 +7067,7 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
         })}
       </div>
 
-      {level >= CALC_LV && (<>
+      {hasLevelUnlock(profile, CALC_LV) && (<>
         <Head>Calculator skin</Head>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           {CALC_SKIN_IDS.map((id) => (
@@ -10657,6 +10662,9 @@ export default function MathsUnlockedBN() {
     if (newAchIds.length) patchProfile((p) => ({ seenAch: [...new Set([...(p.seenAch || []), ...(p.achievements || [])])] }));
   };
   const myLevel = levelFromExp(totalExp(profile));
+  // Level-gated tools (calculator / rough-working / handwriting) stay
+  // unlocked after prestige — see hasLevelUnlock.
+  const hasTool = (lv) => hasLevelUnlock(profile, lv);
   // Admin (a teachers row with admin = true): dev/cheat tools, Admin view,
   // Question bank, the weekly graphic. Plain teacher accounts get only the
   // class tools. Everyone else gets neither.
@@ -11265,7 +11273,7 @@ export default function MathsUnlockedBN() {
                     onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
                     placeholder="your answer" autoComplete="off"
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
-                  {myLevel >= CALC_LV && <button {...calcBtnHandlers} aria-label="Calculator" title="Calculator — hold to change colour" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}><Calculator size={16} /></button>}
+                  {hasTool(CALC_LV) && <button {...calcBtnHandlers} aria-label="Calculator" title="Calculator — hold to change colour" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}><Calculator size={16} /></button>}
                   <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
                   <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
                 </div>
@@ -11485,7 +11493,7 @@ export default function MathsUnlockedBN() {
                           autoFocus placeholder="Your answer" autoComplete="off" inputMode="text" className="mub-mono"
                           style={{ flex: 1, minWidth: 0, boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, background: "var(--card)", color: "var(--ink)" }}
                         />
-                        {myLevel >= CALC_LV && (
+                        {hasTool(CALC_LV) && (
                         <button type="button" {...calcBtnHandlers} title="Calculator — hold to change colour"
                           style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}>
                           <Calculator size={16} />
@@ -11501,7 +11509,7 @@ export default function MathsUnlockedBN() {
                         style={{ width: "100%", fontSize: 14, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 10, padding: "11px 14px", cursor: "pointer", opacity: dailyBusy || !dailyInput.trim() ? 0.6 : 1 }}>
                         {dailyBusy ? "Locking in…" : "Submit"}
                       </button>
-                      {myLevel >= SKETCH_LV && (<>
+                      {hasTool(SKETCH_LV) && (<>
                         <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
                         <button onClick={() => setSketchOn((v) => !v)} title={sketchOn ? "Hide rough working" : "Rough working"}
                           style={{ position: "absolute", bottom: 8, right: 8, zIndex: 6, width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
@@ -12047,7 +12055,7 @@ export default function MathsUnlockedBN() {
                     disabled={!!feedback || shieldOffer}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
-                  {!feedback && myLevel >= WRITE_LV && (
+                  {!feedback && hasTool(WRITE_LV) && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
                       style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
@@ -12239,12 +12247,12 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {!feedback && myLevel >= CALC_LV && (
+              {!feedback && hasTool(CALC_LV) && (
                 <button
                   {...calcBtnHandlers}
                   title="Calculator — hold to change colour" aria-label="Calculator"
                   style={{
-                    position: "absolute", bottom: 8, right: myLevel >= SKETCH_LV ? 48 : 8, zIndex: 6,
+                    position: "absolute", bottom: 8, right: hasTool(SKETCH_LV) ? 48 : 8, zIndex: 6,
                     width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                     border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
                     cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)",
@@ -12254,7 +12262,7 @@ export default function MathsUnlockedBN() {
                   <Calculator size={16} />
                 </button>
               )}
-              {myLevel >= SKETCH_LV && (<>
+              {hasTool(SKETCH_LV) && (<>
                 <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
                 <button
                   onClick={() => setSketchOn((v) => !v)}
