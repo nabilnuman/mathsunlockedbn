@@ -6409,9 +6409,9 @@ function RadarChart({ profile, dark }) {
   const data = groups.map((g, i) => at(i, Math.max(0.02, g.v)).join(",")).join(" ");
   // Contrast against whatever card background is behind us.
   const web = dark ? "#FFFFFF" : "var(--muted)";
-  const webOp = dark ? 0.32 : 0.5;
-  const acc = dark ? "#7FE0BB" : "var(--green)";
-  const lab = dark ? "#EAF2EE" : "var(--ink)";
+  const webOp = dark ? 0.42 : 0.5;
+  const acc = dark ? "#8CEFC6" : "var(--green)";
+  const lab = dark ? "#F4F8F6" : "var(--ink)";
   return (
     <svg viewBox="-28 -6 296 232" width="100%" style={{ display: "block", maxWidth: 300, margin: "0 auto" }}>
       {[0.34, 0.67, 1].map((f, k) => <polygon key={k} points={ring(f)} fill="none" stroke={web} strokeOpacity={webOp} strokeWidth="1" />)}
@@ -6684,6 +6684,38 @@ function cardBgStyle(b, swatch) {
   if (b.img) { s.backgroundImage = b.img; s.backgroundSize = b.size; }
   return s;
 }
+// Paint a leaderboard row with the player's own card background + give
+// callers the matching text colours. `full` is the raw profile. The
+// default "graph" / "plain" backgrounds render as a normal card so the
+// board stays calm — only players who chose a distinctive one stand out.
+function boardRowSkin(full, mine) {
+  const id = (full && full.cardBg) || "graph";
+  const plain = id === "graph" || id === "plain";
+  const b = cardBgOf(full || {});
+  const dark = !plain && !!b.dark;
+  return {
+    cls: undefined,
+    style: {
+      ...(plain ? { background: "var(--card)" } : cardBgStyle(b)),
+      color: dark ? "#EEF2F6" : "var(--ink)",
+      border: `1px solid ${mine ? "var(--blue)" : dark ? "rgba(255,255,255,0.24)" : "var(--grid)"}`,
+    },
+    dark,
+    sub: dark ? "rgba(255,255,255,0.72)" : "var(--muted)",
+    you: dark ? "#BFE0FF" : "var(--blue)",
+  };
+}
+// A player's name span style for leaderboard rows — their name style,
+// with the underline dropped when it's a gradient (clip would hide it).
+function boardNameStyle(full) {
+  const st = nameStyleOf(full);
+  if (st.color === "transparent") {
+    // gradient text — drop the underline (clip hides it) and add a dark
+    // halo so it stays legible when the row bg is a similar gradient
+    return { ...st, textDecoration: "none", textShadow: "0 1px 2px rgba(0,0,0,0.55)" };
+  }
+  return st;
+}
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
   return (
@@ -6740,7 +6772,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   );
   const nameBlock = (
     <div style={{ minWidth: 0 }}>
-      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty }}>{profile.name || "Student"}</div>
+      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty, ...(cardBg.dark ? { textShadow: "0 1px 3px rgba(0,0,0,0.5)" } : null) }}>{profile.name || "Student"}</div>
       <div style={{ fontSize: 12, color: accent, fontWeight: 600, marginTop: 2 }}>
         {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
       </div>
@@ -6804,10 +6836,14 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
       </div>
 
-      <div style={{ fontSize: 10, color: sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-        Mastery
+      <div style={cardBg.dark
+        ? { background: "rgba(9,12,20,0.55)", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 12, padding: "10px 8px 6px" }
+        : undefined}>
+        <div style={{ fontSize: 10, color: cardBg.dark ? "rgba(255,255,255,0.7)" : sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+          Mastery
+        </div>
+        <RadarChart profile={profile} dark={cardBg.dark} />
       </div>
-      <RadarChart profile={profile} dark={cardBg.dark} />
     </div>
   );
 }
@@ -9060,7 +9096,7 @@ export default function MathsUnlockedBN() {
       const all = await getLeaderboard();
       const rows = (all || [])
         .filter((m) => m && (m.blitzBest || 0) > 0 && m.name)
-        .map((m) => ({ uid: m.uid, name: m.name, best: m.blitzBest || 0, prestige: m.prestige || 0 }))
+        .map((m) => ({ uid: m.uid, name: m.name, best: m.blitzBest || 0, prestige: m.prestige || 0, full: m }))
         .sort((a, b) => b.best - a.best || a.name.localeCompare(b.name))
         .slice(0, 100);
       setBlitzBoard(rows);
@@ -12772,14 +12808,14 @@ export default function MathsUnlockedBN() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {blitzBoard.map((r, i) => {
                       const mine = r.uid && r.uid === authUid;
+                      const skin = boardRowSkin(r.full, mine);
                       return (
-                        <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
-                          background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
-                          <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                        <div key={r.uid || i} className={skin.cls} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, ...skin.style }}>
+                          <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : skin.sub }}>#{i + 1}</span>
                           <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
-                            {r.name}{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", ...boardNameStyle(r.full) }}>{r.name}</span>{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                           </span>
-                          <span className="mub-display" style={{ fontWeight: 800, color: "var(--blue)" }}>★ {r.best}</span>
+                          <span className="mub-display" style={{ fontWeight: 800, color: skin.dark ? "#BFE0FF" : "var(--blue)" }}>★ {r.best}</span>
                         </div>
                       );
                     })}
@@ -12911,21 +12947,23 @@ export default function MathsUnlockedBN() {
                           )}
 
                           {expanded && (
-                            <div style={{ borderTop: "1px solid var(--grid)" }}>
+                            <div style={{ borderTop: "1px solid var(--grid)", display: "flex", flexDirection: "column", gap: 3, padding: 4 }}>
                               {s.roster.map((m, j) => {
                                 const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                                const skin = boardRowSkin(m.full, false);
                                 return (
                                   <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                                    style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 14px", textAlign: "left", cursor: "pointer", color: "var(--ink)", background: "none", border: "none", borderTop: j === 10 ? "2px dashed var(--amber)" : j === 0 ? "none" : "1px solid var(--grid)" }}>
-                                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{j + 1}</span>
+                                    className={skin.cls}
+                                    style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "9px 12px", textAlign: "left", cursor: "pointer", borderRadius: 8, ...skin.style, marginTop: j === 10 ? 6 : 0, borderTop: j === 10 ? "2px dashed var(--amber)" : skin.style.border }}>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: skin.sub, flexShrink: 0 }}>{j + 1}</span>
                                     {m.full && <MiniAvatar profile={m.full} size={30} />}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                        <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
+                                        <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
                                         {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                                         {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                                       </div>
-                                      <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                                      <div style={{ fontSize: 10.5, color: skin.sub }}>
                                         {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
                                       </div>
                                     </div>
@@ -12951,20 +12989,21 @@ export default function MathsUnlockedBN() {
                       const mine = m.full && ((authUid && m.full.uid === authUid) || (!authUid && profile.name === m.name));
                       const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
                       const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                      const skin = boardRowSkin(m.full, mine);
                       return (
                         <button key={i} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                          style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer",
-                            color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
-                          <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, flexShrink: 0 }}>#{i + 1}</span>
+                          className={skin.cls}
+                          style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: "pointer", borderRadius: 10, ...skin.style }}>
+                          <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: i < 3 ? rankColor : skin.sub, flexShrink: 0 }}>#{i + 1}</span>
                           {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                              <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
-                              {mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                              <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
+                              {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                               {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                               {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                             </div>
-                            <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                            <div style={{ fontSize: 10.5, color: skin.sub }}>
                               {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
                             </div>
                           </div>
@@ -12996,20 +13035,21 @@ export default function MathsUnlockedBN() {
                     const mine = m.full && m.full.uid === authUid;
                     const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
                     const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
+                    const skin = boardRowSkin(m.full, mine);
                     return (
                       <button key={i} onClick={() => { if (!mine && m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
-                        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: mine ? "default" : "pointer",
-                          color: "var(--ink)", background: "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10 }}>
-                        <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: rankColor, flexShrink: 0 }}>#{i + 1}</span>
+                        className={skin.cls}
+                        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "10px 12px", textAlign: "left", cursor: mine ? "default" : "pointer", borderRadius: 10, ...skin.style }}>
+                        <span className="mub-display" style={{ fontSize: 16, fontWeight: 700, color: i < 3 ? rankColor : skin.sub, flexShrink: 0 }}>#{i + 1}</span>
                         {m.full && <MiniAvatar profile={m.full} size={30} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            <span style={{ textDecoration: "underline", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{m.name}</span>
-                            {mine ? <span style={{ fontSize: 10, color: "var(--blue)", fontWeight: 700 }}>you</span> : null}
+                            <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
+                            {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                             {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                             {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                           </div>
-                          <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                          <div style={{ fontSize: 10.5, color: skin.sub }}>
                             {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
                           </div>
                         </div>
