@@ -6649,7 +6649,7 @@ const NAME_STYLES = {
   ocean:    { name: "Ocean",    prestige: 3, style: { background: "linear-gradient(90deg,var(--blue),#4FC3C7)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   violetite:{ name: "Amethyst", prestige: 5, style: { background: "linear-gradient(90deg,#7C5CFF,#E0567A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   ember:    { name: "Ember",    prestige: 8, style: { background: "linear-gradient(90deg,#E0567A,#C99A1E)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
-  arcade:   { name: "Arcade",   prestige: 99, ach: "konami", style: { color: "#ffffff", WebkitTextStroke: "0.7px #2a0a3a", textShadow: "0 0 7px #B31FC6, 0 0 2px rgba(10,6,20,0.9)" } },
+  arcade:   { name: "Arcade",   prestige: 99, ach: "konami", style: { color: "#ffffff", textShadow: "0 1px 2px rgba(6,2,14,0.85), 0 0 9px rgba(255,77,225,0.5)" } },
 };
 const NAME_STYLE_IDS = Object.keys(NAME_STYLES);
 const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain).style;
@@ -6721,7 +6721,8 @@ function boardNameStyle(full, dark) {
   if (st.color === "transparent") {
     return { color: dark ? "#F4F8FF" : "var(--ink)", textDecoration: "none", textShadow: "0 0 3px rgba(0,0,0,0.45)" };
   }
-  return st;
+  // a solid name style is active — drop the plain-name underline so it reads clean
+  return Object.keys(st).length ? { ...st, textDecoration: "none" } : st;
 }
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
