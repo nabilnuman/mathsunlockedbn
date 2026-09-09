@@ -7705,15 +7705,22 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose, sound, skin, onKonami }) {
-  const [st, setSt] = useState({ s: "", c: 0 });     // expression + cursor
-  const [ans, setAns] = useState(0);
-  const [res, setRes] = useState(null);              // { val, frac } | { text }
-  const [asFrac, setAsFrac] = useState(false);
-  const histRef = useRef([]);
-  const [hi, setHi] = useState(-1);
-  const postEq = useRef(false);                       // last action was "=" — next input starts fresh
+export function Calc({ onClose, sound, skin, onKonami, initial, onPersist }) {
+  // `initial` — a snapshot handed back by the parent so the working stays
+  // put if you close the calculator and reopen it on the same question.
+  const [st, setSt] = useState(() => (initial && initial.st) || { s: "", c: 0 }); // expression + cursor
+  const [ans, setAns] = useState(() => (initial && initial.ans) || 0);
+  const [res, setRes] = useState(() => (initial && initial.res) || null);         // { val, frac } | { text }
+  const [asFrac, setAsFrac] = useState(() => (initial && initial.asFrac) || false);
+  const histRef = useRef(initial && initial.hist ? initial.hist.slice() : []);
+  const [hi, setHi] = useState(initial && typeof initial.hi === "number" ? initial.hi : -1);
+  const postEq = useRef(!!(initial && initial.postEq));  // last action was "=" — next input starts fresh
   const acRef = useRef(null);
+
+  // Stash the current working back to the parent on every change.
+  useEffect(() => {
+    if (onPersist) onPersist({ st, ans, res, asFrac, hist: histRef.current, hi, postEq: postEq.current });
+  }, [st, ans, res, asFrac, hi]);
 
   // ↑ ↑ ↓ ↓ ← → ← → on the arrow pad — the Konami code.
   const koRef = useRef("");
@@ -8160,6 +8167,7 @@ export default function MathsUnlockedBN() {
   const [calcPick, setCalcPick] = useState(false);   // long-press skin quick-picker
   const calcHoldRef = useRef(null);
   const calcHeldRef = useRef(false);
+  const calcSessionRef = useRef(null); // last calculator working — kept while on the same question, cleared when it changes
   // Spread onto every calculator button: tap opens the calc, long-press
   // (450ms) opens the skin quick-picker instead.
   const calcBtnHandlers = {
@@ -8623,6 +8631,9 @@ export default function MathsUnlockedBN() {
   }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
 
   useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
+  // Drop the saved calculator working whenever the question changes so it
+  // only persists across a close/reopen on the *same* question.
+  useEffect(() => { calcSessionRef.current = null; }, [question, dailyQ, lessonQuizQ, screen]);
 
   // Remember an in-progress guided lesson (per device) so a page reload
   // resumes where the student left off instead of restarting.
@@ -13924,7 +13935,16 @@ export default function MathsUnlockedBN() {
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
 
-      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} skin={calcSkinOf(profile)} onKonami={doKonami} />}
+      {calcOpen && (
+        <Calc
+          onClose={() => setCalcOpen(false)}
+          sound={soundOn}
+          skin={calcSkinOf(profile)}
+          onKonami={doKonami}
+          initial={calcSessionRef.current}
+          onPersist={(snap) => { calcSessionRef.current = snap; }}
+        />
+      )}
 
       {calcPick && (
         <CalcSkinQuickPick
