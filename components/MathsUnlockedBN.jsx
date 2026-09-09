@@ -6483,6 +6483,11 @@ const PERKS = {
   forgive:  { name: "Error Correction",   icon: "🛟", lv: 18, desc: "Your first slip in each topic each day doesn't break your streak" },
 };
 const PERK_IDS = Object.keys(PERKS);
+// A perk is yours for good once earned — and prestige only happens at the
+// level cap, so any prestige means every perk was already unlocked.
+const perkUnlocked = (profile, id) =>
+  (profile && (profile.prestige || 0) > 0) || levelFromExp(totalExp(profile)) >= (PERKS[id] ? PERKS[id].lv : 99);
+const anyPerkUnlocked = (profile) => PERK_IDS.some((id) => perkUnlocked(profile, id));
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
 const CALC_LV = 4;
@@ -9750,7 +9755,7 @@ export default function MathsUnlockedBN() {
   // Equip / unequip a perk (max 2). Ignores locked perks.
   function togglePerk(id) {
     const p = PERKS[id];
-    if (!p || levelFromExp(totalExp(profile)) < p.lv) return;
+    if (!p || !perkUnlocked(profile, id)) return;
     patchProfile((prev) => {
       const cur = (prev.perks || []).filter((x) => PERKS[x]);
       if (cur.includes(id)) return { perks: cur.filter((x) => x !== id) };
@@ -11017,7 +11022,7 @@ export default function MathsUnlockedBN() {
                 fontSize: 11.5, fontWeight: 700, background: "var(--card)", border: "1px solid var(--grid)",
                 borderRadius: 12, padding: "9px 6px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)",
               };
-              const perksOk = myLevel >= PERKS.compound.lv;
+              const perksOk = anyPerkUnlocked(profile);
               const showAsg = assignments.length > 0 || studentClasses.some((c) => !c.archived);
               const openHw = showAsg && assignments.some((a) => !assignmentProgress(profile, a).complete);
               return (
@@ -13231,11 +13236,11 @@ export default function MathsUnlockedBN() {
                 <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Perks</span>
                 <button onClick={() => setPerksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || myLevel >= PERKS.momentum.lv ? " (Momentum works in Blitz too)" : ""}. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {PERK_IDS.map((id) => {
                   const p = PERKS[id];
-                  const owned = myLevel >= p.lv;
+                  const owned = perkUnlocked(profile, id);
                   const on = equipped.includes(id);
                   const full = !on && equipped.length >= 2;
                   return (
