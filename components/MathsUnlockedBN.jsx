@@ -6047,6 +6047,9 @@ const ACHIEVEMENTS = [
     check: (p) => (p.playStreak || 0) >= 7 },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
     check: (p) => !!p.gotFriend },
+  { id: "konami", tier: "Bronze", name: "Konami Code", icon: "🕹",
+    desc: "↑ ↑ ↓ ↓ ← → ← → on the calculator", secret: true, showName: true,
+    check: (p) => !!p.konami },
 
   /* ---------------- Silver ---------------- */
   { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
@@ -6269,6 +6272,7 @@ function unlockedTitles(profile) {
   return [
     ...TITLES.filter((t) => lv >= t.level).map((t) => t.name),
     ...PRESTIGE_TITLES.filter((t) => pr >= t.prestige).map((t) => t.name),
+    ...(profile.konami ? ["Gamer"] : []),   // secret — Konami code
   ];
 }
 function titleFor(profile) {
@@ -6466,7 +6470,7 @@ const FRAME_LV = {
 };
 const SOUND_PACKS = {
   default: { name: "Classic", lv: 1 },
-  arcade: { name: "Arcade", lv: 5 },
+  arcade: { name: "Arcade", lv: 99, ach: "konami" }, // secret — Konami code only
   chime: { name: "Chime", lv: 10 },
   retro: { name: "Retro", lv: 15 },
   bell: { name: "Bell", lv: 19 },
@@ -6527,9 +6531,21 @@ export const CALC_SKINS = {
       op: "#111111", opInk: "#f7e017", eq: "#cf1126", del: "#cf1126",
       delInk: "#ffffff", titleInk: "#1c1c1c", errInk: "#7a1420" },
   },
+  // Secret — only from the Konami code (see the "konami" achievement).
+  arcade: {
+    name: "Arcade", lv: 99, ach: "konami",
+    P: { body: "#2a1c52", face: "#120a2c", screen: "#0e1330", ink: "#63eef7",
+      key: "#7d5cff", keyInk: "#0e0a24", fn: "#3d2a73", fnInk: "#e6ddff",
+      op: "#ff4de1", opInk: "#1a0a1e", eq: "#63eef7", del: "#b31fc6",
+      delInk: "#ffffff", titleInk: "#63eef7", errInk: "#ff8a5c" },
+  },
 };
 const CALC_SKIN_IDS = Object.keys(CALC_SKINS);
 const calcSkinOf = (p) => CALC_SKINS[(p && p.calcSkin)] || CALC_SKINS.classic;
+// A skin is locked until its level (or, for secret skins, its achievement).
+const calcSkinLocked = (sk, p) =>
+  sk.ach ? !((p && p.achievements) || []).includes(sk.ach)
+         : levelFromExp(totalExp(p)) < sk.lv;
 // The pixel font has no accented glyphs — strip diacritics for the LCD label.
 const calcSkinLabel = (skin) =>
   ((skin && skin.name) || "Classic").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -6545,13 +6561,13 @@ function unlocksAtLevel(L) {
   Object.entries(AVATAR_LV).forEach(([id, lv]) => { if (lv === L) out.push(`${AVATARS[id]} profile icon`); });
   const frames = Object.entries(FRAME_LV).filter(([id, lv]) => lv === L && id !== "plain").length;
   if (frames) out.push(`${frames > 1 ? `${frames} icon frames` : "a new icon frame"}`);
-  Object.values(SOUND_PACKS).forEach((p) => { if (p.lv === L && p.name !== "Classic") out.push(`${p.name} sound pack`); });
+  Object.values(SOUND_PACKS).forEach((p) => { if (p.lv === L && !p.ach && p.name !== "Classic") out.push(`${p.name} sound pack`); });
   const bs = bannerSlots(L);
   if (bs > bannerSlots(L - 1)) out.push(`Banner slot ${bs}`);
   if (L === SKETCH_LV) out.push("Rough-working pad");
   if (L === WRITE_LV) out.push("Handwriting input");
   if (L === CALC_LV) out.push("Calculator");
-  Object.values(CALC_SKINS).forEach((s) => { if (s.lv === L && s.name !== "Classic") out.push(`${s.name} calculator skin`); });
+  Object.values(CALC_SKINS).forEach((s) => { if (s.lv === L && !s.ach && s.name !== "Classic") out.push(`${s.name} calculator skin`); });
   Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
   if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
   if (L % 5 === 0) out.push("🗝 Skeleton Key");
@@ -6633,6 +6649,7 @@ const NAME_STYLES = {
   ocean:    { name: "Ocean",    prestige: 3, style: { background: "linear-gradient(90deg,var(--blue),#4FC3C7)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   violetite:{ name: "Amethyst", prestige: 5, style: { background: "linear-gradient(90deg,#7C5CFF,#E0567A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   ember:    { name: "Ember",    prestige: 8, style: { background: "linear-gradient(90deg,#E0567A,#C99A1E)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
+  arcade:   { name: "Arcade",   prestige: 99, ach: "konami", style: { background: "linear-gradient(90deg,#FF4DE1,#A06BFF,#63EEF7,#B31FC6)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
 };
 const NAME_STYLE_IDS = Object.keys(NAME_STYLES);
 const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain).style;
@@ -6650,6 +6667,8 @@ const CARD_BGS = {
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
   aurora:    { name: "Aurora",      bg: "linear-gradient(135deg,#D6D9F6,#BFE9E1)" },
   gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#F6E7BF,#EAD29A)" },
+  arcade:    { name: "Arcade",      ach: "konami", dark: true,
+               bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
@@ -6941,6 +6960,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 function StyleModal({ profile, onChange, onClose, previewPack }) {
   const level = levelFromExp(totalExp(profile));
   const prestige = profile.prestige || 0;
+  const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px" }}>{children}</div>
   );
@@ -6955,12 +6975,12 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       <Head>Sound pack</Head>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {Object.entries(SOUND_PACKS).map(([id, p]) => {
-          const locked = level < p.lv;
+          const locked = p.ach ? !hasAch(p.ach) : level < p.lv;
           const on = (profile.soundPack || "default") === id;
           return (
             <button key={id} type="button" disabled={locked} style={pill(on, locked)}
               onClick={() => { if (locked) return; onChange(() => ({ soundPack: id })); previewPack && previewPack(id); }}>
-              {p.name}{locked ? ` · Lv ${p.lv}` : ""}
+              {p.name}{locked ? (p.ach ? " · 🔒" : ` · Lv ${p.lv}`) : ""}
             </button>
           );
         })}
@@ -6970,7 +6990,7 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
         <Head>Calculator skin</Head>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           {CALC_SKIN_IDS.map((id) => (
-            <CalcSkinSwatch key={id} id={id} locked={level < CALC_SKINS[id].lv}
+            <CalcSkinSwatch key={id} id={id} locked={calcSkinLocked(CALC_SKINS[id], profile)}
               on={(profile.calcSkin || "classic") === id}
               onPick={(pid) => onChange(() => ({ calcSkin: pid }))} />
           ))}
@@ -6989,12 +7009,12 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {NAME_STYLE_IDS.map((id) => {
           const s = NAME_STYLES[id];
-          const locked = prestige < s.prestige;
+          const locked = s.ach ? !hasAch(s.ach) : prestige < s.prestige;
           const on = (profile.nameStyle || "plain") === id;
           return (
             <button key={id} type="button" disabled={locked} style={{ ...pill(on, locked), ...(locked ? {} : s.style) }}
               onClick={() => !locked && onChange(() => ({ nameStyle: id }))}>
-              {s.name}{locked ? ` · P${s.prestige}` : ""}
+              {s.name}{locked ? (s.ach ? " · 🔒" : ` · P${s.prestige}`) : ""}
             </button>
           );
         })}
@@ -7004,7 +7024,7 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         {CARD_BG_IDS.map((id, i) => {
           const b = CARD_BGS[id];
-          const locked = prestige < i;
+          const locked = b.ach ? !hasAch(b.ach) : prestige < i;
           const on = (profile.cardBg || "graph") === id;
           return (
             <div key={id} style={{ width: 66 }}>
@@ -7014,7 +7034,7 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
                 ...cardBgStyle(b, true),
                 filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
               }} />
-              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `P${i}` : b.name}</div>
+              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (b.ach ? "🔒" : `P${i}`) : b.name}</div>
             </div>
           );
         })}
@@ -7205,6 +7225,7 @@ function assignmentProgress(profile, a) {
    rank C (50%) — a "basic competency" bar, not full mastery. */
 const UNLOCK_RANK = RANK_ORDER.indexOf("C");
 function isUnlocked(topic, profile) {
+  if (profile.konami) return true;                                  // the code opens every topic
   if ((profile.keyedTopics || []).includes(topic.id)) return true; // opened early with a Skeleton Key
   return topic.prereqs.every((pid) => ((profile.topics[pid] || {}).highestRank ?? -1) >= UNLOCK_RANK);
 }
@@ -7384,7 +7405,7 @@ const emptyProfile = () => ({
   seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
-  bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic",
+  bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false,
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -7640,7 +7661,7 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose, sound, skin }) {
+export function Calc({ onClose, sound, skin, onKonami }) {
   const [st, setSt] = useState({ s: "", c: 0 });     // expression + cursor
   const [ans, setAns] = useState(0);
   const [res, setRes] = useState(null);              // { val, frac } | { text }
@@ -7649,6 +7670,20 @@ export function Calc({ onClose, sound, skin }) {
   const [hi, setHi] = useState(-1);
   const postEq = useRef(false);                       // last action was "=" — next input starts fresh
   const acRef = useRef(null);
+
+  // ↑ ↑ ↓ ↓ ← → ← → on the arrow pad — the Konami code.
+  const koRef = useRef("");
+  const koDone = useRef(false);
+  const [egg, setEgg] = useState(false);
+  const koTrack = (d) => {
+    koRef.current = (koRef.current + d).slice(-8);
+    if (koRef.current === "UUDDLRLR" && !koDone.current) {
+      koDone.current = true;
+      setEgg(true);
+      setTimeout(() => setEgg(false), 2400);
+      onKonami && onKonami();
+    }
+  };
 
   // soft mechanical-keyboard "tk" — a short filtered-noise tick + low thump
   const clickSound = () => {
@@ -7674,12 +7709,13 @@ export function Calc({ onClose, sound, skin }) {
   };
 
   const ins = (text, back = 0) => {
+    koRef.current = "";
     setRes(null);
     if (postEq.current) { postEq.current = false; setSt({ s: text, c: text.length - back }); return; }
     setSt(({ s, c }) => ({ s: s.slice(0, c) + text + s.slice(c), c: c + text.length - back }));
   };
-  const del = () => { postEq.current = false; setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
-  const ac = () => { postEq.current = false; setRes(null); setSt({ s: "", c: 0 }); setHi(-1); };
+  const del = () => { koRef.current = ""; postEq.current = false; setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
+  const ac = () => { koRef.current = ""; postEq.current = false; setRes(null); setSt({ s: "", c: 0 }); setHi(-1); };
   const move = (d) => { postEq.current = false; setSt(({ s, c }) => ({ s, c: Math.max(0, Math.min(s.length, c + d)) })); };
   const recall = (dir) => {
     const h = histRef.current; if (!h.length) return;
@@ -7694,6 +7730,7 @@ export function Calc({ onClose, sound, skin }) {
     setHi(j); setRes(null); setSt({ s: h[j], c: h[j].length });
   };
   const equals = () => {
+    koRef.current = "";
     const s = st.s.trim(); if (!s) return;
     const r = calcEval(s, ans);
     if (r.error) { setRes({ text: r.error }); postEq.current = true; return; }
@@ -7745,7 +7782,13 @@ export function Calc({ onClose, sound, skin }) {
         </div>
         {/* screen — the two rows keep a fixed reserved height so nothing
              shifts when the result appears after "=" */}
-        <div style={{ background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ position: "relative", background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          {egg && (
+            <div style={{ position: "absolute", inset: 0, borderRadius: 5, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: "linear-gradient(115deg,#FF4DE1,#A06BFF,#63EEF7,#B31FC6)", color: "#0e0a24", fontFamily: PXFONT, fontWeight: 700, letterSpacing: 1, zIndex: 3 }}>
+              <span style={{ fontSize: 24 }}>🕹</span>
+              <span style={{ fontSize: 13 }}>KONAMI CODE</span>
+            </div>
+          )}
           <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 22 }}>
             {blank ? <span style={{ opacity: 0.4 }}>0</span> : <>
               <MathText text={left || ""} />
@@ -7759,10 +7802,10 @@ export function Calc({ onClose, sound, skin }) {
         </div>
         {/* arrows — one row: left, up, down, right */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, margin: "9px 0 8px" }}>
-          {K("◀", () => move(-1), P.fn, P.fnInk)}
-          {K("▲", () => recall(-1), P.fn, P.fnInk)}
-          {K("▼", () => recall(1), P.fn, P.fnInk)}
-          {K("▶", () => move(1), P.fn, P.fnInk)}
+          {K("◀", () => { koTrack("L"); move(-1); }, P.fn, P.fnInk)}
+          {K("▲", () => { koTrack("U"); recall(-1); }, P.fn, P.fnInk)}
+          {K("▼", () => { koTrack("D"); recall(1); }, P.fn, P.fnInk)}
+          {K("▶", () => { koTrack("R"); move(1); }, P.fn, P.fnInk)}
         </div>
         {/* function keys */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, marginBottom: 5 }}>
@@ -7803,7 +7846,7 @@ function CalcSkinSwatch({ id, locked, on, onPick }) {
           <span style={{ flex: 1, borderRadius: 2, background: sk.P.del }} />
         </span>
       </button>
-      <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `Lv ${sk.lv}` : sk.name}</div>
+      <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (sk.ach ? "🔒" : `Lv ${sk.lv}`) : sk.name}</div>
     </div>
   );
 }
@@ -7811,7 +7854,6 @@ function CalcSkinSwatch({ id, locked, on, onPick }) {
 /* Long-press the calculator button → this compact overlay to swap skins
    without going through Settings. */
 function CalcSkinQuickPick({ profile, onPick, onClose }) {
-  const level = levelFromExp(totalExp(profile));
   const cur = profile.calcSkin || "classic";
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -7819,7 +7861,7 @@ function CalcSkinQuickPick({ profile, onPick, onClose }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Calculator colour</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
           {CALC_SKIN_IDS.map((id) => (
-            <CalcSkinSwatch key={id} id={id} locked={level < CALC_SKINS[id].lv} on={cur === id}
+            <CalcSkinSwatch key={id} id={id} locked={calcSkinLocked(CALC_SKINS[id], profile)} on={cur === id}
               onPick={(pid) => { onPick(pid); onClose(); }} />
           ))}
         </div>
@@ -7871,7 +7913,7 @@ function CelebrationOverlay({ c, onDone }) {
   useEffect(() => {
     if (!c) return;
     setGi(0);
-    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200 }[c.kind] || 2200;
+    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200, konami: 3200 }[c.kind] || 2200;
     if (c.kind === "groupsplus") {
       const groups = (c.data && c.data.groups) || [];
       let i = 0, t;
@@ -7945,6 +7987,17 @@ function CelebrationOverlay({ c, onDone }) {
         <div style={{ textAlign: "center", animation: "celFade 2.2s ease forwards" }}>
           <div style={{ fontSize: 78, animation: "celCrown 0.8s cubic-bezier(.2,.9,.3,1.2) forwards" }}>👑</div>
           <div className="mub-display" style={{ fontSize: 22, fontWeight: 900, color: "#C99A1E" }}>#1 TODAY</div>
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "konami") {
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(115deg,#FF4DE1,#A06BFF,#63EEF7,#B31FC6)", animation: "celFlash 1.1s ease-out forwards" }} />
+        <Confetti count={170} duration={3000} />
+        <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 3.2s ease forwards" }}>
+          {stampBox("🕹", "KONAMI CODE — EVERYTHING UNLOCKED", "#63EEF7")}
         </div>
       </div>
     );
@@ -8085,6 +8138,21 @@ export default function MathsUnlockedBN() {
       setCalcOpen(true);
     },
   };
+  // ↑↑↓↓←→←→ on the calculator — unlock every topic + the arcade cosmetics.
+  function doKonami() {
+    if (profile.konami) return;
+    const next = JSON.parse(JSON.stringify(profile));
+    next.konami = true;
+    next.calcSkin = "arcade";
+    next.cardBg = "arcade";
+    next.soundPack = "arcade";
+    next.nameStyle = "arcade";
+    next.title = "Gamer";
+    next.avatar = "ach:konami";
+    awardAchievements(next);
+    saveProfile(next);
+    setTimeout(() => { celebrate("konami"); playArcadeJingle(); }, 220);
+  }
   const wroteAnswerRef = useRef(false);              // the next submitAnswer came straight from the handwriting pad ("Old School")
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
@@ -8666,6 +8734,13 @@ export default function MathsUnlockedBN() {
     setTimeout(() => playSeq([523.25], { wave: w, step: 0.1, dur: 0.5, attack: 0.01, vol: 0.11, detune: 6 }), 340);   // taaa
     setTimeout(() => playSeq([523.25, 659.25, 783.99, 1046.5], { wave: w, step: 0.115, dur: 0.32, attack: 0.01, vol: 0.1 }), 900);  // rising flourish
     setTimeout(() => playSeq([392, 523.25, 659.25, 783.99, 1046.5], { wave: "triangle", step: 0, dur: 1.5, attack: 0.04, vol: 0.085 }), 1420); // held regal chord
+  }
+
+  // Konami code — a chiptune power-up: fast square-wave run + high blips.
+  function playArcadeJingle() {
+    playSeq([523.25, 659.25, 783.99, 1046.5, 1318.5], { wave: "square", step: 0.07, dur: 0.16, attack: 0.003, vol: 0.09 });
+    setTimeout(() => playSeq([1046.5, 1318.5, 1567.98, 2093.0], { wave: "square", step: 0.06, dur: 0.12, attack: 0.003, vol: 0.07 }), 430);
+    setTimeout(() => playSeq([783.99, 1046.5], { wave: "square", step: 0.1, dur: 0.42, attack: 0.004, vol: 0.08, detune: 8 }), 740);
   }
 
   // Whole mastery group taken to S+ — a short triumphant run + sparkle.
@@ -13367,6 +13442,7 @@ export default function MathsUnlockedBN() {
                       {items.map((a) => {
                         const unlocked = (profile.achievements || []).includes(a.id);
                         const hidden = a.secret && !unlocked;
+                        const nameHidden = hidden && !a.showName; // some secrets show their name as a teaser
                         const fresh = unlocked && newAchIds.includes(a.id);
                         return (
                           <div key={a.id} style={{
@@ -13380,7 +13456,7 @@ export default function MathsUnlockedBN() {
                             {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                             <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700 }}>{hidden ? "???" : a.name}</div>
+                              <div style={{ fontWeight: 700 }}>{nameHidden ? "???" : a.name}</div>
                               <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{hidden ? "Secret — revealed when earned" : a.desc}</div>
                             </div>
                           </div>
@@ -13800,7 +13876,7 @@ export default function MathsUnlockedBN() {
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
 
-      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} skin={calcSkinOf(profile)} />}
+      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} skin={calcSkinOf(profile)} onKonami={doKonami} />}
 
       {calcPick && (
         <CalcSkinQuickPick
