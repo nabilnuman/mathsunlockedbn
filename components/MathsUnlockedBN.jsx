@@ -6746,6 +6746,16 @@ function boardNameStyle(full, dark) {
   // a solid name style is active — drop the plain-name underline so it reads clean
   return Object.keys(st).length ? { ...st, textDecoration: "none" } : st;
 }
+// "12 S+" — number of topics a player has taken to S+ (leaderboard rows)
+function SplusBadge({ n }) {
+  if (!n) return null;
+  const c = RANK_COLOR["S+"];
+  return (
+    <span style={{ fontSize: 10, fontWeight: 800, color: c, border: `1px solid ${c}`, borderRadius: 4, padding: "0 4px", whiteSpace: "nowrap" }}>
+      {n}&nbsp;S+
+    </span>
+  );
+}
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
   return (
@@ -8096,6 +8106,13 @@ function lastImprovementAt(profile) {
   return times.length ? Math.max(...times) : 0;
 }
 
+// How many of the 30 topics this player has taken to S+ (lifetime best,
+// so it survives prestige). Shown as a badge on leaderboard rows.
+const S_PLUS_IDX = RANK_ORDER.length - 1;
+function splusCount(m) {
+  return TOPICS.reduce((n, t) => n + (bestRankOf(m, t.id) >= S_PLUS_IDX ? 1 : 0), 0);
+}
+
 // Shape a raw profile (as returned by getLeaderboard, or `profile` itself)
 // into a leaderboard row. Shared by the Top Players and Friends tabs.
 function toBoardEntry(m) {
@@ -8108,7 +8125,7 @@ function toBoardEntry(m) {
     title: titleFor(m),
     correct: m.totalCorrect || 0,
     achievements: (m.achievements || []).length,
-    bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
+    splus: splusCount(m),
     at: lastImprovementAt(m),
     full: m,
   };
@@ -10526,7 +10543,7 @@ export default function MathsUnlockedBN() {
           title: titleFor(m),
           correct: m.totalCorrect || 0,
           achievements: (m.achievements || []).length,
-          bestRank: Math.max(-1, ...Object.values(m.topics || {}).map((t) => t.highestRank ?? -1)),
+          splus: splusCount(m),
           at: lastImprovementAt(m),
           full: m,
         }))
@@ -13002,7 +13019,6 @@ export default function MathsUnlockedBN() {
                           {expanded && (
                             <div style={{ borderTop: "1px solid var(--grid)", display: "flex", flexDirection: "column", gap: 3, padding: 4 }}>
                               {s.roster.map((m, j) => {
-                                const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                                 const skin = boardRowSkin(m.full, false);
                                 return (
                                   <button key={j} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
@@ -13014,7 +13030,7 @@ export default function MathsUnlockedBN() {
                                       <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                         <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                                         {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
-                                        {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                                        <SplusBadge n={m.splus} />
                                       </div>
                                       <div style={{ fontSize: 10.5, color: skin.sub }}>
                                         {m.title} · Level {m.level} · {m.achievements} achievement{m.achievements === 1 ? "" : "s"}
@@ -13041,7 +13057,6 @@ export default function MathsUnlockedBN() {
                     {board.players.map((m, i) => {
                       const mine = m.full && ((authUid && m.full.uid === authUid) || (!authUid && profile.name === m.name));
                       const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
-                      const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                       const skin = boardRowSkin(m.full, mine);
                       return (
                         <button key={i} onClick={() => { if (m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
@@ -13054,7 +13069,7 @@ export default function MathsUnlockedBN() {
                               <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                               {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                               {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
-                              {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                              <SplusBadge n={m.splus} />
                             </div>
                             <div style={{ fontSize: 10.5, color: skin.sub }}>
                               {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
@@ -13087,7 +13102,6 @@ export default function MathsUnlockedBN() {
                   {entries.map((m, i) => {
                     const mine = m.full && m.full.uid === authUid;
                     const rankColor = ["#D4A017", "#9AA3AE", "#B07437"][i] || "var(--muted)";
-                    const rk = m.bestRank >= 0 ? rankDisplay(m.bestRank) : null;
                     const skin = boardRowSkin(m.full, mine);
                     return (
                       <button key={i} onClick={() => { if (!mine && m.full) { setRosterProfile(m.full); markMilestone("friendview"); } }}
@@ -13100,7 +13114,7 @@ export default function MathsUnlockedBN() {
                             <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                             {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                             {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
-                            {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
+                            <SplusBadge n={m.splus} />
                           </div>
                           <div style={{ fontSize: 10.5, color: skin.sub }}>
                             {m.title} · Level {m.level}{m.school ? ` · ${m.school}` : ""}
