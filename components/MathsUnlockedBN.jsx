@@ -6969,29 +6969,11 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
       {level >= CALC_LV && (<>
         <Head>Calculator skin</Head>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {CALC_SKIN_IDS.map((id) => {
-            const sk = CALC_SKINS[id];
-            const locked = level < sk.lv;
-            const on = (profile.calcSkin || "classic") === id;
-            return (
-              <div key={id} style={{ width: 66 }}>
-                <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ calcSkin: id }))} style={{
-                  width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 5,
-                  border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: sk.P.body,
-                  display: "flex", flexDirection: "column", gap: 3,
-                  filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
-                }}>
-                  <span style={{ height: 12, borderRadius: 2, background: sk.P.screen }} />
-                  <span style={{ display: "flex", gap: 3, flex: 1 }}>
-                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.key }} />
-                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.op }} />
-                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.del }} />
-                  </span>
-                </button>
-                <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `Lv ${sk.lv}` : sk.name}</div>
-              </div>
-            );
-          })}
+          {CALC_SKIN_IDS.map((id) => (
+            <CalcSkinSwatch key={id} id={id} locked={level < CALC_SKINS[id].lv}
+              on={(profile.calcSkin || "classic") === id}
+              onPick={(pid) => onChange(() => ({ calcSkin: pid }))} />
+          ))}
         </div>
       </>)}
 
@@ -7800,6 +7782,51 @@ export function Calc({ onClose, sound, skin }) {
   );
 }
 
+/* One calculator-skin swatch: a tiny stylised calculator (LCD strip +
+   three key colours). Shared by the Style sheet and the long-press
+   quick picker. */
+function CalcSkinSwatch({ id, locked, on, onPick }) {
+  const sk = CALC_SKINS[id];
+  return (
+    <div style={{ width: 66 }}>
+      <button type="button" disabled={locked} onClick={() => !locked && onPick(id)} style={{
+        width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 5,
+        border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: sk.P.body,
+        display: "flex", flexDirection: "column", gap: 3,
+        filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
+      }}>
+        <span style={{ height: 12, borderRadius: 2, background: sk.P.screen }} />
+        <span style={{ display: "flex", gap: 3, flex: 1 }}>
+          <span style={{ flex: 1, borderRadius: 2, background: sk.P.key }} />
+          <span style={{ flex: 1, borderRadius: 2, background: sk.P.op }} />
+          <span style={{ flex: 1, borderRadius: 2, background: sk.P.del }} />
+        </span>
+      </button>
+      <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `Lv ${sk.lv}` : sk.name}</div>
+    </div>
+  );
+}
+
+/* Long-press the calculator button → this compact overlay to swap skins
+   without going through Settings. */
+function CalcSkinQuickPick({ profile, onPick, onClose }) {
+  const level = levelFromExp(totalExp(profile));
+  const cur = profile.calcSkin || "classic";
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 92, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 16, maxWidth: 300, boxShadow: "0 10px 34px var(--shadow-soft)" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Calculator colour</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {CALC_SKIN_IDS.map((id) => (
+            <CalcSkinSwatch key={id} id={id} locked={level < CALC_SKINS[id].lv} on={cur === id}
+              onPick={(pid) => { onPick(pid); onClose(); }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------
    Celebration overlays — reserved for genuinely rare moments
    so they keep their impact. Confetti is a plain canvas.
@@ -8032,6 +8059,31 @@ export default function MathsUnlockedBN() {
   const [answerInput, setAnswerInput] = useState("");
   const [writePad, setWritePad] = useState(false);   // handwriting pad for the answer box
   const [calcOpen, setCalcOpen] = useState(false);   // "Classic" pop-up calculator
+  const [calcPick, setCalcPick] = useState(false);   // long-press skin quick-picker
+  const calcHoldRef = useRef(null);
+  const calcHeldRef = useRef(false);
+  // Spread onto every calculator button: tap opens the calc, long-press
+  // (450ms) opens the skin quick-picker instead.
+  const calcBtnHandlers = {
+    onPointerDown: () => {
+      calcHeldRef.current = false;
+      clearTimeout(calcHoldRef.current);
+      calcHoldRef.current = setTimeout(() => {
+        calcHeldRef.current = true;
+        try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+        setCalcPick(true);
+      }, 450);
+    },
+    onPointerUp: () => clearTimeout(calcHoldRef.current),
+    onPointerLeave: () => clearTimeout(calcHoldRef.current),
+    onPointerCancel: () => clearTimeout(calcHoldRef.current),
+    onContextMenu: (e) => e.preventDefault(),
+    onClick: () => {
+      clearTimeout(calcHoldRef.current);
+      if (calcHeldRef.current) { calcHeldRef.current = false; return; } // was a long-press
+      setCalcOpen(true);
+    },
+  };
   const wroteAnswerRef = useRef(false);              // the next submitAnswer came straight from the handwriting pad ("Old School")
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
@@ -11031,7 +11083,7 @@ export default function MathsUnlockedBN() {
                     onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
                     placeholder="your answer" autoComplete="off"
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
-                  {myLevel >= CALC_LV && <button onClick={() => setCalcOpen(true)} aria-label="Calculator" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Calculator size={16} /></button>}
+                  {myLevel >= CALC_LV && <button {...calcBtnHandlers} aria-label="Calculator" title="Calculator — hold to change colour" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}><Calculator size={16} /></button>}
                   <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
                   <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
                 </div>
@@ -11252,8 +11304,8 @@ export default function MathsUnlockedBN() {
                           style={{ flex: 1, minWidth: 0, boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, background: "var(--card)", color: "var(--ink)" }}
                         />
                         {myLevel >= CALC_LV && (
-                        <button type="button" onClick={() => setCalcOpen(true)} title="Calculator"
-                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
+                        <button type="button" {...calcBtnHandlers} title="Calculator — hold to change colour"
+                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}>
                           <Calculator size={16} />
                         </button>
                         )}
@@ -12007,13 +12059,14 @@ export default function MathsUnlockedBN() {
 
               {!feedback && myLevel >= CALC_LV && (
                 <button
-                  onClick={() => setCalcOpen(true)}
-                  title="Calculator" aria-label="Calculator"
+                  {...calcBtnHandlers}
+                  title="Calculator — hold to change colour" aria-label="Calculator"
                   style={{
                     position: "absolute", bottom: 8, right: myLevel >= SKETCH_LV ? 48 : 8, zIndex: 6,
                     width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                     border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
                     cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)",
+                    touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none",
                   }}
                 >
                   <Calculator size={16} />
@@ -13747,6 +13800,14 @@ export default function MathsUnlockedBN() {
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
 
       {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} skin={calcSkinOf(profile)} />}
+
+      {calcPick && (
+        <CalcSkinQuickPick
+          profile={profile}
+          onPick={(id) => saveProfile({ ...profile, calcSkin: id })}
+          onClose={() => setCalcPick(false)}
+        />
+      )}
 
       {rankJump && (() => {
         const jt = TOPIC_BY_ID[rankJump.topicId];
