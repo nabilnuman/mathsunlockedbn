@@ -6530,6 +6530,9 @@ export const CALC_SKINS = {
 };
 const CALC_SKIN_IDS = Object.keys(CALC_SKINS);
 const calcSkinOf = (p) => CALC_SKINS[(p && p.calcSkin)] || CALC_SKINS.classic;
+// The pixel font has no accented glyphs — strip diacritics for the LCD label.
+const calcSkinLabel = (skin) =>
+  ((skin && skin.name) || "Classic").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 
 const avatarLevel = (id) => AVATAR_LV[id] || 1;
 const frameLevel = (id) => FRAME_LV[id] || 1;
@@ -7755,7 +7758,7 @@ export function Calc({ onClose, sound, skin }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.66)", zIndex: 88, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 336, maxHeight: "96vh", overflowY: "auto", background: P.body, border: `3px solid ${P.face}`, borderRadius: 14, boxShadow: "6px 6px 0 rgba(0,0,0,0.45)", padding: 11, fontFamily: PXFONT }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: P.titleInk }}>CLASSIC</span>
+          <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: P.titleInk }}>{calcSkinLabel(skin)}</span>
           <button className="mub-px" onClick={onClose} style={{ ...kb(P.del, P.delInk), padding: "5px 10px", fontSize: 11 }}>X</button>
         </div>
         {/* screen */}
