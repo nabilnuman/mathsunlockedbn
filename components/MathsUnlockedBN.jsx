@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users, Calculator } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -6481,6 +6481,7 @@ const PERKS = {
 const PERK_IDS = Object.keys(PERKS);
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
+const CALC_LV = 4;
 const SHIELD_LEVELS = [6, 13]; // levels that grant a Streak Shield
 
 const avatarLevel = (id) => AVATAR_LV[id] || 1;
@@ -6499,6 +6500,7 @@ function unlocksAtLevel(L) {
   if (bs > bannerSlots(L - 1)) out.push(`Banner slot ${bs}`);
   if (L === SKETCH_LV) out.push("Rough-working pad");
   if (L === WRITE_LV) out.push("Handwriting input");
+  if (L === CALC_LV) out.push("Calculator");
   Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
   if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
   if (L % 5 === 0) out.push("🗝 Skeleton Key");
@@ -7464,6 +7466,230 @@ function LadderDivision({ pair, divisors }) {
 }
 
 /* ---------------------------------------------------------
+   "Classic" — a pop-up scientific calculator for the answer
+   pages. Numeric only (no symbolic surds); trig is in degrees,
+   like a school Casio. Retro pixel styling.
+--------------------------------------------------------- */
+// Evaluate a calculator expression. `ans` = the last result.
+// Returns { value } or { error }.
+export function calcEval(raw, ans) {
+  let s = String(raw).replace(/\s+/g, "")
+    .replace(/×/g, "*").replace(/÷/g, "/").replace(/[−–—]/g, "-")
+    .replace(/π/g, "(p)").replace(/Ans/gi, "(a)")
+    .replace(/sin⁻¹/g, "S").replace(/cos⁻¹/g, "C").replace(/tan⁻¹/g, "T")
+    .replace(/∛/g, "cbrt").replace(/√/g, "sqrt")
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => "^(" + m.replace(/./g, (c) => "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c)) + ")")
+    .replace(/S/g, "asin").replace(/C/g, "acos").replace(/T/g, "atan");
+  const toks = [];
+  const re = /(\d+\.?\d*|\.\d+)|([a-z]+)|([+\-*/^()])/g;
+  let m, at = 0;
+  while ((m = re.exec(s))) {
+    if (m.index !== at) return { error: "Syntax ERROR" };
+    at = re.lastIndex;
+    if (m[1] != null) toks.push({ t: "num", v: parseFloat(m[1]) });
+    else if (m[2] != null) toks.push({ t: "id", v: m[2] });
+    else toks.push({ t: "op", v: m[3] });
+  }
+  // auto-close any unclosed brackets, like a Casio does before "="
+  {
+    const need = (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+    for (let k = 0; k < need; k++) toks.push({ t: "op", v: ")" });
+  }
+  if (at !== s.length || !toks.length) return { error: "Syntax ERROR" };
+  let p = 0;
+  const peek = () => toks[p], eat = () => toks[p++];
+  const D = Math.PI / 180, R = 180 / Math.PI;
+  const FN = {
+    sqrt: Math.sqrt, cbrt: Math.cbrt,
+    sin: (x) => Math.sin(x * D), cos: (x) => Math.cos(x * D), tan: (x) => Math.tan(x * D),
+    asin: (x) => Math.asin(x) * R, acos: (x) => Math.acos(x) * R, atan: (x) => Math.atan(x) * R,
+  };
+  const startsPrim = (tk) => tk && (tk.t === "num" || tk.t === "id" || (tk.t === "op" && tk.v === "("));
+  function prim() {
+    const tk = peek();
+    if (!tk) throw 0;
+    if (tk.t === "num") { eat(); return tk.v; }
+    if (tk.t === "op" && tk.v === "-") { eat(); return -unary(); }
+    if (tk.t === "op" && tk.v === "(") { eat(); const v = expr(); if (!peek() || peek().v !== ")") throw 0; eat(); return v; }
+    if (tk.t === "id") {
+      eat();
+      if (tk.v === "p") return Math.PI;
+      if (tk.v === "a") return ans || 0;
+      const f = FN[tk.v]; if (!f) throw 0;
+      if (!peek() || peek().v !== "(") throw 0; eat();
+      const arg = expr();
+      if (!peek() || peek().v !== ")") throw 0; eat();
+      return f(arg);
+    }
+    throw 0;
+  }
+  function unary() { if (peek() && peek().v === "-") { eat(); return -unary(); } return pow(); }
+  function pow() { let b = prim(); if (peek() && peek().v === "^") { eat(); b = Math.pow(b, unary()); } return b; }
+  function term() {
+    let v = unary();
+    while (peek()) {
+      if (peek().v === "*") { eat(); v *= unary(); }
+      else if (peek().v === "/") { eat(); v /= unary(); }
+      else if (startsPrim(peek())) v *= unary();
+      else break;
+    }
+    return v;
+  }
+  function expr() {
+    let v = term();
+    while (peek() && (peek().v === "+" || peek().v === "-")) { const o = eat().v; v = o === "+" ? v + term() : v - term(); }
+    return v;
+  }
+  try {
+    const v = expr();
+    if (p !== toks.length) return { error: "Syntax ERROR" };
+    if (typeof v !== "number" || Number.isNaN(v)) return { error: "Math ERROR" };
+    if (!isFinite(v)) return { error: "Math ERROR" };
+    return { value: v };
+  } catch (e) { return { error: "Syntax ERROR" }; }
+}
+// Decimal → simple fraction via continued fractions, or null. Only a
+// genuinely "nice" fraction (small denominator, near-exact) counts —
+// otherwise S⇔D on an irrational would show a huge nonsense fraction.
+function calcToFrac(x) {
+  if (!isFinite(x) || Math.abs(x) > 1e7 || Number.isInteger(x)) return null;
+  const neg = x < 0; x = Math.abs(x);
+  let n0 = 0, d0 = 1, n1 = 1, d1 = 0, b = x;
+  for (let i = 0; i < 30; i++) {
+    const a = Math.floor(b);
+    const n2 = a * n1 + n0, d2 = a * d1 + d0;
+    if (d2 > 10000) break;
+    n0 = n1; d0 = d1; n1 = n2; d1 = d2;
+    if (Math.abs(n1 / d1 - x) <= 1e-12 * Math.max(1, x)) break;
+    const fr = b - a;
+    if (fr < 1e-11) break;
+    b = 1 / fr;
+  }
+  if (d1 <= 1 || d1 > 10000 || Math.abs(n1 / d1 - x) > 1e-12 * Math.max(1, x)) return null;
+  return { n: (neg ? -1 : 1) * n1, d: d1 };
+}
+function calcFmt(x) {
+  if (!isFinite(x)) return "Math ERROR";
+  if (x !== 0 && (Math.abs(x) >= 1e10 || Math.abs(x) < 1e-9)) {
+    return x.toExponential(6).replace(/\.?0+e/, "e").replace("e+", "×10^").replace("e", "×10^");
+  }
+  return String(Math.round(x * 1e10) / 1e10);
+}
+// display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
+const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
+
+export function Calc({ onClose }) {
+  const [st, setSt] = useState({ s: "", c: 0 });     // expression + cursor
+  const [ans, setAns] = useState(0);
+  const [res, setRes] = useState(null);              // { val, frac } | { text }
+  const [asFrac, setAsFrac] = useState(false);
+  const histRef = useRef([]);
+  const [hi, setHi] = useState(-1);
+
+  const ins = (text, back = 0) => { setRes(null); setSt(({ s, c }) => ({ s: s.slice(0, c) + text + s.slice(c), c: c + text.length - back })); };
+  const del = () => { setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
+  const ac = () => { setRes(null); setSt({ s: "", c: 0 }); setHi(-1); };
+  const move = (d) => setSt(({ s, c }) => ({ s, c: Math.max(0, Math.min(s.length, c + d)) }));
+  const recall = (dir) => {
+    const h = histRef.current; if (!h.length) return;
+    let ni = hi < 0 ? (dir < 0 ? h.length - 1 : -1) : hi + dir;
+    if (ni >= h.length) { setHi(-1); setRes(null); setSt({ s: "", c: 0 }); return; }
+    ni = Math.max(0, ni); setHi(ni); setRes(null); setSt({ s: h[ni], c: h[ni].length });
+  };
+  const equals = () => {
+    const s = st.s.trim(); if (!s) return;
+    const r = calcEval(s, ans);
+    if (r.error) { setRes({ text: r.error }); return; }
+    histRef.current = [...histRef.current.filter((x) => x !== s), s].slice(-24);
+    setHi(-1); setAns(r.value); setAsFrac(false);
+    setRes({ val: r.value, frac: calcToFrac(r.value) });
+  };
+
+  const P = {
+    body: "#3b3b45", face: "#141414", screen: "#c4d1a3", ink: "#1b2410",
+    key: "#f2f2f2", keyInk: "#141414", fn: "#5b5b70", fnInk: "#f4f4f4",
+    op: "#eea748", opInk: "#141414", eq: "#78c86f", del: "#d25a5a",
+  };
+  const PXFONT = "'Silkscreen', 'Pixelify Sans', ui-monospace, monospace";
+  const kb = (bg, fg, big) => ({
+    fontFamily: PXFONT, fontWeight: 400, fontSize: big ? 17 : 13,
+    color: fg, background: bg, border: `2px solid ${P.face}`, borderRadius: 5,
+    boxShadow: `2px 2px 0 ${P.face}`, padding: 0, height: big ? 46 : 36, cursor: "pointer",
+    lineHeight: 1, minWidth: 0, textAlign: "center", touchAction: "manipulation",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  });
+  let kid = 0;
+  const K = (label, onClick, bg = P.key, fg = P.keyInk, opt = {}) => (
+    <button key={"k" + kid++} className="mub-px" onClick={onClick}
+      style={{ ...kb(bg, fg, opt.big), gridColumn: `span ${opt.span || 1}` }}>{label}</button>
+  );
+  const sup = (b, e) => <span>{b}<sup style={{ fontSize: "0.7em" }}>{e}</sup></span>;
+  const fracIcon = (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 0.78, fontSize: 8.5 }}>
+      <span>a</span>
+      <span style={{ borderTop: "1.5px solid currentColor", width: 13, height: 0, margin: "1px 0" }} />
+      <span>b</span>
+    </span>
+  );
+
+  const fnGrid = [
+    [sup("x", "2"), () => ins("²")], [sup("x", "3"), () => ins("³")], ["√", () => ins("√()", 1)], ["∛", () => ins("∛()", 1)],
+    [fracIcon, () => ins("/")], ["(", () => ins("(")], [")", () => ins(")")], [sup("×10", "x"), () => ins("×10^")],
+    ["sin", () => ins("sin()", 1)], ["cos", () => ins("cos()", 1)], ["tan", () => ins("tan()", 1)], ["π", () => ins("π")],
+    [sup("sin", "-1"), () => ins("sin⁻¹()", 1)], [sup("cos", "-1"), () => ins("cos⁻¹()", 1)], [sup("tan", "-1"), () => ins("tan⁻¹()", 1)], ["S↔D", () => setAsFrac((f) => !f)],
+  ];
+
+  const resStr = res ? (res.text != null ? res.text : (asFrac && res.frac ? frac(res.frac.n, res.frac.d) : calcFmt(res.val))) : "";
+  const left = calcShow(st.s.slice(0, st.c)), right = calcShow(st.s.slice(st.c));
+  const blank = !st.s && !res;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.66)", zIndex: 88, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 336, maxHeight: "96vh", overflowY: "auto", background: P.body, border: `3px solid ${P.face}`, borderRadius: 14, boxShadow: "6px 6px 0 rgba(0,0,0,0.45)", padding: 11, fontFamily: PXFONT }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: "#e9e9e9" }}>CLASSIC</span>
+          <button className="mub-px" onClick={onClose} style={{ ...kb(P.del, "#fff"), padding: "5px 10px", fontSize: 11 }}>X</button>
+        </div>
+        {/* screen */}
+        <div style={{ background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 64, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 20 }}>
+            {blank ? <span style={{ opacity: 0.4 }}>0</span> : <>
+              <MathText text={left || ""} />
+              <span style={{ width: 2, alignSelf: "stretch", minHeight: 17, background: P.ink, animation: "calcCaret 1.1s step-end infinite" }} />
+              <MathText text={right || ""} />
+            </>}
+          </div>
+          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, color: res && res.text ? "#8a3b1e" : P.ink, textAlign: "right", minHeight: 24 }}>
+            <MathText text={String(resStr)} />
+          </div>
+        </div>
+        {/* arrows — one row: left, up, down, right */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, margin: "9px 0 8px" }}>
+          {K("◀", () => move(-1), P.fn, P.fnInk)}
+          {K("▲", () => recall(-1), P.fn, P.fnInk)}
+          {K("▼", () => recall(1), P.fn, P.fnInk)}
+          {K("▶", () => move(1), P.fn, P.fnInk)}
+        </div>
+        {/* function keys */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, marginBottom: 5 }}>
+          {fnGrid.map(([l, f]) => K(l, f, P.fn, P.fnInk))}
+          {K("Ans", () => ins("Ans"), P.fn, P.fnInk)}
+          {K("DEL", del, P.del, "#fff")}
+          {K("RESET", ac, P.del, "#fff", { span: 2 })}
+        </div>
+        {/* keypad */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5 }}>
+          {K("7", () => ins("7"), P.key, P.keyInk, { big: 1 })}{K("8", () => ins("8"), P.key, P.keyInk, { big: 1 })}{K("9", () => ins("9"), P.key, P.keyInk, { big: 1 })}{K("÷", () => ins("÷"), P.op, P.opInk, { big: 1 })}
+          {K("4", () => ins("4"), P.key, P.keyInk, { big: 1 })}{K("5", () => ins("5"), P.key, P.keyInk, { big: 1 })}{K("6", () => ins("6"), P.key, P.keyInk, { big: 1 })}{K("×", () => ins("×"), P.op, P.opInk, { big: 1 })}
+          {K("1", () => ins("1"), P.key, P.keyInk, { big: 1 })}{K("2", () => ins("2"), P.key, P.keyInk, { big: 1 })}{K("3", () => ins("3"), P.key, P.keyInk, { big: 1 })}{K("−", () => ins("−"), P.op, P.opInk, { big: 1 })}
+          {K("0", () => ins("0"), P.key, P.keyInk, { big: 1 })}{K(".", () => ins("."), P.key, P.keyInk, { big: 1 })}{K("=", equals, P.eq, P.opInk, { big: 1 })}{K("+", () => ins("+"), P.op, P.opInk, { big: 1 })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    Celebration overlays — reserved for genuinely rare moments
    so they keep their impact. Confetti is a plain canvas.
 --------------------------------------------------------- */
@@ -7694,6 +7920,7 @@ export default function MathsUnlockedBN() {
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
   const [writePad, setWritePad] = useState(false);   // handwriting pad for the answer box
+  const [calcOpen, setCalcOpen] = useState(false);   // "Classic" pop-up calculator
   const wroteAnswerRef = useRef(false);              // the next submitAnswer came straight from the handwriting pad ("Old School")
   const [multiInput, setMultiInput] = useState({}); // for questions with several answer fields (e.g. x & y)
   const [drawPts, setDrawPts] = useState([]);       // up to 2 lattice points tapped on a "draw the graph" question
@@ -10096,7 +10323,10 @@ export default function MathsUnlockedBN() {
   return (
     <div style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", background: "var(--page-bg)", minHeight: "100dvh", display: "flex", flexDirection: "column", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600;700&display=swap');
+        @keyframes calcCaret { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        .mub-px { transition: none; }
+        .mub-px:active { transform: translate(2px, 2px); box-shadow: none !important; }
         .mub-display { font-family: 'Fraunces', serif; }
         .mub-mono { font-family: 'JetBrains Mono', monospace; font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0, "calt" 0; }
         .mub-grid {
@@ -10690,6 +10920,7 @@ export default function MathsUnlockedBN() {
                     onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
                     placeholder="your answer" autoComplete="off"
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
+                  {myLevel >= CALC_LV && <button onClick={() => setCalcOpen(true)} aria-label="Calculator" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Calculator size={16} /></button>}
                   <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
                   <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
                 </div>
@@ -10909,6 +11140,12 @@ export default function MathsUnlockedBN() {
                           autoFocus placeholder="Your answer" autoComplete="off" inputMode="text" className="mub-mono"
                           style={{ flex: 1, minWidth: 0, boxSizing: "border-box", padding: "12px 14px", fontSize: 18, border: `2px solid ${dailyWrong ? "var(--red)" : "var(--grid)"}`, borderRadius: 10, background: "var(--card)", color: "var(--ink)" }}
                         />
+                        {myLevel >= CALC_LV && (
+                        <button type="button" onClick={() => setCalcOpen(true)} title="Calculator"
+                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
+                          <Calculator size={16} />
+                        </button>
+                        )}
                         <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                           style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
                           <Pencil size={16} />
@@ -11465,6 +11702,12 @@ export default function MathsUnlockedBN() {
                     disabled={!!feedback || shieldOffer}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
+                  {!feedback && myLevel >= CALC_LV && (
+                    <button type="button" onClick={() => setCalcOpen(true)} title="Calculator" aria-label="Calculator"
+                      style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
+                      <Calculator size={16} />
+                    </button>
+                  )}
                   {!feedback && myLevel >= WRITE_LV && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
@@ -13383,6 +13626,8 @@ export default function MathsUnlockedBN() {
       )}
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
+
+      {calcOpen && <Calc onClose={() => setCalcOpen(false)} />}
 
       {rankJump && (() => {
         const jt = TOPIC_BY_ID[rankJump.topicId];
