@@ -7578,30 +7578,65 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose }) {
+export function Calc({ onClose, sound }) {
   const [st, setSt] = useState({ s: "", c: 0 });     // expression + cursor
   const [ans, setAns] = useState(0);
   const [res, setRes] = useState(null);              // { val, frac } | { text }
   const [asFrac, setAsFrac] = useState(false);
   const histRef = useRef([]);
   const [hi, setHi] = useState(-1);
+  const postEq = useRef(false);                       // last action was "=" — next input starts fresh
+  const acRef = useRef(null);
 
-  const ins = (text, back = 0) => { setRes(null); setSt(({ s, c }) => ({ s: s.slice(0, c) + text + s.slice(c), c: c + text.length - back })); };
-  const del = () => { setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
-  const ac = () => { setRes(null); setSt({ s: "", c: 0 }); setHi(-1); };
-  const move = (d) => setSt(({ s, c }) => ({ s, c: Math.max(0, Math.min(s.length, c + d)) }));
+  // soft mechanical-keyboard "tk" — a short filtered-noise tick + low thump
+  const clickSound = () => {
+    if (!sound) return;
+    try {
+      let a = acRef.current;
+      if (!a) a = acRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      if (a.state === "suspended") a.resume();
+      const t = a.currentTime, dur = 0.03;
+      const buf = a.createBuffer(1, Math.max(1, Math.ceil(a.sampleRate * dur)), a.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.5);
+      const src = a.createBufferSource(); src.buffer = buf;
+      const bp = a.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1700 + Math.random() * 500; bp.Q.value = 0.7;
+      const g = a.createGain(); g.gain.value = 0.035;
+      src.connect(bp); bp.connect(g); g.connect(a.destination);
+      src.start(t); src.stop(t + dur);
+      const o = a.createOscillator(); o.type = "sine";
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(65, t + 0.028);
+      const og = a.createGain(); og.gain.setValueAtTime(0.03, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+      o.connect(og); og.connect(a.destination); o.start(t); o.stop(t + 0.045);
+    } catch (e) { /* ignore */ }
+  };
+
+  const ins = (text, back = 0) => {
+    setRes(null);
+    if (postEq.current) { postEq.current = false; setSt({ s: text, c: text.length - back }); return; }
+    setSt(({ s, c }) => ({ s: s.slice(0, c) + text + s.slice(c), c: c + text.length - back }));
+  };
+  const del = () => { postEq.current = false; setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
+  const ac = () => { postEq.current = false; setRes(null); setSt({ s: "", c: 0 }); setHi(-1); };
+  const move = (d) => { postEq.current = false; setSt(({ s, c }) => ({ s, c: Math.max(0, Math.min(s.length, c + d)) })); };
   const recall = (dir) => {
     const h = histRef.current; if (!h.length) return;
-    let ni = hi < 0 ? (dir < 0 ? h.length - 1 : -1) : hi + dir;
-    if (ni >= h.length) { setHi(-1); setRes(null); setSt({ s: "", c: 0 }); return; }
-    ni = Math.max(0, ni); setHi(ni); setRes(null); setSt({ s: h[ni], c: h[ni].length });
+    postEq.current = false;
+    if (hi < 0) {                                  // nothing recalled yet
+      if (dir < 0) { const j = h.length - 1; setHi(j); setRes(null); setSt({ s: h[j], c: h[j].length }); }
+      return;                                       // ▼ from the live line is a no-op
+    }
+    const ni = hi + dir;
+    if (ni >= h.length) { setHi(-1); setRes(null); setSt({ s: "", c: 0 }); return; } // ▼ past newest → blank
+    const j = Math.max(0, ni);                      // ▲ past oldest → stay on oldest
+    setHi(j); setRes(null); setSt({ s: h[j], c: h[j].length });
   };
   const equals = () => {
     const s = st.s.trim(); if (!s) return;
     const r = calcEval(s, ans);
-    if (r.error) { setRes({ text: r.error }); return; }
+    if (r.error) { setRes({ text: r.error }); postEq.current = true; return; }
     histRef.current = [...histRef.current.filter((x) => x !== s), s].slice(-24);
-    setHi(-1); setAns(r.value); setAsFrac(false);
+    setHi(-1); setAns(r.value); setAsFrac(false); postEq.current = true;
     setRes({ val: r.value, frac: calcToFrac(r.value) });
   };
 
@@ -7620,7 +7655,7 @@ export function Calc({ onClose }) {
   });
   let kid = 0;
   const K = (label, onClick, bg = P.key, fg = P.keyInk, opt = {}) => (
-    <button key={"k" + kid++} className="mub-px" onClick={onClick}
+    <button key={"k" + kid++} className="mub-px" onClick={() => { clickSound(); onClick(); }}
       style={{ ...kb(bg, fg, opt.big), gridColumn: `span ${opt.span || 1}` }}>{label}</button>
   );
   const sup = (b, e) => <span>{b}<sup style={{ fontSize: "0.7em" }}>{e}</sup></span>;
@@ -11702,12 +11737,6 @@ export default function MathsUnlockedBN() {
                     disabled={!!feedback || shieldOffer}
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
-                  {!feedback && myLevel >= CALC_LV && (
-                    <button type="button" onClick={() => setCalcOpen(true)} title="Calculator" aria-label="Calculator"
-                      style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
-                      <Calculator size={16} />
-                    </button>
-                  )}
                   {!feedback && myLevel >= WRITE_LV && (
                     <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
@@ -11900,6 +11929,20 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
+              {!feedback && myLevel >= CALC_LV && (
+                <button
+                  onClick={() => setCalcOpen(true)}
+                  title="Calculator" aria-label="Calculator"
+                  style={{
+                    position: "absolute", bottom: 8, right: myLevel >= SKETCH_LV ? 48 : 8, zIndex: 6,
+                    width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                    border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
+                    cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)",
+                  }}
+                >
+                  <Calculator size={16} />
+                </button>
+              )}
               {myLevel >= SKETCH_LV && (<>
                 <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
                 <button
@@ -13627,7 +13670,7 @@ export default function MathsUnlockedBN() {
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
 
-      {calcOpen && <Calc onClose={() => setCalcOpen(false)} />}
+      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} />}
 
       {rankJump && (() => {
         const jt = TOPIC_BY_ID[rankJump.topicId];
