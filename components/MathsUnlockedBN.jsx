@@ -6000,6 +6000,176 @@ const LESSONS = {
     ],
     quizFilter: (q) => !/cumulative frequency|graph|histogram|stem|box/i.test(q.prompt),
   },
+
+  polygons: {
+    title: "Angles in polygons",
+    blurb: "Interior and exterior angles, and finding the number of sides.",
+    cards: [
+      { k: "teach", h: "Interior angle sum", b: [
+        "Split any polygon into triangles from one corner: an n-sided polygon makes (n − 2) triangles.",
+        "Each triangle is 180°, so the interior angles add up to (n − 2) × 180°." ] },
+      { k: "eg", h: "Sum of the interior angles of an octagon", lines: [
+        "An octagon has n = 8 sides",
+        "Sum = (n − 2) × 180°",
+        "= (8 − 2) × 180",
+        "= 6 × 180",
+        "= 1080°" ] },
+      { k: "write", q: "Find the sum of the interior angles of a hexagon (6 sides), in degrees", a: "720", tips: ["(n − 2) × 180 with n = 6", "4 × 180"] },
+      { k: "teach", h: "Each angle of a REGULAR polygon", b: [
+        "Regular = all sides and all angles equal.",
+        "Find the total with (n − 2) × 180°, then divide by n to get one angle." ] },
+      { k: "write", q: "Find the size of each interior angle of a regular pentagon (5 sides), in degrees", a: "108", tips: ["Sum = (5 − 2) × 180 = 540", "540 ÷ 5"] },
+      { k: "teach", h: "Exterior angles", b: [
+        "An exterior angle is the turn you make at a corner walking round the polygon.",
+        "For ANY polygon the exterior angles add up to 360°. For a regular one, each = 360 ÷ n." ] },
+      { k: "write", q: "Find the size of each exterior angle of a regular octagon (8 sides), in degrees", a: "45", tips: ["Exterior angles total 360°", "360 ÷ 8"] },
+      { k: "teach", h: "Working out the number of sides", b: [
+        "Given the interior sum:  (n − 2) × 180 = sum,  so  n = sum ÷ 180 + 2.",
+        "Given each exterior angle:  n = 360 ÷ (exterior angle).",
+        "Given each interior angle:  first do  exterior = 180 − interior,  then  n = 360 ÷ exterior." ] },
+      { k: "eg", h: "Each interior angle is 150°. How many sides?", lines: [
+        "Exterior angle = 180 − 150 = 30°",
+        "Number of sides = 360 ÷ exterior",
+        "= 360 ÷ 30",
+        "= 12 sides" ] },
+      { k: "write", q: "The interior angles of a polygon add up to 1440°. How many sides does it have?", a: "10", tips: ["(n − 2) × 180 = 1440", "1440 ÷ 180 = 8, then + 2"] },
+      { k: "write", q: "Each exterior angle of a regular polygon is 40°. How many sides?", a: "9", tips: ["n = 360 ÷ (each exterior angle)", "360 ÷ 40"] },
+    ],
+  },
+
+  kinematics: {
+    title: "Speed, distance, time and acceleration",
+    blurb: "The speed triangle and the v = u + at rules.",
+    cards: [
+      { k: "teach", h: "The speed triangle", b: [
+        "Speed = distance ÷ time.  Rearranged:  distance = speed × time,  time = distance ÷ speed.",
+        "Cover the one you want in the triangle  D over (S · T)  to see the formula." ] },
+      { k: "write", q: "An object travels 132 km in 4 hours. Find the average speed in km/h", a: "33", tips: ["Speed = distance ÷ time", "132 ÷ 4"] },
+      { k: "write", q: "An object travels at 14 m/s for 7 seconds. Find the distance in m", a: "98", tips: ["Distance = speed × time", "14 × 7"] },
+      { k: "teach", h: "Watch the units", b: [
+        "km/h needs km and hours;  m/s needs metres and seconds.",
+        "45 minutes = 45 ÷ 60 = 0.75 hours before you divide." ] },
+      { k: "eg", h: "A cyclist rides 45 km in 45 minutes. Speed in km/h?", lines: [
+        "The answer is in km/h, so time must be in hours",
+        "45 minutes = 45 ÷ 60 = 0.75 h",
+        "Speed = distance ÷ time",
+        "= 45 ÷ 0.75",
+        "= 60 km/h" ] },
+      { k: "write", q: "An object travels 60 km at 20 km/h. Find the time taken in hours", a: "3", tips: ["Time = distance ÷ speed", "60 ÷ 20"] },
+      { k: "teach", h: "Acceleration:  v = u + at", b: [
+        "u = starting speed, v = final speed, a = acceleration, t = time.",
+        "Final speed:  v = u + a t.   Acceleration:  a = (v − u) ÷ t.   Time:  t = (v − u) ÷ a." ] },
+      { k: "eg", h: "Starts at 4 m/s, accelerates at 1 m/s² for 6 s. Final speed?", lines: [
+        "v = u + a t",
+        "= 4 + (1)(6)",
+        "= 4 + 6",
+        "= 10 m/s" ] },
+      { k: "write", q: "A vehicle speeds up from 5 m/s to 14 m/s in 3 s. Find the acceleration in m/s²", a: "3", tips: ["a = (v − u) ÷ t", "(14 − 5) ÷ 3"] },
+      { k: "write", q: "A vehicle starts at 2 m/s and accelerates at 4 m/s² for 5 s. Find the final speed in m/s", a: "22", tips: ["v = u + a t", "2 + 4 × 5"] },
+    ],
+    quizFilter: (q) => !/graph/i.test(q.prompt),
+  },
+
+  coordgeo: {
+    title: "Straight-line graphs",
+    blurb: "Gradient, y = mx + c, distance, and perpendicular lines.",
+    cards: [
+      { k: "teach", h: "Gradient between two points", b: [
+        "Gradient m = change in y ÷ change in x = (y₂ − y₁) ÷ (x₂ − x₁).",
+        "It's how steep the line is — positive slopes up, negative slopes down." ] },
+      { k: "eg", h: "Gradient of the line through (1, −5) and (2, −6)", lines: [
+        "m = (y₂ − y₁) ÷ (x₂ − x₁)",
+        "= (−6 − (−5)) ÷ (2 − 1)",
+        "= −1 ÷ 1",
+        "= −1" ] },
+      { k: "write", q: "Find the gradient of the line joining (2, 1) and (5, 7)", a: "2", tips: ["(7 − 1) ÷ (5 − 2)", "6 ÷ 3"] },
+      { k: "teach", h: "y = mx + c", b: [
+        "m is the gradient, c is where the line crosses the y-axis (the y-intercept).",
+        "To read them off an equation like 4y = x + 4, first make y the subject: divide everything by 4 → y = ¼x + 1, so m = ¼ and c = 1." ] },
+      { k: "write", q: "The line  3y = 6x − 12.  Find the gradient.", a: "2", mode: "any", tips: ["Divide every term by 3 → y = 2x − 4", "The number in front of x"] },
+      { k: "write", q: "The line  2y = 4x + 10.  Find the y-intercept.", a: "5", tips: ["Divide by 2 → y = 2x + 5", "c is the number on its own"] },
+      { k: "teach", h: "Equation of a line through two points", b: [
+        "Find the gradient m first. Then put one point into y = mx + c to find c.",
+        "Through (6, −27) and (4, −19):  m = (−19 − (−27)) ÷ (4 − 6) = 8 ÷ −2 = −4." ] },
+      { k: "eg", h: "…continued: line through (6, −27), gradient −4", lines: [
+        "y = −4x + c",
+        "Substitute (6, −27):  −27 = −4(6) + c",
+        "−27 = −24 + c",
+        "c = −3",
+        "y = −4x − 3" ] },
+      { k: "write", q: "Find the equation of the line through (0, 2) with gradient 3.  Give it as  y = ...", a: "y = 3x + 2", mode: "any", tips: ["m = 3, and it crosses the y-axis at 2", "y = 3x + c with c = 2"] },
+      { k: "teach", h: "Length of a segment", b: [
+        "Use Pythagoras on the x-gap and the y-gap:  length = √( (x₂ − x₁)² + (y₂ − y₁)² ).",
+        "Leave it as a surd unless it works out exactly." ] },
+      { k: "write", q: "Find the length of the segment joining (0, 0) and (3, 4)", a: "5", tips: ["√(3² + 4²)", "√(9 + 16) = √25"] },
+      { k: "teach", h: "Perpendicular lines", b: [
+        "Perpendicular gradients multiply to −1. So flip the fraction and change the sign.",
+        "Gradient 2 → perpendicular gradient −½.   Gradient −3 → perpendicular gradient ⅓." ] },
+      { k: "write", q: "A line has gradient −4. Find the gradient of any line perpendicular to it.", a: "1/4", mode: "any", tips: ["−1 ÷ (−4)", "Flip −4/1 and change sign → 1/4"] },
+    ],
+  },
+
+  vectors: {
+    title: "Vector geometry",
+    blurb: "Adding along arrows, reversing direction, and points on a line.",
+    cards: [
+      { k: "teach", h: "Travelling along arrows", b: [
+        "To get from one point to another, add the vectors along a path of arrows.",
+        "If AB = a and BC = b, then AC = AB + BC = a + b." ] },
+      { k: "tap", q: "AB = a and BC = b.  What is AC?", opts: ["a + b", "a − b", "b − a"], a: 0, tip: "Travel A → B → C:  AB + BC = a + b." },
+      { k: "teach", h: "Reversing a vector", b: [
+        "Going backwards flips the sign:  BA = −AB.",
+        "So if AB = a, then BA = −a." ] },
+      { k: "eg", h: "OA = a and OB = b.  Find AB.", lines: [
+        "Path from A to B:  A → O → B",
+        "AB = AO + OB",
+        "AO is the reverse of OA, so AO = −a",
+        "AB = −a + b",
+        "AB = b − a" ] },
+      { k: "tap", q: "OA = a and OB = b.  What is BA?", opts: ["a + b", "a − b", "b − a"], a: 1, tip: "B → O → A:  BO + OA = −b + a = a − b." },
+      { k: "tap", q: "AB = a and AC = b.  What is BC?", opts: ["a + b", "a − b", "b − a"], a: 2, tip: "B → A → C:  BA + AC = −a + b = b − a." },
+      { k: "teach", h: "Parallelograms", b: [
+        "In parallelogram ABCD, opposite sides are equal vectors:  DC = AB  and  BC = AD.",
+        "A diagonal like AC = AB + BC = AB + AD." ] },
+      { k: "tap", q: "ABCD is a parallelogram with AB = a and AD = b.  What is AC?", opts: ["a + b", "a − b", "2a"], a: 0, tip: "AC = AB + BC, and BC = AD = b, so AC = a + b." },
+      { k: "teach", h: "A point that splits a line", b: [
+        "If M is the midpoint of AB, then AM = ½ AB.",
+        "If AM : MB = 1 : 3, then AM is 1 out of 4 parts, so AM = ¼ AB.  And AB = b − a when OA = a, OB = b." ] },
+      { k: "eg", h: "M is the midpoint of AB.  OA = a, OB = b.  Find OM.", lines: [
+        "AB = b − a",
+        "AM = ½ AB = ½(b − a)",
+        "OM = OA + AM",
+        "= a + ½(b − a)",
+        "OM = ½a + ½b" ] },
+      { k: "tap", q: "M is the midpoint of AB, OA = a, OB = b.  What is AM?", opts: ["½(b − a)", "½(a + b)", "b − a"], a: 0, tip: "AM = ½ of AB, and AB = b − a." },
+    ],
+  },
+
+  similarity: {
+    title: "Similar shapes and area",
+    blurb: "How area scales when a shape is enlarged.",
+    cards: [
+      { k: "teach", h: "Similar shapes", b: [
+        "Similar shapes are the same shape, different size — every length is multiplied by the same number.",
+        "That number is the length scale factor:  bigger length ÷ smaller length." ] },
+      { k: "tap", q: "One triangle has a side of 5 cm, the similar bigger one has the matching side 15 cm. Length scale factor?", opts: ["3", "10", "1/3"], a: 0, tip: "15 ÷ 5 = 3." },
+      { k: "teach", h: "Area scales by the SQUARE", b: [
+        "If lengths are ×k, then areas are ×k².",
+        "Length scale factor 2 → area scale factor 2² = 4.  Length ×3 → area ×9." ] },
+      { k: "eg", h: "Sides 5 cm and 10 cm; smaller area 8 cm². Larger area?", lines: [
+        "Length scale factor = 10 ÷ 5 = 2",
+        "Area scale factor = 2² = 4",
+        "Larger area = smaller area × 4",
+        "= 8 × 4",
+        "= 32 cm²" ] },
+      { k: "write", q: "Two similar triangles have matching sides 4 cm and 8 cm. The smaller has area 15 cm². Find the area of the larger, in cm².", a: "60", tips: ["Length scale factor = 8 ÷ 4 = 2", "Area scale factor = 2² = 4, then 15 × 4"] },
+      { k: "write", q: "Two similar triangles have matching sides 6 cm and 24 cm. The smaller has area 9 cm². Find the area of the larger, in cm².", a: "144", tips: ["Length scale factor = 24 ÷ 6 = 4", "Area scale factor = 4² = 16, then 9 × 16"] },
+      { k: "teach", h: "Going the other way", b: [
+        "To shrink, divide by the area scale factor.",
+        "And volumes scale by the cube:  length ×k → volume ×k³." ] },
+      { k: "write", q: "Two similar shapes have matching sides 3 cm and 9 cm. The smaller has area 5 cm². Find the area of the larger, in cm².", a: "45", tips: ["Length scale factor = 9 ÷ 3 = 3", "Area scale factor = 3² = 9, then 5 × 9"] },
+    ],
+  },
 };
 const LESSON_IDS = Object.keys(LESSONS);
 const LESSON_XP = 40;
