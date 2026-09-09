@@ -5785,6 +5785,221 @@ const LESSONS = {
       { k: "write", q: "y is inversely proportional to x².  When x = 2, y = 5.  Find k.", a: "20", tips: ["y = k ÷ x², so k = y × x²", "5 × 2² = 5 × 4"] },
     ],
   },
+
+  time: {
+    title: "Time calculations",
+    blurb: "Journey lengths, start and finish times, minutes and hours.",
+    cards: [
+      { k: "teach", h: "60, not 100", b: [
+        "An hour has 60 minutes, so time doesn't add like ordinary numbers.",
+        "3:45 plus 30 minutes is not 3:75 — it rolls over to 4:15." ] },
+      { k: "teach", h: "Split the jump into hours, then minutes", b: [
+        "To go from one time to another, first jump whole hours, then count the extra minutes.",
+        "9:20 → 11:20 is 2 hours. 11:20 → 11:50 is 30 more minutes. Total 2 h 30 min." ] },
+      { k: "eg", h: "How long from 8:40 to 11:15?", lines: [
+        "From 8:40, jump whole hours: 8:40 → 10:40 is 2 h",
+        "Now count on to 11:15",
+        "10:40 → 11:00 is 20 min,  11:00 → 11:15 is 15 min",
+        "20 + 15 = 35 min",
+        "Total = 2 h 35 min" ] },
+      { k: "write", q: "How long from 6:10 to 9:45?  Answer like  3 h 20 min", a: "3 h 35 min", mode: "any", tips: ["6:10 → 9:10 is 3 h", "9:10 → 9:45 is 35 min"] },
+      { k: "teach", h: "Turning a time into minutes", b: [
+        "Hours × 60, then add the leftover minutes.",
+        "2 h 15 min = 2 × 60 + 15 = 135 minutes." ] },
+      { k: "write", q: "How many minutes is 3 h 5 min in total?", a: "185", tips: ["3 × 60 = 180", "180 + 5"] },
+      { k: "eg", h: "It's 4 h 21 min. How many minutes?", lines: [
+        "Hours to minutes:  4 × 60 = 240",
+        "Add the extra minutes:  240 + 21",
+        "= 261 minutes" ] },
+      { k: "teach", h: "Start time + duration → arrival", b: [
+        "Add the hours first, then the minutes. Roll over 60 minutes into the next hour.",
+        "Start 7:54, add 3 h → 10:54, then add 5 min → 10:59." ] },
+      { k: "write", q: "A train leaves at 13:42 and the trip takes 2 h 20 min. What time does it arrive?", a: "16:02", mode: "any", tips: ["13:42 + 2 h = 15:42", "15:42 + 20 min: 42 + 20 = 62 → roll over → 16:02"] },
+      { k: "teach", h: "Arrival − duration → start", b: [
+        "Same idea, backwards. Subtract the hours, then the minutes.",
+        "Arrives 7:12 after 1 h 40 min:  7:12 − 1 h → 6:12,  then − 40 min → 5:32." ] },
+      { k: "write", q: "A bus arrives at 15:05 after a 45-minute trip. When did it leave?", a: "14:20", mode: "any", tips: ["Subtract 45 min from 15:05", "15:05 → 14:05 is 60 min, so add back 15 → 14:20"] },
+      { k: "eg", h: "From 12:40 to 16:34 — how many minutes?", lines: [
+        "Whole hours:  12:40 → 15:40 is 3 h = 180 min",
+        "Then 15:40 → 16:34 is 54 min",
+        "180 + 54 = 234 minutes" ] },
+    ],
+  },
+
+  dailymaths: {
+    title: "Percentages in real life",
+    blurb: "Price rises and falls, working backwards, and simple interest.",
+    cards: [
+      { k: "teach", h: "Find the change, then apply it", b: [
+        "A rise or fall is a percentage of the original amount.",
+        "Work out that amount, then add it on (rise) or take it off (fall)." ] },
+      { k: "eg", h: "A $180 sofa rises 10%. New price?", lines: [
+        "Change = 10% of $180",
+        "10% of 180 = 180 ÷ 10 = $18",
+        "It's a rise, so add:  180 + 18",
+        "New price = $198" ] },
+      { k: "write", q: "A $200 bike falls 15%. What is the new price?  ($)", a: "170", tips: ["15% of 200 = 30", "It falls, so 200 − 30"] },
+      { k: "teach", h: "The multiplier shortcut", b: [
+        "A 10% rise means the new price is 110% of the old = old × 1.1.",
+        "A 25% fall means 75% is left = old × 0.75." ] },
+      { k: "write", q: "A $316 watch falls 25%. New price?  ($)", a: "237", tips: ["75% is left: × 0.75", "316 × 0.75"] },
+      { k: "teach", h: "Working backwards", b: [
+        "If you know the price AFTER the change, you know what percentage it is of the original.",
+        "After a 25% rise the price is 125% of the original. So original = price ÷ 1.25." ] },
+      { k: "eg", h: "After a 25% rise a bill is $195. Original?", lines: [
+        "$195 is 125% of the original",
+        "125% as a decimal is 1.25",
+        "Original = 195 ÷ 1.25",
+        "= $156" ] },
+      { k: "write", q: "After a 25% fall, a laptop costs $156. What was the original price?  ($)", a: "208", tips: ["75% is left, so 156 is 0.75 of the original", "156 ÷ 0.75"] },
+      { k: "teach", h: "Percentage change", b: [
+        "Percentage change =  change ÷ original × 100.",
+        "Price goes 360 → 252: change is 108, so 108 ÷ 360 × 100 = 30% decrease." ] },
+      { k: "write", q: "A jacket's price changes from $80 to $60. Find the percentage decrease.  (%)", a: "25", tips: ["Change = 80 − 60 = 20", "20 ÷ 80 × 100"] },
+      { k: "teach", h: "Simple interest", b: [
+        "Simple interest = P × R × T ÷ 100,  where P is the amount, R the rate per year, T the years.",
+        "The interest is the same every year — it's not added on to earn more." ] },
+      { k: "eg", h: "$300 at 10% simple interest for 4 years", lines: [
+        "Interest = P × R × T ÷ 100",
+        "= 300 × 10 × 4 ÷ 100",
+        "= 12000 ÷ 100",
+        "= $120 interest" ] },
+      { k: "write", q: "$500 is invested at 4% simple interest per year for 3 years. Find the interest earned.  ($)", a: "60", tips: ["500 × 4 × 3 ÷ 100", "6000 ÷ 100"] },
+    ],
+    quizFilter: (q) => !/\bevery \b|\beach (year|hour|day|month)\b/i.test(q.prompt), // drop compound growth/decay — not taught here
+  },
+
+  functions: {
+    title: "Function notation",
+    blurb: "What f(x) means, substituting, and one function inside another.",
+    cards: [
+      { k: "teach", h: "f(x) is a machine", b: [
+        "f(x) = 2x + 3 is a rule: take the input, double it, add 3.",
+        "f(5) means put 5 in:  2 × 5 + 3 = 13." ] },
+      { k: "tap", q: "If f(x) = 3x − 1, what is f(4)?", opts: ["11", "12", "7"], a: 0, tip: "3 × 4 − 1 = 12 − 1 = 11." },
+      { k: "write", q: "f(x) = 5x − 8.   Find f(2).", a: "2", tips: ["5 × 2 − 8", "10 − 8"] },
+      { k: "teach", h: "Careful with negatives and powers", b: [
+        "Replace every x with the number, keeping brackets:  f(x) = x² − 3x + 6,  f(−2) = (−2)² − 3(−2) + 6.",
+        "(−2)² = 4  and  −3 × −2 = +6,  so  4 + 6 + 6 = 16." ] },
+      { k: "eg", h: "f(x) = 2x² + 4x + 1,  find f(2)", lines: [
+        "Substitute x = 2:  2 × (2)² + 4 × 2 + 1",
+        "(2)² = 4,  so  2 × 4 = 8",
+        "4 × 2 = 8",
+        "8 + 8 + 1 = 17" ] },
+      { k: "write", q: "f(x) = x² − 3x + 6.   Find f(−2).", a: "16", tips: ["(−2)² = 4", "−3 × −2 = +6, so 4 + 6 + 6"] },
+      { k: "teach", h: "Composite functions", b: [
+        "gf(x) means: do f first, then feed the result into g. Work from the inside out.",
+        "gf(1): find f(1), then apply g to that answer." ] },
+      { k: "eg", h: "f(x) = 5x − 8,  g(x) = x² + 6.   Find gf(2)", lines: [
+        "Inside first:  f(2) = 5 × 2 − 8 = 2",
+        "Now apply g to 2:  g(2) = (2)² + 6",
+        "= 4 + 6",
+        "= 10" ] },
+      { k: "write", q: "f(x) = 2x − 8,  g(x) = 2x − 2.   Find gf(1).", a: "-14", tips: ["f(1) = 2 × 1 − 8 = −6", "g(−6) = 2 × −6 − 2"] },
+      { k: "teach", h: "Inverse functions", b: [
+        "f⁻¹(x) undoes f. Write y = f(x), swap x and y, then make y the subject.",
+        "f(x) = 3x − 1:  y = 3x − 1 → x = 3y − 1 → 3y = x + 1 → f⁻¹(x) = (x + 1) ÷ 3." ] },
+      { k: "tap", q: "f(x) = 2x + 5. To find f⁻¹(x) you first…", opts: ["Swap x and y, then rearrange for y", "Multiply f(x) by −1", "Square both sides"], a: 0, tip: "Inverse = swap the variables and solve for y." },
+    ],
+    quizFilter: (q) => q.sub !== "inverse",
+  },
+
+  inequalities: {
+    title: "Solving linear inequalities",
+    blurb: "Like solving an equation — with one extra rule.",
+    cards: [
+      { k: "teach", h: "Read the sign", b: [
+        "x > 3 means x is bigger than 3 (not including 3).  x ≤ 3 means x is 3 or less.",
+        "You solve it almost exactly like an equation:  get x on its own." ] },
+      { k: "tap", q: "To solve  x + 4 > 10, what do you do?", opts: ["Subtract 4 from both sides", "Divide both sides by 4", "Flip the sign"], a: 0, tip: "Undo “+ 4” by subtracting 4 — the sign stays the same." },
+      { k: "write", q: "Solve   x + 4 > 10", a: "x > 6", mode: "any", tips: ["Subtract 4 from both sides", "10 − 4 = 6"] },
+      { k: "write", q: "Solve   3x ≤ 21", a: "x ≤ 7", mode: "any", tips: ["Divide both sides by 3", "21 ÷ 3"] },
+      { k: "teach", h: "The one extra rule", b: [
+        "If you multiply or divide both sides by a NEGATIVE number, the inequality flips.",
+        "−2x < 6  →  divide by −2  →  x > −3  (the < became >)." ] },
+      { k: "eg", h: "Solve  7 − 4x < 3", lines: [
+        "Get the x-term by itself — subtract 7:",
+        "−4x < 3 − 7",
+        "−4x < −4",
+        "Divide by −4 — the sign flips:",
+        "x > 1" ] },
+      { k: "tap", q: "You divide both sides of an inequality by −5. What happens to the sign?", opts: ["It flips (e.g. < becomes >)", "Nothing changes", "It becomes ="], a: 0, tip: "Dividing or multiplying by a negative flips the inequality." },
+      { k: "write", q: "Solve   −5x + 7 > −4x + 4", a: "x < 3", mode: "any", tips: ["Collect x on the left: −x > −3", "Divide by −1 → flip → x < 3"] },
+      { k: "eg", h: "Solve  2(2x − 2) > 16", lines: [
+        "Expand the bracket:  4x − 4 > 16",
+        "Add 4 to both sides:  4x > 20",
+        "Divide by 4 (positive — no flip):",
+        "x > 5" ] },
+      { k: "write", q: "Solve   2(x + 3) ≥ 16", a: "x ≥ 5", mode: "any", tips: ["Expand: 2x + 6 ≥ 16", "2x ≥ 10, then ÷ 2"] },
+    ],
+    quizFilter: (q) => q.sub === "solve",
+  },
+
+  probability: {
+    title: "Probability",
+    blurb: "One event, two events, with and without replacement.",
+    cards: [
+      { k: "teach", h: "Probability of one event", b: [
+        "P(event) =  number of ways it can happen  ÷  total number of equally likely outcomes.",
+        "A bag of 8 black and 2 green counters:  P(black) = 8 ÷ 10." ] },
+      { k: "write", q: "A bag has 4 red and 5 blue counters. One is taken at random. P(red)?  Give it as a fraction like 4/9", a: "4/9", mode: "any", tips: ["4 red out of 9 total", "P(red) = 4/9"] },
+      { k: "teach", h: "Two events — multiply along the branches", b: [
+        "For “this AND then that”, multiply the two probabilities.",
+        "With replacement, the bag is unchanged for the second pick. Without replacement, it has one fewer." ] },
+      { k: "eg", h: "6 red, 6 blue. Two taken WITHOUT replacement. P(both red)?", lines: [
+        "First red:  6 out of 12  =  6/12",
+        "Now 5 red and 11 left, second red:  5/11",
+        "Multiply:  6/12 × 5/11",
+        "= 30/132" ] },
+      { k: "write", q: "A bag has 4 red and 5 blue. Three taken without replacement. P(all three blue)?  Leave it as a product worked out, like 60/504", a: "60/504", mode: "any", tips: ["5/9 × 4/8 × 3/7", "Numerators: 5 × 4 × 3 = 60. Denominators: 9 × 8 × 7 = 504"] },
+      { k: "teach", h: "Replaced each time", b: [
+        "If the ball is put back, every pick is from the full bag.",
+        "P(odd) from 1–6 is 3/6. Both odd (replaced) = 3/6 × 3/6 = 9/36." ] },
+      { k: "write", q: "A ball numbered 1 to 6 is taken, noted, and replaced, then a second is taken. P(both odd)?  Like 9/36", a: "9/36", mode: "any", tips: ["P(odd) = 3/6 each time", "3/6 × 3/6"] },
+      { k: "teach", h: "One of each — there are two ways", b: [
+        "“One odd and one even” can be odd-then-even OR even-then-odd.",
+        "So P = 2 × P(odd) × P(even)." ] },
+      { k: "teach", h: "Working out the total", b: [
+        "If P(yellow) = 1/5 and there are 5 yellow pegs, then yellow ÷ total = 1/5.",
+        "5 ÷ total = 1/5, so total = 5 × 5 = 25." ] },
+      { k: "write", q: "P(blue peg) = 3/4 and there are 12 blue pegs. How many pegs in total?", a: "16", tips: ["12 ÷ total = 3/4", "total = 12 × 4 ÷ 3"] },
+    ],
+    quizFilter: (q) => !/spinner|dice|die|at least|neither/i.test(q.prompt),
+  },
+
+  statistics: {
+    title: "Averages and range",
+    blurb: "Mean, median, mode and range from a list of numbers.",
+    cards: [
+      { k: "teach", h: "The three averages", b: [
+        "Mean — add them all up, divide by how many there are.",
+        "Median — put them in order, take the middle one.",
+        "Mode — the value that appears most often." ] },
+      { k: "eg", h: "Mean of  19, 8, 20, 10, 5, 22", lines: [
+        "Add them:  19 + 8 + 20 + 10 + 5 + 22 = 84",
+        "Count them:  6 values",
+        "Mean = 84 ÷ 6",
+        "= 14" ] },
+      { k: "write", q: "Find the mean of   4, 9, 5, 6, 6", a: "6", tips: ["Add: 4 + 9 + 5 + 6 + 6 = 30", "30 ÷ 5"] },
+      { k: "teach", h: "Median — order first", b: [
+        "Always sort the list smallest to largest before finding the middle.",
+        "4, 4, 22, 2, 23  →  2, 4, 4, 22, 23  →  middle value is 4." ] },
+      { k: "write", q: "Find the median of   7, 2, 9, 4, 6", a: "6", tips: ["In order: 2, 4, 6, 7, 9", "The middle one"] },
+      { k: "teach", h: "Median of an even list", b: [
+        "With an even number of values there are two in the middle — take their mean (halfway between).",
+        "2, 5, 8, 11  →  middle two are 5 and 8  →  (5 + 8) ÷ 2 = 6.5." ] },
+      { k: "write", q: "Find the median of   3, 8, 10, 15", a: "9", tips: ["Middle two are 8 and 10", "(8 + 10) ÷ 2"] },
+      { k: "teach", h: "Mode", b: [
+        "The mode is just the most common value. There can be none, one, or more than one.",
+        "2, 3, 11, 3, 9, 3  →  3 appears three times, more than anything else  →  mode = 3." ] },
+      { k: "write", q: "Find the mode of   6, 1, 4, 1, 8, 1, 9", a: "1", tips: ["Count how many times each value appears", "1 appears three times"] },
+      { k: "teach", h: "Range", b: [
+        "Range = largest value − smallest value. It measures how spread out the data is.",
+        "10, 10, 24, 27, 17, 13, 8  →  27 − 8 = 19." ] },
+      { k: "write", q: "Find the range of   23, 7, 7, 7, 10", a: "16", tips: ["Largest is 23, smallest is 7", "23 − 7"] },
+    ],
+    quizFilter: (q) => !/cumulative frequency|graph|histogram|stem|box/i.test(q.prompt),
+  },
 };
 const LESSON_IDS = Object.keys(LESSONS);
 const LESSON_XP = 40;
