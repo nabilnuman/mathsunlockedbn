@@ -6484,6 +6484,53 @@ const WRITE_LV = 3;
 const CALC_LV = 4;
 const SHIELD_LEVELS = [6, 13]; // levels that grant a Streak Shield
 
+// Calculator colour schemes. The calculator itself unlocks at CALC_LV;
+// "classic" is the free default, the rest are level-gated re-skins.
+// Every key/behaviour is identical — only the palette `P` changes.
+// Palette keys: body (case), face (bezel/borders), screen (LCD), ink
+// (LCD text + caret), key/keyInk (digits), fn/fnInk (function + arrows),
+// op/opInk (+ − × ÷), eq (=), del (DEL/RESET/X), delInk (their text),
+// titleInk ("CLASSIC" label), errInk (error text).
+export const CALC_SKINS = {
+  classic: {
+    name: "Classic", lv: CALC_LV,
+    P: { body: "#3b3b45", face: "#141414", screen: "#c4d1a3", ink: "#1b2410",
+      key: "#f2f2f2", keyInk: "#141414", fn: "#5b5b70", fnInk: "#f4f4f4",
+      op: "#eea748", opInk: "#141414", eq: "#78c86f", del: "#d25a5a",
+      delInk: "#ffffff", titleInk: "#e9e9e9", errInk: "#8a3b1e" },
+  },
+  rose: {
+    name: "Rosé", lv: 8,
+    P: { body: "#d7b3bf", face: "#6f4a55", screen: "#e7e8de", ink: "#38282e",
+      key: "#f6ecef", keyInk: "#4a343c", fn: "#c49aa7", fnInk: "#3c262c",
+      op: "#c9899b", opInk: "#3a2126", eq: "#7fbf9a", del: "#efe4d7",
+      delInk: "#6f4a55", titleInk: "#5c3a45", errInk: "#9a3b4e" },
+  },
+  arctic: {
+    name: "Arctic", lv: 12,
+    P: { body: "#eef0f2", face: "#b6bcc5", screen: "#cdd7c6", ink: "#20261c",
+      key: "#dfe3e8", keyInk: "#1c2530", fn: "#eceef1", fnInk: "#2b2f36",
+      op: "#c6ccd4", opInk: "#1c1c1c", eq: "#8cc63f", del: "#8cc63f",
+      delInk: "#ffffff", titleInk: "#3a4048", errInk: "#b0472a" },
+  },
+  midnight: {
+    name: "Midnight", lv: 16,
+    P: { body: "#2c3a52", face: "#0e1620", screen: "#aab4ac", ink: "#1a2216",
+      key: "#565f70", keyInk: "#f4f4f4", fn: "#3c4a63", fnInk: "#e6e9ef",
+      op: "#7c8698", opInk: "#12161c", eq: "#5bb469", del: "#cf4230",
+      delInk: "#ffffff", titleInk: "#dfe3ea", errInk: "#e08a5a" },
+  },
+  royal: {
+    name: "Royal", lv: 20,
+    P: { body: "#f7e017", face: "#111111", screen: "#f4f4ec", ink: "#1c1c1c",
+      key: "#f5f5f2", keyInk: "#141414", fn: "#1b1b1b", fnInk: "#f4f4f4",
+      op: "#111111", opInk: "#f7e017", eq: "#cf1126", del: "#cf1126",
+      delInk: "#ffffff", titleInk: "#1c1c1c", errInk: "#7a1420" },
+  },
+};
+const CALC_SKIN_IDS = Object.keys(CALC_SKINS);
+const calcSkinOf = (p) => CALC_SKINS[(p && p.calcSkin)] || CALC_SKINS.classic;
+
 const avatarLevel = (id) => AVATAR_LV[id] || 1;
 const frameLevel = (id) => FRAME_LV[id] || 1;
 const bannerSlots = (lv) => (lv < 2 ? 0 : lv < 8 ? 1 : lv < 12 ? 2 : lv < 16 ? 3 : lv < 20 ? 4 : 5);
@@ -6501,6 +6548,7 @@ function unlocksAtLevel(L) {
   if (L === SKETCH_LV) out.push("Rough-working pad");
   if (L === WRITE_LV) out.push("Handwriting input");
   if (L === CALC_LV) out.push("Calculator");
+  Object.values(CALC_SKINS).forEach((s) => { if (s.lv === L && s.name !== "Classic") out.push(`${s.name} calculator skin`); });
   Object.values(PERKS).forEach((p) => { if (p.lv === L) out.push(`Perk · ${p.name}`); });
   if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
   if (L % 5 === 0) out.push("🗝 Skeleton Key");
@@ -6915,6 +6963,35 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
         })}
       </div>
 
+      {level >= CALC_LV && (<>
+        <Head>Calculator skin</Head>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {CALC_SKIN_IDS.map((id) => {
+            const sk = CALC_SKINS[id];
+            const locked = level < sk.lv;
+            const on = (profile.calcSkin || "classic") === id;
+            return (
+              <div key={id} style={{ width: 66 }}>
+                <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ calcSkin: id }))} style={{
+                  width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 5,
+                  border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: sk.P.body,
+                  display: "flex", flexDirection: "column", gap: 3,
+                  filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
+                }}>
+                  <span style={{ height: 12, borderRadius: 2, background: sk.P.screen }} />
+                  <span style={{ display: "flex", gap: 3, flex: 1 }}>
+                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.key }} />
+                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.op }} />
+                    <span style={{ flex: 1, borderRadius: 2, background: sk.P.del }} />
+                  </span>
+                </button>
+                <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? `Lv ${sk.lv}` : sk.name}</div>
+              </div>
+            );
+          })}
+        </div>
+      </>)}
+
       <Head>Title</Head>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <button type="button" style={pill(!profile.title, false)} onClick={() => onChange(() => ({ title: "" }))}>Auto (by level)</button>
@@ -7322,7 +7399,7 @@ const emptyProfile = () => ({
   seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
-  bestTrigStreak: 0, writtenAnswers: 0,
+  bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic",
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -7578,7 +7655,7 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose, sound }) {
+export function Calc({ onClose, sound, skin }) {
   const [st, setSt] = useState({ s: "", c: 0 });     // expression + cursor
   const [ans, setAns] = useState(0);
   const [res, setRes] = useState(null);              // { val, frac } | { text }
@@ -7640,11 +7717,7 @@ export function Calc({ onClose, sound }) {
     setRes({ val: r.value, frac: calcToFrac(r.value) });
   };
 
-  const P = {
-    body: "#3b3b45", face: "#141414", screen: "#c4d1a3", ink: "#1b2410",
-    key: "#f2f2f2", keyInk: "#141414", fn: "#5b5b70", fnInk: "#f4f4f4",
-    op: "#eea748", opInk: "#141414", eq: "#78c86f", del: "#d25a5a",
-  };
+  const P = (skin && skin.P) || CALC_SKINS.classic.P;
   const PXFONT = "'Silkscreen', 'Pixelify Sans', ui-monospace, monospace";
   const kb = (bg, fg, big) => ({
     fontFamily: PXFONT, fontWeight: 400, fontSize: big ? 17 : 13,
@@ -7682,8 +7755,8 @@ export function Calc({ onClose, sound }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.66)", zIndex: 88, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 336, maxHeight: "96vh", overflowY: "auto", background: P.body, border: `3px solid ${P.face}`, borderRadius: 14, boxShadow: "6px 6px 0 rgba(0,0,0,0.45)", padding: 11, fontFamily: PXFONT }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: "#e9e9e9" }}>CLASSIC</span>
-          <button className="mub-px" onClick={onClose} style={{ ...kb(P.del, "#fff"), padding: "5px 10px", fontSize: 11 }}>X</button>
+          <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: P.titleInk }}>CLASSIC</span>
+          <button className="mub-px" onClick={onClose} style={{ ...kb(P.del, P.delInk), padding: "5px 10px", fontSize: 11 }}>X</button>
         </div>
         {/* screen */}
         <div style={{ background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 64, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
@@ -7694,7 +7767,7 @@ export function Calc({ onClose, sound }) {
               <MathText text={right || ""} />
             </>}
           </div>
-          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, color: res && res.text ? "#8a3b1e" : P.ink, textAlign: "right", minHeight: 24 }}>
+          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 24 }}>
             <MathText text={String(resStr)} />
           </div>
         </div>
@@ -7709,8 +7782,8 @@ export function Calc({ onClose, sound }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5, marginBottom: 5 }}>
           {fnGrid.map(([l, f]) => K(l, f, P.fn, P.fnInk))}
           {K("Ans", () => ins("Ans"), P.fn, P.fnInk)}
-          {K("DEL", del, P.del, "#fff")}
-          {K("RESET", ac, P.del, "#fff", { span: 2 })}
+          {K("DEL", del, P.del, P.delInk)}
+          {K("RESET", ac, P.del, P.delInk, { span: 2 })}
         </div>
         {/* keypad */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5 }}>
@@ -13670,7 +13743,7 @@ export default function MathsUnlockedBN() {
 
       {celebration && <CelebrationOverlay key={celebration.key} c={celebration} onDone={() => setCelebration(null)} />}
 
-      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} />}
+      {calcOpen && <Calc onClose={() => setCalcOpen(false)} sound={soundOn} skin={calcSkinOf(profile)} />}
 
       {rankJump && (() => {
         const jt = TOPIC_BY_ID[rankJump.topicId];
