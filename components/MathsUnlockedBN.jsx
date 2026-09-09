@@ -7347,6 +7347,7 @@ function assignmentProgress(profile, a) {
     inRun: run ? (run.done || 0) : 0,
     running: !!run,
     attempts: rec ? (rec.attempts || 0) : 0,
+    log: rec && Array.isArray(rec.log) ? rec.log : null, // best attempt's per-question breakdown
     overdue: a.due_at && Date.now() > new Date(a.due_at).getTime(),
   };
 }
@@ -7540,7 +7541,7 @@ const emptyProfile = () => ({
   calcErrored: false, usedWrite: false, usedSketch: false, usedCalc: false,
   perkProg: {}, // hidden per-perk progress toward the "+" upgrade
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
-  hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
+  hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts, log:[{q,a,given,ok}] (best attempt) }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
   sawRankJump: {}, // sawRankJump[topicId] = highest rank ("S" / "S+") the "move on?" prompt has shown for
 });
@@ -8362,6 +8363,7 @@ export default function MathsUnlockedBN() {
   const [openSchool, setOpenSchool] = useState(null); // name of the one expanded school on the leaderboard
   const [rosterProfile, setRosterProfile] = useState(null); // a leaderboard student whose full profile is shown in a modal
   const [openAsgId, setOpenAsgId] = useState(null); // teacher: assignment whose submission breakdown is expanded
+  const [openHwStudent, setOpenHwStudent] = useState(null); // teacher: "<assignmentId>:<uid>" whose per-question answers are shown
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResults, setFriendResults] = useState(null); // null = not searched yet
   const [friendLoading, setFriendLoading] = useState(false);
@@ -9803,7 +9805,7 @@ export default function MathsUnlockedBN() {
     if (!isUnlocked(topic, profile)) { flash("That topic isn't unlocked yet — practise its prerequisites first."); return; }
     const run = (profile.hwRun && profile.hwRun.assignmentId === a.id)
       ? profile.hwRun
-      : { assignmentId: a.id, topicId: a.topic_id, count: a.count, subs: a.subs || [], done: 0, correct: 0 };
+      : { assignmentId: a.id, topicId: a.topic_id, count: a.count, subs: a.subs || [], done: 0, correct: 0, log: [] };
     patchProfile(() => ({ hwRun: run }));
     startTopic(topic, true);
   }
@@ -10190,14 +10192,27 @@ export default function MathsUnlockedBN() {
     if (run && (question.topicId || activeTopic.id) === run.topicId) {
       const done = (run.done || 0) + 1;
       const gotRight = (run.correct || 0) + (correct ? 1 : 0);
+      // Record what the student answered on this question (for the teacher view).
+      let given = typed;
+      if ((given == null || given === "") && multiInput && Object.keys(multiInput).length) given = Object.values(multiInput).filter((v) => v != null && v !== "").join(", ");
+      const entry = {
+        q: String(question.prompt || "").slice(0, 200),
+        a: String(question.answerDisplay ?? question.answer ?? "").slice(0, 60),
+        given: String(given == null || given === "" ? "—" : given).slice(0, 80),
+        ok: !!correct,
+      };
+      const log = [...(run.log || []), entry];
       if (done >= run.count) {
-        const prev = (next.hw && next.hw[run.assignmentId] && next.hw[run.assignmentId].best);
+        const prevRec = (next.hw && next.hw[run.assignmentId]) || {};
+        const prev = typeof prevRec.best === "number" ? prevRec.best : null;
         const best = Math.max(prev ?? -1, gotRight);
-        next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: ((next.hw && next.hw[run.assignmentId] && next.hw[run.assignmentId].attempts) || 0) + 1 } };
+        // Keep the question-by-question breakdown of the best attempt.
+        const keepLog = prev == null || gotRight >= prev ? log : prevRec.log || null;
+        next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: (prevRec.attempts || 0) + 1, log: keepLog } };
         next.hwRun = null;
         hwComplete = { assignmentId: run.assignmentId, topicId: run.topicId, count: run.count, score: gotRight, best, improved: gotRight > (prev ?? -1), first: prev === undefined || prev === null };
       } else {
-        next.hwRun = { ...run, done, correct: gotRight };
+        next.hwRun = { ...run, done, correct: gotRight, log };
       }
     }
 
@@ -12583,12 +12598,36 @@ export default function MathsUnlockedBN() {
                         ].map(([label, list, col, fmt]) => list.length > 0 && (
                           <div key={label} style={{ marginBottom: 6 }}>
                             <div style={{ fontSize: 10.5, fontWeight: 700, color: col, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>{label} · {list.length}</div>
-                            {list.map(({ s, p }) => (
-                              <div key={s.uid} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "3px 0" }}>
-                                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name || "—"}</span>
-                                <span style={{ color: "var(--muted)", flexShrink: 0 }}>{fmt(p)}</span>
-                              </div>
-                            ))}
+                            {list.map(({ s, p }) => {
+                              const key = `${a.id}:${s.uid}`;
+                              const canOpen = label === "Submitted" && p.log && p.log.length > 0;
+                              const isOpen = openHwStudent === key;
+                              return (
+                                <div key={s.uid}>
+                                  <div onClick={() => canOpen && setOpenHwStudent(isOpen ? null : key)}
+                                    style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "3px 0", cursor: canOpen ? "pointer" : "default" }}>
+                                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: canOpen ? "var(--blue)" : "var(--ink)", fontWeight: canOpen ? 600 : 400 }}>
+                                      {canOpen ? (isOpen ? "▾ " : "▸ ") : ""}{s.name || "—"}
+                                    </span>
+                                    <span style={{ color: "var(--muted)", flexShrink: 0 }}>{fmt(p)}</span>
+                                  </div>
+                                  {isOpen && (
+                                    <div style={{ margin: "2px 0 8px 6px", padding: "7px 9px", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                                      {p.log.map((e, i) => (
+                                        <div key={i} style={{ fontSize: 11, borderLeft: `2px solid ${e.ok ? "var(--green)" : "var(--red)"}`, paddingLeft: 7 }}>
+                                          <div style={{ color: "var(--muted)", marginBottom: 1 }}>{i + 1}. <MathText text={e.q} /></div>
+                                          <div>
+                                            <span style={{ color: e.ok ? "var(--green)" : "var(--red)", fontWeight: 700 }}>{e.ok ? "✓" : "✗"}</span>{" "}
+                                            <MathText text={e.given} />
+                                            {!e.ok && <span style={{ color: "var(--muted)" }}> · correct: <MathText text={e.a} /></span>}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         ))}
                       </div>
