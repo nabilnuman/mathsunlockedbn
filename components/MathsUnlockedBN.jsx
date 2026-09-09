@@ -6500,13 +6500,31 @@ const SOUND_PACKS = {
   bell: { name: "Bell", lv: 19 },
 };
 // Equippable perks (2 slots). Applied in submitAnswer; Momentum also in Blitz.
+// Each perk can be levelled up by using it. `up` is the target for the
+// hidden progress counter (profile.perkProg[id]); once reached the perk
+// switches to `upDesc` and shows a "+" next to its name.
 const PERKS = {
-  compound: { name: "Compound Interest", icon: "📈", lv: 7,  desc: "Longer streaks pay more XP (+1 per 4 in a row, up to +6)" },
-  momentum: { name: "Momentum",          icon: "🔗", lv: 11, desc: "Every 5th correct in a row scores double base XP" },
-  quick:    { name: "Quick Study",        icon: "⚡", lv: 14, desc: "Answer correctly in under 8 seconds for +2 XP" },
-  forgive:  { name: "Error Correction",   icon: "🛟", lv: 18, desc: "Your first slip in each topic each day doesn't break your streak" },
+  compound: { name: "Compound Interest", icon: "📈", lv: 7,
+    desc: "Longer streaks pay more XP (+1 per 4 in a row, up to +6)",
+    up: 50, upHow: "50 correct answers on a 10+ streak (while equipped)",
+    upDesc: "Bigger streak bonus: +1 per 3 in a row, up to +9" },
+  momentum: { name: "Momentum", icon: "🔗", lv: 11,
+    desc: "Every 5th correct in a row scores double base XP",
+    up: 20, upHow: "the streak bonus procs 20 times",
+    upDesc: "Every 4th correct in a row scores double base XP" },
+  quick: { name: "Quick Study", icon: "⚡", lv: 14,
+    desc: "Answer correctly in under 8 seconds for +2 XP",
+    up: 30, upHow: "the speed bonus procs 30 times",
+    upDesc: "Answer correctly in under 10 seconds for +3 XP" },
+  forgive: { name: "Error Correction", icon: "🛟", lv: 18,
+    desc: "Your first slip in each topic each day doesn't break your streak",
+    up: 30, upHow: "a slip is forgiven 30 times",
+    upDesc: "Your first two slips in each topic each day are forgiven" },
 };
 const PERK_IDS = Object.keys(PERKS);
+const perkProgOf = (p, id) => ((p && p.perkProg && p.perkProg[id]) || 0);
+const perkPlus = (p, id) => perkProgOf(p, id) >= (PERKS[id] ? PERKS[id].up : Infinity);
+const perkProgFrac = (p, id) => Math.min(1, PERKS[id] ? perkProgOf(p, id) / PERKS[id].up : 1);
 // A perk is yours for good once earned — and prestige only happens at the
 // level cap, so any prestige means every perk was already unlocked.
 const perkUnlocked = (profile, id) =>
@@ -7496,6 +7514,7 @@ const emptyProfile = () => ({
   bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
   bestRanks: {}, // lifetime best rank per topic — not reset by prestige (Mastery radar)
   calcErrored: false, usedWrite: false, usedSketch: false, usedCalc: false,
+  perkProg: {}, // hidden per-perk progress toward the "+" upgrade
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -9373,7 +9392,12 @@ export default function MathsUnlockedBN() {
     if (sc > 0) {
       const perks = (n.perks || []).filter((p) => PERKS[p]);
       let units = sc;
-      if (perks.includes("momentum")) units += Math.floor(sc / 5); // every 5th doubled
+      if (perks.includes("momentum")) {
+        const nth = perkPlus(n, "momentum") ? 4 : 5;
+        const procs = Math.floor(sc / nth);
+        units += procs; // every nth doubled
+        if (!perkPlus(n, "momentum")) n.perkProg = { ...(n.perkProg || {}), momentum: ((n.perkProg && n.perkProg.momentum) || 0) + procs };
+      }
       const gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
       n.bonusExp = (n.bonusExp || 0) + gain;
       bumpWeek(n, gain);
@@ -9974,11 +9998,18 @@ export default function MathsUnlockedBN() {
     const next = JSON.parse(JSON.stringify(profile));
     const d = ensureDay(next);
     const perks = (profile.perks || []).filter((p) => PERKS[p]);
+    // Perk upgrades: `plus(id)` = already levelled up; `bumpPerk(id)` adds
+    // to the hidden progress counter (only while equipped + not yet maxed).
+    const plus = (id) => perkPlus(profile, id);
+    next.perkProg = { ...(next.perkProg || {}) };
+    const bumpPerk = (id, n = 1) => { if (perks.includes(id) && !plus(id)) next.perkProg[id] = (next.perkProg[id] || 0) + n; };
+    const ecMax = plus("forgive") ? 2 : 1;
+    const forgivenHere = (d.forgiven || []).filter((x) => x === scoredId).length;
 
     // Wrong, holding a Streak Shield, and the Error Correction perk didn't
     // already cover it — pause and offer to spend the shield before the
     // streak breaks. Nothing is committed yet; they retry the same question.
-    const forgiveCovers = perks.includes("forgive") && !(d.forgiven || []).includes(scoredId);
+    const forgiveCovers = perks.includes("forgive") && forgivenHere < ecMax;
     if (!correct && !forgiveCovers && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
       setShieldOffer(true);
       return;
@@ -9989,10 +10020,10 @@ export default function MathsUnlockedBN() {
     d.answered = (d.answered || 0) + 1;
     next.bestDayAnswers = Math.max(next.bestDayAnswers || 0, d.answered);
 
-    // Error Correction perk: the first wrong answer in each topic per day
-    // is forgiven — streak, topic history and consec-wrong stay untouched.
-    const forgiven = !correct && perks.includes("forgive") && !(d.forgiven || []).includes(scoredId);
-    if (forgiven) d.forgiven = [...(d.forgiven || []), scoredId];
+    // Error Correction perk: the first slip (two, once upgraded) in each
+    // topic per day is forgiven — streak / rank history / consec-wrong stay.
+    const forgiven = !correct && perks.includes("forgive") && forgivenHere < ecMax;
+    if (forgiven) { d.forgiven = [...(d.forgiven || []), scoredId]; bumpPerk("forgive"); }
 
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     if (!forgiven) {
@@ -10060,15 +10091,22 @@ export default function MathsUnlockedBN() {
       d.bestStreakToday = Math.max(d.bestStreakToday || 0, d.streakToday);
       if (scoredId === d.weakTopicId) d.weakCorrect = (d.weakCorrect || 0) + 1;
       // XP for a correct answer. Base is doubled by a ×2 Boost and, with
-      // Momentum, on every 5th answer in a row. Compound Interest adds more
-      // the longer the streak; Quick Study rewards a sub-8-second answer.
+      // Momentum, on every Nth answer in a row. Compound Interest adds more
+      // the longer the streak; Quick Study rewards a fast answer. Each perk
+      // has an upgraded ("+") tier — see PERKS.
       const boosted = (profile.boostUntil || 0) > Date.now();
       let base = CORRECT_XP;
-      if (perks.includes("momentum") && (next.streak || 0) % 5 === 0) base *= 2;
+      const momN = plus("momentum") ? 4 : 5;
+      if (perks.includes("momentum") && (next.streak || 0) % momN === 0) { base *= 2; bumpPerk("momentum"); }
       if (boosted) base *= 2;
       let gain = base;
-      if (perks.includes("compound")) gain += Math.min(6, Math.floor((next.streak || 0) / 4));
-      if (perks.includes("quick") && elapsed < 8) gain += 2;
+      if (perks.includes("compound")) {
+        const step = plus("compound") ? 3 : 4, cap = plus("compound") ? 9 : 6;
+        gain += Math.min(cap, Math.floor((next.streak || 0) / step));
+        if ((next.streak || 0) > 10) bumpPerk("compound");
+      }
+      const qsT = plus("quick") ? 10 : 8, qsB = plus("quick") ? 3 : 2;
+      if (perks.includes("quick") && elapsed < qsT) { gain += qsB; bumpPerk("quick"); }
       next.bonusExp = (next.bonusExp || 0) + gain;
     } else if (!forgiven) {
       next.streak = 0;
@@ -10129,12 +10167,14 @@ export default function MathsUnlockedBN() {
     }
 
     const unlocked = awardAchievements(next);
-    const bonusSound = unlocked.length > 0 || leveledTo;
-    if (bonusSound) playJingle(!!leveledTo);
+    // A perk that just hit its upgrade target this answer.
+    const perkUpgraded = perks.find((id) => !plus(id) && (next.perkProg[id] || 0) >= PERKS[id].up) || null;
+    const bonusSound = unlocked.length > 0 || leveledTo || perkUpgraded;
+    if (bonusSound) playJingle(!!leveledTo || !!perkUpgraded);
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge, perkUpgraded });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -12214,6 +12254,12 @@ export default function MathsUnlockedBN() {
                       </div>
                     </div>
                   )}
+                  {feedback.perkUpgraded && PERKS[feedback.perkUpgraded] && (
+                    <div className="mub-stamp" style={{ marginBottom: 10, fontSize: 12, color: "var(--ink)", background: "var(--paper)", border: "1px solid #C99A1E", borderRadius: 8, padding: "9px 12px" }}>
+                      <span style={{ fontWeight: 800, color: "#C99A1E", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>⬆ Perk levelled up</span>
+                      <div style={{ marginTop: 3 }}>{PERKS[feedback.perkUpgraded].icon} <strong>{PERKS[feedback.perkUpgraded].name} +</strong> — {PERKS[feedback.perkUpgraded].upDesc}</div>
+                    </div>
+                  )}
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>
@@ -13310,25 +13356,39 @@ export default function MathsUnlockedBN() {
                 <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Perks</span>
                 <button onClick={() => setPerksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}, and <b style={{ color: "var(--ink)" }}>level up</b> the more you use them. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {PERK_IDS.map((id) => {
                   const p = PERKS[id];
                   const owned = perkUnlocked(profile, id);
                   const on = equipped.includes(id);
                   const full = !on && equipped.length >= 2;
+                  const up = perkPlus(profile, id);
+                  const frac = perkProgFrac(profile, id);
+                  const GOLD = "#C99A1E";
                   return (
                     <button key={id} type="button" disabled={!owned || full} onClick={() => togglePerk(id)} style={{
                       display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 10, cursor: owned && !full ? "pointer" : "default",
-                      background: on ? "var(--paper)" : "transparent",
-                      border: `1.5px solid ${on ? "var(--green)" : "var(--grid)"}`,
+                      background: up && owned ? "color-mix(in srgb, #C99A1E 12%, var(--paper))" : on ? "var(--paper)" : "transparent",
+                      border: `1.5px solid ${up && owned ? GOLD : on ? "var(--green)" : "var(--grid)"}`,
+                      boxShadow: up && owned ? `0 0 0 1px ${GOLD}55, 0 0 10px ${GOLD}33` : "none",
                       opacity: owned ? (full ? 0.55 : 1) : 0.5,
                     }}>
-                      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>{owned ? p.icon : "🔒"}</span>
+                      <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2, ...(up && owned ? { filter: "drop-shadow(0 0 3px rgba(201,154,30,0.8))" } : null) }}>{owned ? p.icon : "🔒"}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</span>
+                        <span style={{ fontWeight: up && owned ? 800 : 700, fontSize: 13, color: up && owned ? GOLD : "var(--ink)" }}>
+                          {p.name}{up && owned ? " +" : ""}
+                        </span>
                         {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · Level {p.lv}</span>}
-                        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{p.desc}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{up && owned ? p.upDesc : p.desc}</div>
+                        {owned && (
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ height: 4, borderRadius: 999, background: "var(--grid)", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${Math.round((up ? 1 : frac) * 100)}%`, background: up ? GOLD : "var(--blue)", borderRadius: 999, transition: "width 0.3s" }} />
+                            </div>
+                            <div style={{ fontSize: 9.5, color: "var(--muted)", marginTop: 3 }}>{up ? "Levelled up" : `Level up: ${p.upHow}`}</div>
+                          </div>
+                        )}
                       </span>
                       <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 800, flexShrink: 0 }}>{on ? "✓" : ""}</span>
                     </button>
