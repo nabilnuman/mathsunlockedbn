@@ -7743,16 +7743,17 @@ export function Calc({ onClose, sound, skin }) {
           <span style={{ fontSize: 13, fontFamily: PXFONT, letterSpacing: 1, color: P.titleInk }}>{calcSkinLabel(skin)}</span>
           <button className="mub-px" onClick={onClose} style={{ ...kb(P.del, P.delInk), padding: "5px 10px", fontSize: 11 }}>X</button>
         </div>
-        {/* screen */}
-        <div style={{ background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 64, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-          <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 20 }}>
+        {/* screen — the two rows keep a fixed reserved height so nothing
+             shifts when the result appears after "=" */}
+        <div style={{ background: P.screen, border: `3px solid ${P.face}`, borderRadius: 8, padding: "8px 9px", minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 22 }}>
             {blank ? <span style={{ opacity: 0.4 }}>0</span> : <>
               <MathText text={left || ""} />
               <span style={{ width: 2, alignSelf: "stretch", minHeight: 17, background: P.ink, animation: "calcCaret 1.1s step-end infinite" }} />
               <MathText text={right || ""} />
             </>}
           </div>
-          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 24 }}>
+          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.3, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 30, display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
             <MathText text={String(resStr)} />
           </div>
         </div>
