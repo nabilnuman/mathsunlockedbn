@@ -6649,7 +6649,7 @@ const NAME_STYLES = {
   ocean:    { name: "Ocean",    prestige: 3, style: { background: "linear-gradient(90deg,var(--blue),#4FC3C7)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   violetite:{ name: "Amethyst", prestige: 5, style: { background: "linear-gradient(90deg,#7C5CFF,#E0567A)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
   ember:    { name: "Ember",    prestige: 8, style: { background: "linear-gradient(90deg,#E0567A,#C99A1E)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
-  arcade:   { name: "Arcade",   prestige: 99, ach: "konami", style: { background: "linear-gradient(90deg,#FF4DE1,#A06BFF,#63EEF7,#B31FC6)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" } },
+  arcade:   { name: "Arcade",   prestige: 99, ach: "konami", style: { color: "#ffffff", WebkitTextStroke: "0.7px #2a0a3a", textShadow: "0 0 7px #B31FC6, 0 0 2px rgba(10,6,20,0.9)" } },
 };
 const NAME_STYLE_IDS = Object.keys(NAME_STYLES);
 const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain).style;
@@ -6693,26 +6693,33 @@ function boardRowSkin(full, mine) {
   const plain = id === "graph" || id === "plain";
   const b = cardBgOf(full || {});
   const dark = !plain && !!b.dark;
+  // Bright "dark-text-flag" gradients (Arcade) need a black wash so the
+  // white name/details stay readable in a small row; keep patterned and
+  // already-dark backgrounds untouched.
+  const painted = plain
+    ? { background: "var(--card)" }
+    : dark && !b.img
+      ? { background: `linear-gradient(rgba(0,0,0,0.34), rgba(0,0,0,0.34)), ${b.bg}` }
+      : cardBgStyle(b);
   return {
     cls: undefined,
     style: {
-      ...(plain ? { background: "var(--card)" } : cardBgStyle(b)),
+      ...painted,
       color: dark ? "#EEF2F6" : "var(--ink)",
       border: `1px solid ${mine ? "var(--blue)" : dark ? "rgba(255,255,255,0.24)" : "var(--grid)"}`,
     },
     dark,
-    sub: dark ? "rgba(255,255,255,0.72)" : "var(--muted)",
+    sub: dark ? "rgba(255,255,255,0.78)" : "var(--muted)",
     you: dark ? "#BFE0FF" : "var(--blue)",
   };
 }
-// A player's name span style for leaderboard rows — their name style,
-// with the underline dropped when it's a gradient (clip would hide it).
-function boardNameStyle(full) {
+// A player's name span style for leaderboard rows. Solid name styles
+// (gold, arcade neon…) keep their look; gradient-clip styles don't
+// survive a small coloured row, so render those as a plain solid name.
+function boardNameStyle(full, dark) {
   const st = nameStyleOf(full);
   if (st.color === "transparent") {
-    // gradient text — drop the underline (clip hides it) and add a dark
-    // halo so it stays legible when the row bg is a similar gradient
-    return { ...st, textDecoration: "none", textShadow: "0 1px 2px rgba(0,0,0,0.55)" };
+    return { color: dark ? "#F4F8FF" : "var(--ink)", textDecoration: "none", textShadow: "0 0 3px rgba(0,0,0,0.45)" };
   }
   return st;
 }
@@ -6772,7 +6779,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
   );
   const nameBlock = (
     <div style={{ minWidth: 0 }}>
-      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty, ...(cardBg.dark ? { textShadow: "0 1px 3px rgba(0,0,0,0.5)" } : null) }}>{profile.name || "Student"}</div>
+      <div className="mub-display" style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", ...nameSty, ...(cardBg.dark && !nameSty.textShadow && nameSty.color !== "transparent" ? { textShadow: "0 0 4px rgba(0,0,0,0.6)" } : null) }}>{profile.name || "Student"}</div>
       <div style={{ fontSize: 12, color: accent, fontWeight: 600, marginTop: 2 }}>
         {title} · Level {level}{prestige > 0 ? ` · Prestige ${prestige}` : ""}
       </div>
@@ -12813,7 +12820,7 @@ export default function MathsUnlockedBN() {
                         <div key={r.uid || i} className={skin.cls} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, ...skin.style }}>
                           <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : skin.sub }}>#{i + 1}</span>
                           <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", ...boardNameStyle(r.full) }}>{r.name}</span>{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", ...boardNameStyle(r.full, skin.dark) }}>{r.name}</span>{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                           </span>
                           <span className="mub-display" style={{ fontWeight: 800, color: skin.dark ? "#BFE0FF" : "var(--blue)" }}>★ {r.best}</span>
                         </div>
@@ -12959,7 +12966,7 @@ export default function MathsUnlockedBN() {
                                     {m.full && <MiniAvatar profile={m.full} size={30} />}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                        <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
+                                        <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                                         {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                                         {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
                                       </div>
@@ -12998,7 +13005,7 @@ export default function MathsUnlockedBN() {
                           {m.full && <MiniAvatar profile={m.full} size={30} />}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                              <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
+                              <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                               {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                               {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                               {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
@@ -13044,7 +13051,7 @@ export default function MathsUnlockedBN() {
                         {m.full && <MiniAvatar profile={m.full} size={30} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full) }}>{m.name}</span>
+                            <span style={{ textDecoration: "underline", textDecorationColor: skin.dark ? "rgba(255,255,255,0.3)" : "var(--grid)", textUnderlineOffset: 2, ...boardNameStyle(m.full, skin.dark) }}>{m.name}</span>
                             {mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                             {m.prestige > 0 && <PrestigeBadge prestige={m.prestige} size={13} />}
                             {rk && <span style={{ fontSize: 10, fontWeight: 800, color: rk.color, border: `1px solid ${rk.color}`, borderRadius: 4, padding: "0 4px" }}>{rk.label}</span>}
