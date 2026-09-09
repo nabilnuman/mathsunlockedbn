@@ -6400,9 +6400,24 @@ function statGroupValue(profile, ids) {
   const sum = ids.reduce((s, id) => s + Math.max(0, Math.min((topics[id] || {}).highestRank ?? -1, maxIdx)), 0);
   return ids.length ? sum / (ids.length * maxIdx) : 0; // 0..1
 }
+// A topic's best rank ever reached — kept in profile.bestRanks, which
+// prestige does NOT wipe (unlike profile.topics). Falls back to the
+// current run so it works before bestRanks has been populated.
+function bestRankOf(profile, id) {
+  const rec = (profile && profile.bestRanks) || {};
+  const cur = ((profile && profile.topics) || {})[id];
+  return Math.max(rec[id] ?? -1, (cur && cur.highestRank) ?? -1);
+}
+// Same shape as statGroupValue but reads the lifetime best — used by the
+// profile-card radar so "Mastery" survives a prestige reset.
+function statGroupBest(profile, ids) {
+  const maxIdx = RANK_ORDER.length - 1;
+  const sum = ids.reduce((s, id) => s + Math.max(0, Math.min(bestRankOf(profile, id), maxIdx)), 0);
+  return ids.length ? sum / (ids.length * maxIdx) : 0;
+}
 function RadarChart({ profile, dark }) {
   const cx = 120, cy = 104, R = 62, labelR = 82;
-  const groups = STAT_GROUPS.map((g) => ({ name: g.name, v: statGroupValue(profile, g.ids) }));
+  const groups = STAT_GROUPS.map((g) => ({ name: g.name, v: statGroupBest(profile, g.ids) }));
   const at = (i, frac) => {
     const a = (-90 + i * 72) * Math.PI / 180;
     return [cx + Math.cos(a) * R * frac, cy + Math.sin(a) * R * frac];
@@ -7457,6 +7472,7 @@ const emptyProfile = () => ({
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
+  bestRanks: {}, // lifetime best rank per topic — not reset by prestige (Mastery radar)
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -9957,6 +9973,8 @@ export default function MathsUnlockedBN() {
     if (t.streak >= STREAK_FOR_S_PLUS) candidateIdx = Math.max(candidateIdx, RANK_ORDER.indexOf("S+"));
     t.highestRank = Math.max(t.highestRank ?? -1, candidateIdx); // ratchet: never decreases
     next.topics[scoredId] = t;
+    // Lifetime best rank — kept across prestige for the Mastery radar.
+    next.bestRanks = { ...(next.bestRanks || {}), [scoredId]: Math.max((next.bestRanks || {})[scoredId] ?? -1, t.highestRank ?? -1) };
     const rankedUp = t.highestRank > rankBefore
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
@@ -10100,6 +10118,10 @@ export default function MathsUnlockedBN() {
     if (!allTopicsRankAtLeast(cur, TOPICS, "C")) return; // must be at least C in every topic
     cur.prestige = (cur.prestige || 0) + 1;
     cur.prestigeAt = [...(cur.prestigeAt || []), Date.now()];
+    // Fold this run's grades into the lifetime best before wiping, so the
+    // Mastery radar keeps whatever peak was reached.
+    cur.bestRanks = cur.bestRanks || {};
+    TOPICS.forEach((tp) => { cur.bestRanks[tp.id] = bestRankOf(cur, tp.id); });
     cur.topics = {};            // grades wiped
     cur.bonusExp = 0;           // level resets to 1 — the invisible XP pool goes too
     cur.streak = 0;
