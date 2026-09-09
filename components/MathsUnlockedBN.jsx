@@ -6504,22 +6504,42 @@ const SOUND_PACKS = {
 // hidden progress counter (profile.perkProg[id]); once reached the perk
 // switches to `upDesc` and shows a "+" next to its name.
 const PERKS = {
+  steadyhand: { name: "Steady Hand", icon: "✍️", lv: 5,
+    desc: "Handwritten answers give +1 XP",
+    up: 25, upHow: "25 correct handwritten answers",
+    upDesc: "Handwritten answers give +2 XP" },
   compound: { name: "Compound Interest", icon: "📈", lv: 7,
     desc: "Longer streaks pay more XP (+1 per 4 in a row, up to +6)",
     up: 50, upHow: "50 correct answers on a 10+ streak (while equipped)",
     upDesc: "Bigger streak bonus: +1 per 3 in a row, up to +9" },
+  resourceful: { name: "Resourceful", icon: "🪙", lv: 9,
+    desc: "Every 15th correct answer grants a Hint coin",
+    up: 20, upHow: "it grants 20 Hint coins",
+    upDesc: "Every 10th correct answer grants a Hint coin" },
   momentum: { name: "Momentum", icon: "🔗", lv: 11,
     desc: "Every 5th correct in a row scores double base XP",
     up: 20, upHow: "the streak bonus procs 20 times",
     upDesc: "Every 4th correct in a row scores double base XP" },
+  specialist: { name: "Specialist", icon: "🎯", lv: 12,
+    desc: "Correct answers in a topic you've taken to rank A give +1 XP",
+    up: 40, upHow: "40 correct answers in an A-rank topic",
+    upDesc: "+2 XP, and from rank B up" },
   quick: { name: "Quick Study", icon: "⚡", lv: 14,
     desc: "Answer correctly in under 8 seconds for +2 XP",
     up: 30, upHow: "the speed bonus procs 30 times",
     upDesc: "Answer correctly in under 10 seconds for +3 XP" },
+  secondwind: { name: "Second Wind", icon: "💨", lv: 16,
+    desc: "Once a day, breaking a streak of 15+ keeps half of it",
+    up: 10, upHow: "it saves a streak 10 times",
+    upDesc: "From a streak of 10+, keeps two-thirds" },
   forgive: { name: "Error Correction", icon: "🛟", lv: 18,
     desc: "Your first slip in each topic each day doesn't break your streak",
     up: 30, upHow: "a slip is forgiven 30 times",
     upDesc: "Your first two slips in each topic each day are forgiven" },
+  marathoner: { name: "Marathoner", icon: "🏃", lv: 19,
+    desc: "Every 25 questions in a day → +15 XP",
+    up: 10, upHow: "the bonus fires 10 times",
+    upDesc: "Every 20 questions in a day → +15 XP" },
 };
 const PERK_IDS = Object.keys(PERKS);
 const perkProgOf = (p, id) => ((p && p.perkProg && p.perkProg[id]) || 0);
@@ -10005,6 +10025,7 @@ export default function MathsUnlockedBN() {
     const bumpPerk = (id, n = 1) => { if (perks.includes(id) && !plus(id)) next.perkProg[id] = (next.perkProg[id] || 0) + n; };
     const ecMax = plus("forgive") ? 2 : 1;
     const forgivenHere = (d.forgiven || []).filter((x) => x === scoredId).length;
+    let secondWindKept = null; // set if Second Wind saved the streak this answer
 
     // Wrong, holding a Streak Shield, and the Error Correction perk didn't
     // already cover it — pause and offer to spend the shield before the
@@ -10019,6 +10040,9 @@ export default function MathsUnlockedBN() {
     // onto the profile so the achievement survives the daily rollover.
     d.answered = (d.answered || 0) + 1;
     next.bestDayAnswers = Math.max(next.bestDayAnswers || 0, d.answered);
+    // Marathoner perk — a flat XP bonus every N questions in a day.
+    const marN = plus("marathoner") ? 20 : 25;
+    if (perks.includes("marathoner") && d.answered % marN === 0) { next.bonusExp = (next.bonusExp || 0) + 15; bumpPerk("marathoner"); }
 
     // Error Correction perk: the first slip (two, once upgraded) in each
     // topic per day is forgiven — streak / rank history / consec-wrong stay.
@@ -10107,11 +10131,25 @@ export default function MathsUnlockedBN() {
       }
       const qsT = plus("quick") ? 10 : 8, qsB = plus("quick") ? 3 : 2;
       if (perks.includes("quick") && elapsed < qsT) { gain += qsB; bumpPerk("quick"); }
+      // Steady Hand — bonus for a handwritten answer.
+      if (perks.includes("steadyhand") && viaWrite) { gain += plus("steadyhand") ? 2 : 1; bumpPerk("steadyhand"); }
+      // Specialist — bonus in a topic already at rank A (rank B once upgraded).
+      const specMin = plus("specialist") ? RANK_ORDER.indexOf("B") : RANK_ORDER.indexOf("A");
+      if (perks.includes("specialist") && rankBefore >= specMin) { gain += plus("specialist") ? 2 : 1; bumpPerk("specialist"); }
       next.bonusExp = (next.bonusExp || 0) + gain;
+      // Resourceful — a Hint coin every Nth correct answer.
+      const resN = plus("resourceful") ? 10 : 15;
+      if (perks.includes("resourceful") && (next.totalCorrect || 0) % resN === 0) { next.hints = (next.hints || 0) + 1; bumpPerk("resourceful"); }
     } else if (!forgiven) {
-      next.streak = 0;
+      // Second Wind — once a day, a broken streak of 15+ (10+ upgraded)
+      // keeps a fraction of itself instead of resetting to zero.
+      const swMin = plus("secondwind") ? 10 : 15;
+      const swKept = perks.includes("secondwind") && !d.secondWindUsed && (profile.streak || 0) >= swMin
+        ? Math.floor((profile.streak || 0) * (plus("secondwind") ? 2 / 3 : 1 / 2))
+        : null;
+      if (swKept != null) { next.streak = swKept; d.streakToday = swKept; d.secondWindUsed = true; bumpPerk("secondwind"); secondWindKept = swKept; }
+      else { next.streak = 0; d.streakToday = 0; }
       next.consecWrong = (next.consecWrong || 0) + 1;
-      d.streakToday = 0;
     }
     const expAfter = totalExp(next);
     const expGain = expAfter - expBefore;
@@ -10174,7 +10212,7 @@ export default function MathsUnlockedBN() {
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge, perkUpgraded });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -11147,7 +11185,7 @@ export default function MathsUnlockedBN() {
                   <button onClick={() => setInventoryOpen(true)} style={{ ...util, color: "var(--blue)" }}>
                     <span style={{ fontSize: 17 }}>🎒</span>Inventory
                   </button>
-                  <button onClick={() => perksOk && setPerksOpen(true)} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS.compound.lv}`}
+                  <button onClick={() => perksOk && setPerksOpen(true)} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS[PERK_IDS[0]].lv}`}
                     style={{ ...util, color: perksOk ? "var(--blue)" : "var(--muted)", opacity: perksOk ? 1 : 0.55, cursor: perksOk ? "pointer" : "default" }}>
                     <span style={{ fontSize: 17 }}>🎖</span>{perksOk ? "Perks" : "Perks 🔒"}
                   </button>
@@ -12258,6 +12296,11 @@ export default function MathsUnlockedBN() {
                     <div className="mub-stamp" style={{ marginBottom: 10, fontSize: 12, color: "var(--ink)", background: "var(--paper)", border: "1px solid #C99A1E", borderRadius: 8, padding: "9px 12px" }}>
                       <span style={{ fontWeight: 800, color: "#C99A1E", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4 }}>⬆ Perk levelled up</span>
                       <div style={{ marginTop: 3 }}>{PERKS[feedback.perkUpgraded].icon} <strong>{PERKS[feedback.perkUpgraded].name} +</strong> — {PERKS[feedback.perkUpgraded].upDesc}</div>
+                    </div>
+                  )}
+                  {feedback.secondWindKept != null && (
+                    <div style={{ marginBottom: 10, fontSize: 12, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--blue)", borderRadius: 8, padding: "9px 12px" }}>
+                      💨 <strong>Second Wind</strong> — streak held at {feedback.secondWindKept}
                     </div>
                   )}
                   {feedback.expGain > 0 && (
