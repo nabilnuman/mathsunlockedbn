@@ -8431,6 +8431,7 @@ export default function MathsUnlockedBN() {
   const [dailyElapsed, setDailyElapsed] = useState(0);
   const [dailyDone, setDailyDone] = useState(null); // seconds once cleared / already played
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
+  const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
@@ -8463,13 +8464,18 @@ export default function MathsUnlockedBN() {
   useEffect(() => { isPushSubscribed().then(setPushOn); }, []); // also on first load, for the dashboard prompt
 
   // Whether today's Daily Challenge is still outstanding (drives the red
-  // dots on Special Modes). Re-checked when landing on the dashboard.
+  // dots on Special Modes). Re-checked on the dashboard, and re-fetched
+  // whenever the Brunei day rolls over so a fresh challenge lights the dot.
+  const dailyCheckDayRef = useRef(null);
   useEffect(() => {
-    if (!ready || !profile.name || dailyDoneToday !== null) return;
+    if (!ready || !profile.name) return;
+    const today = bruneiDayKey();
+    if (dailyDoneToday !== null && dailyCheckDayRef.current === today) return;
+    dailyCheckDayRef.current = today;
     let live = true;
     myDailyResult().then((v) => { if (live) setDailyDoneToday(v == null ? false : v); });
     return () => { live = false; };
-  }, [ready, profile.name, dailyDoneToday]);
+  }, [ready, profile.name, dailyDoneToday, screen]);
 
   // Blitz leaderboard — load once whenever the Blitz screen opens.
   useEffect(() => {
@@ -9230,6 +9236,8 @@ export default function MathsUnlockedBN() {
     setModesOpen(false);
     const key = bruneiDayKey();
     setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
+    setDailyPrevRows(null);
+    dailyBoard(bruneiDayKey(Date.now() - 24 * 3600 * 1000)).then(setDailyPrevRows); // yesterday's board
     setWritePad(false); setSketchOn(false); setSketchStrokes([]);
     setDailyQ(dailyChallenge(key));
     setScreen("daily");
@@ -11682,6 +11690,21 @@ export default function MathsUnlockedBN() {
                   })}
                 </div>
               )}
+
+              {dailyPrevRows && dailyPrevRows.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Yesterday's top 10</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {dailyPrevRows.slice(0, 10).map((r, i) => (
+                      <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 12px", borderRadius: 8, fontSize: 12.5, background: "var(--card)", border: "1px solid var(--grid)", opacity: 0.85 }}>
+                        <span className="mub-display" style={{ fontSize: 13, fontWeight: 700, minWidth: 22, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "Someone"}{r.uid === authUid ? " · you" : ""}</span>
+                        <span className="mub-mono" style={{ fontWeight: 700, color: "var(--muted)" }}>{Number(r.seconds).toFixed(1)}s</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -13045,14 +13068,17 @@ export default function MathsUnlockedBN() {
                     {blitzBoard.map((r, i) => {
                       const mine = r.uid && r.uid === authUid;
                       const skin = boardRowSkin(r.full, mine);
+                      const canOpen = !mine && r.full;
                       return (
-                        <div key={r.uid || i} className={skin.cls} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, ...skin.style }}>
+                        <button key={r.uid || i} type="button" disabled={!canOpen}
+                          onClick={() => { if (canOpen) { setRosterProfile(r.full); markMilestone("friendview"); } }}
+                          className={skin.cls} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: "100%", textAlign: "left", cursor: canOpen ? "pointer" : "default", ...skin.style }}>
                           <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : skin.sub }}>#{i + 1}</span>
                           <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", ...boardNameStyle(r.full, skin.dark) }}>{r.name}</span>{r.prestige > 0 && <PrestigeBadge prestige={r.prestige} size={13} />}{mine ? <span style={{ fontSize: 10, color: skin.you, fontWeight: 700 }}>you</span> : null}
                           </span>
                           <span className="mub-display" style={{ fontWeight: 800, color: skin.dark ? "#BFE0FF" : "var(--blue)" }}>★ {r.best}</span>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
