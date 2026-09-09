@@ -6049,6 +6049,8 @@ const ACHIEVEMENTS = [
     check: (p) => (p.bestDayAnswers || 0) >= 50 },
   { id: "mathexe", tier: "Bronze", name: "Math.exe has crashed", icon: "⛓️‍💥", desc: "Get an error in the calculator",
     check: (p) => !!p.calcErrored },
+  { id: "powerup", tier: "Bronze", name: "Power Up", icon: "⏫️", desc: "Level up a perk",
+    check: (p) => PERK_IDS.some((id) => perkPlus(p, id)) },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
     check: (p) => !!p.gotFriend },
   { id: "konami", tier: "Bronze", name: "Konami Code", icon: "🕹",
@@ -6086,6 +6088,8 @@ const ACHIEVEMENTS = [
     check: (p) => (p.prestige || 0) >= 1 },
   { id: "aura", tier: "Gold", name: "+100 AURA", icon: "🌌", desc: "100 correct answers in a row",
     check: (p) => (p.bestStreak || 0) >= 100 },
+  { id: "perkilicious", tier: "Gold", name: "Perkilicious", icon: "💃", desc: "Level up every perk",
+    check: (p) => PERK_IDS.every((id) => perkPlus(p, id)) },
 
   /* ---------------- Platinum ---------------- */
   { id: "unlocked", tier: "Platinum", name: "Touch Grass", icon: "🏕", desc: "Reach S+ rank in every topic",
@@ -8240,6 +8244,9 @@ export default function MathsUnlockedBN() {
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
   const [hintFree, setHintFree] = useState(false);         // hint auto-given after 3 wrong in a row (no coin spent)
   const [perksOpen, setPerksOpen] = useState(false);       // perk loadout modal
+  const [perkInfoId, setPerkInfoId] = useState(null);      // perk row whose "level up" goal is revealed (hold to show)
+  const perkHoldRef = useRef(null);
+  const perkHeldRef = useRef(false);
   const [stylePickerOpen, setStylePickerOpen] = useState(false); // sound/title/name/card-bg picker
   const [shieldOffer, setShieldOffer] = useState(false);   // wrong answer, offering a Streak Shield
   const [shieldDeclined, setShieldDeclined] = useState(false); // said no to the shield this question
@@ -13392,14 +13399,29 @@ export default function MathsUnlockedBN() {
 
       {perksOpen && (() => {
         const equipped = (profile.perks || []).filter((p) => PERKS[p]);
+        const holdFor = (id) => ({
+          onPointerDown: () => {
+            perkHeldRef.current = false;
+            clearTimeout(perkHoldRef.current);
+            perkHoldRef.current = setTimeout(() => { perkHeldRef.current = true; setPerkInfoId((cur) => (cur === id ? null : id)); }, 320);
+          },
+          onPointerUp: () => clearTimeout(perkHoldRef.current),
+          onPointerLeave: () => clearTimeout(perkHoldRef.current),
+          onPointerCancel: () => clearTimeout(perkHoldRef.current),
+          onClick: () => {
+            clearTimeout(perkHoldRef.current);
+            if (perkHeldRef.current) { perkHeldRef.current = false; return; }
+            togglePerk(id);
+          },
+        });
         return (
-          <div onClick={() => setPerksOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+          <div onClick={() => { setPerksOpen(false); setPerkInfoId(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
             <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                 <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Perks</span>
-                <button onClick={() => setPerksOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+                <button onClick={() => { setPerksOpen(false); setPerkInfoId(null); }} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}, and <b style={{ color: "var(--ink)" }}>level up</b> the more you use them. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}, and <b style={{ color: "var(--ink)" }}>level up</b> the more you use them — hold a perk for its goal. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {PERK_IDS.map((id) => {
                   const p = PERKS[id];
@@ -13410,12 +13432,13 @@ export default function MathsUnlockedBN() {
                   const frac = perkProgFrac(profile, id);
                   const GOLD = "#C99A1E";
                   return (
-                    <button key={id} type="button" disabled={!owned || full} onClick={() => togglePerk(id)} style={{
+                    <button key={id} type="button" disabled={!owned || full} {...holdFor(id)} style={{
                       display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 10, cursor: owned && !full ? "pointer" : "default",
                       background: up && owned ? "color-mix(in srgb, #C99A1E 12%, var(--paper))" : on ? "var(--paper)" : "transparent",
                       border: `1.5px solid ${up && owned ? GOLD : on ? "var(--green)" : "var(--grid)"}`,
                       boxShadow: up && owned ? `0 0 0 1px ${GOLD}55, 0 0 10px ${GOLD}33` : "none",
                       opacity: owned ? (full ? 0.55 : 1) : 0.5,
+                      touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none",
                     }}>
                       <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2, ...(up && owned ? { filter: "drop-shadow(0 0 3px rgba(201,154,30,0.8))" } : null) }}>{owned ? p.icon : "🔒"}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
@@ -13429,7 +13452,9 @@ export default function MathsUnlockedBN() {
                             <div style={{ height: 4, borderRadius: 999, background: "var(--grid)", overflow: "hidden" }}>
                               <div style={{ height: "100%", width: `${Math.round((up ? 1 : frac) * 100)}%`, background: up ? GOLD : "var(--blue)", borderRadius: 999, transition: "width 0.3s" }} />
                             </div>
-                            <div style={{ fontSize: 9.5, color: "var(--muted)", marginTop: 3 }}>{up ? "Levelled up" : `Level up: ${p.upHow}`}</div>
+                            {perkInfoId === id && (
+                              <div style={{ fontSize: 9.5, color: "var(--muted)", marginTop: 3 }}>{up ? "Levelled up" : `Level up: ${p.upHow}`}</div>
+                            )}
                           </div>
                         )}
                       </span>
