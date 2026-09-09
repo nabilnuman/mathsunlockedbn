@@ -6047,6 +6047,8 @@ const ACHIEVEMENTS = [
     check: (p) => (p.playStreak || 0) >= 7 },
   { id: "alldaylong", tier: "Bronze", name: "I Can Do This All Day", icon: "🇺🇸", desc: "Answer 50 questions in one day",
     check: (p) => (p.bestDayAnswers || 0) >= 50 },
+  { id: "mathexe", tier: "Bronze", name: "Math.exe has crashed", icon: "⛓️‍💥", desc: "Get an error in the calculator",
+    check: (p) => !!p.calcErrored },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
     check: (p) => !!p.gotFriend },
   { id: "konami", tier: "Bronze", name: "Konami Code", icon: "🕹",
@@ -6762,6 +6764,11 @@ function SplusBadge({ n }) {
       {n}&nbsp;S+
     </span>
   );
+}
+// "new — never used" red dot for a tool button (absolute; the button
+// must be positioned).
+function NewDot() {
+  return <span aria-hidden="true" style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--card)", boxSizing: "border-box", pointerEvents: "none" }} />;
 }
 // small avatar for leaderboard rows
 function MiniAvatar({ profile, size = 32 }) {
@@ -7488,6 +7495,7 @@ const emptyProfile = () => ({
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
   bestRanks: {}, // lifetime best rank per topic — not reset by prestige (Mastery radar)
+  calcErrored: false, usedWrite: false, usedSketch: false, usedCalc: false,
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -7743,7 +7751,7 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose, sound, skin, onKonami, initial, onPersist }) {
+export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersist }) {
   // `initial` — a snapshot handed back by the parent so the working stays
   // put if you close the calculator and reopen it on the same question.
   const [st, setSt] = useState(() => (initial && initial.st) || { s: "", c: 0 }); // expression + cursor
@@ -7822,7 +7830,7 @@ export function Calc({ onClose, sound, skin, onKonami, initial, onPersist }) {
     koRef.current = "";
     const s = st.s.trim(); if (!s) return;
     const r = calcEval(s, ans);
-    if (r.error) { setRes({ text: r.error }); postEq.current = true; return; }
+    if (r.error) { setRes({ text: r.error }); postEq.current = true; onError && onError(); return; }
     histRef.current = [...histRef.current.filter((x) => x !== s), s].slice(-24);
     setHi(-1); setAns(r.value); setAsFrac(false); postEq.current = true;
     setRes({ val: r.value, frac: calcToFrac(r.value) });
@@ -8222,6 +8230,7 @@ export default function MathsUnlockedBN() {
       calcHoldRef.current = setTimeout(() => {
         calcHeldRef.current = true;
         try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+        markFirstUse("usedCalc");
         setCalcPick(true);
       }, 450);
     },
@@ -8232,6 +8241,7 @@ export default function MathsUnlockedBN() {
     onClick: () => {
       clearTimeout(calcHoldRef.current);
       if (calcHeldRef.current) { calcHeldRef.current = false; return; } // was a long-press
+      markFirstUse("usedCalc");
       setCalcOpen(true);
     },
   };
@@ -10665,6 +10675,19 @@ export default function MathsUnlockedBN() {
   // Level-gated tools (calculator / rough-working / handwriting) stay
   // unlocked after prestige — see hasLevelUnlock.
   const hasTool = (lv) => hasLevelUnlock(profile, lv);
+  // Red "new" dot on a tool button until the first time it's opened.
+  const markFirstUse = (flag) => { if (!profile[flag]) patchProfile(() => ({ [flag]: true })); };
+  const openWrite = () => { markFirstUse("usedWrite"); setWritePad(true); };
+  const toggleSketch = () => { markFirstUse("usedSketch"); setSketchOn((v) => !v); };
+  // "Math.exe has crashed" — first calculator error.
+  const noteCalcError = () => {
+    if (profile.calcErrored) return;
+    const next = JSON.parse(JSON.stringify(profile));
+    next.calcErrored = true;
+    const unlocked = awardAchievements(next);
+    saveProfile(next);
+    if (unlocked.length) playJingle(true);
+  };
   // Admin (a teachers row with admin = true): dev/cheat tools, Admin view,
   // Question bank, the weekly graphic. Plain teacher accounts get only the
   // class tools. Everyone else gets neither.
@@ -11273,8 +11296,8 @@ export default function MathsUnlockedBN() {
                     onKeyDown={(e) => { if (e.key === "Enter") onCheck(); }}
                     placeholder="your answer" autoComplete="off"
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 15, boxSizing: "border-box" }} />
-                  {hasTool(CALC_LV) && <button {...calcBtnHandlers} aria-label="Calculator" title="Calculator — hold to change colour" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}><Calculator size={16} /></button>}
-                  <button onClick={() => setWritePad(true)} aria-label="Write the answer" style={{ flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={16} /></button>
+                  {hasTool(CALC_LV) && <button {...calcBtnHandlers} aria-label="Calculator" title="Calculator — hold to change colour" style={{ position: "relative", flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}>{!profile.usedCalc && <NewDot />}<Calculator size={16} /></button>}
+                  <button onClick={openWrite} aria-label="Write the answer" style={{ position: "relative", flexShrink: 0, padding: "0 12px", border: "1px solid var(--grid)", borderRadius: 8, background: "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center" }}>{!profile.usedWrite && <NewDot />}<Pencil size={16} /></button>
                   <button onClick={onCheck} style={{ flexShrink: 0, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--blue)", color: "var(--on-accent)", fontWeight: 700, cursor: "pointer" }}>Check</button>
                 </div>
               </>
@@ -11495,13 +11518,13 @@ export default function MathsUnlockedBN() {
                         />
                         {hasTool(CALC_LV) && (
                         <button type="button" {...calcBtnHandlers} title="Calculator — hold to change colour"
-                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}>
-                          <Calculator size={16} />
+                          style={{ position: "relative", flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer", touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none" }}>
+                          {!profile.usedCalc && <NewDot />}<Calculator size={16} />
                         </button>
                         )}
-                        <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
-                          style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
-                          <Pencil size={16} />
+                        <button type="button" onClick={openWrite} title="Write the answer by hand"
+                          style={{ position: "relative", flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)", cursor: "pointer" }}>
+                          {!profile.usedWrite && <NewDot />}<Pencil size={16} />
                         </button>
                       </div>
                       {dailyWrong > 0 && <div style={{ fontSize: 12.5, color: "var(--red)", fontWeight: 700, marginBottom: 10 }}>✗ Not quite — keep going ({dailyWrong})</div>}
@@ -11511,10 +11534,10 @@ export default function MathsUnlockedBN() {
                       </button>
                       {hasTool(SKETCH_LV) && (<>
                         <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
-                        <button onClick={() => setSketchOn((v) => !v)} title={sketchOn ? "Hide rough working" : "Rough working"}
+                        <button onClick={toggleSketch} title={sketchOn ? "Hide rough working" : "Rough working"}
                           style={{ position: "absolute", bottom: 8, right: 8, zIndex: 6, width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                             border: `1px solid ${sketchOn ? "var(--blue)" : "var(--grid)"}`, background: sketchOn ? "var(--blue)" : "var(--card)", color: sketchOn ? "var(--on-accent)" : "var(--muted)", cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1 }}>
-                          🗒
+                          {!profile.usedSketch && <NewDot />}🗒
                         </button>
                       </>)}
                     </div>
@@ -12056,10 +12079,10 @@ export default function MathsUnlockedBN() {
                     style={{ flex: 1, minWidth: 0, padding: "10px 12px", fontSize: 15, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box" }}
                   />
                   {!feedback && hasTool(WRITE_LV) && (
-                    <button type="button" onClick={() => setWritePad(true)} title="Write the answer by hand"
+                    <button type="button" onClick={openWrite} title="Write the answer by hand"
                       aria-label="Write the answer by hand"
-                      style={{ flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
-                      <Pencil size={16} />
+                      style={{ position: "relative", flexShrink: 0, alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "0 12px", cursor: "pointer" }}>
+                      {!profile.usedWrite && <NewDot />}<Pencil size={16} />
                     </button>
                   )}
                 </div>
@@ -12259,13 +12282,13 @@ export default function MathsUnlockedBN() {
                     touchAction: "manipulation", WebkitTouchCallout: "none", userSelect: "none",
                   }}
                 >
-                  <Calculator size={16} />
+                  {!profile.usedCalc && <NewDot />}<Calculator size={16} />
                 </button>
               )}
               {hasTool(SKETCH_LV) && (<>
                 <SketchOverlay active={sketchOn} strokes={sketchStrokes} setStrokes={setSketchStrokes} />
                 <button
-                  onClick={() => setSketchOn((v) => !v)}
+                  onClick={toggleSketch}
                   title={sketchOn ? "Hide rough working" : "Rough working"}
                   style={{
                     position: "absolute", bottom: 8, right: 8, zIndex: 6,
@@ -12276,7 +12299,7 @@ export default function MathsUnlockedBN() {
                     cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 15, lineHeight: 1,
                   }}
                 >
-                  🗒
+                  {!profile.usedSketch && <NewDot />}🗒
                 </button>
               </>)}
             </div>
@@ -13997,6 +14020,7 @@ export default function MathsUnlockedBN() {
           sound={soundOn}
           skin={calcSkinOf(profile)}
           onKonami={doKonami}
+          onError={noteCalcError}
           initial={calcSessionRef.current}
           onPersist={(snap) => { calcSessionRef.current = snap; }}
         />
