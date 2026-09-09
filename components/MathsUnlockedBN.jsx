@@ -6045,6 +6045,8 @@ const ACHIEVEMENTS = [
     check: (p) => LESSON_IDS.length > 0 && LESSON_IDS.every((id) => (p.lessons || {})[id] && p.lessons[id].done) },
   { id: "practicemakesperfect", tier: "Bronze", name: "Practice Makes Perfect", icon: "🎰", desc: "Play 7 days in a row",
     check: (p) => (p.playStreak || 0) >= 7 },
+  { id: "alldaylong", tier: "Bronze", name: "I Can Do This All Day", icon: "🇺🇸", desc: "Answer 50 questions in one day",
+    check: (p) => (p.bestDayAnswers || 0) >= 50 },
   { id: "isthisfriends", tier: "Bronze", name: "Is This Friends?", icon: "👬", desc: "Add a friend",
     check: (p) => !!p.gotFriend },
   { id: "konami", tier: "Bronze", name: "Konami Code", icon: "🕹",
@@ -7454,7 +7456,7 @@ const emptyProfile = () => ({
   seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
-  bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false,
+  bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
   hw: {}, hwRun: null, // teacher homework: hw[assignmentId] = { best, attempts }; hwRun = the run in progress
   celebratedGroups: [], // mastery groups whose "all S+" stamp has already played
@@ -9933,6 +9935,11 @@ export default function MathsUnlockedBN() {
       setShieldOffer(true);
       return;
     }
+
+    // Questions answered today — for "I Can Do This All Day". Ratcheted
+    // onto the profile so the achievement survives the daily rollover.
+    d.answered = (d.answered || 0) + 1;
+    next.bestDayAnswers = Math.max(next.bestDayAnswers || 0, d.answered);
 
     // Error Correction perk: the first wrong answer in each topic per day
     // is forgiven — streak, topic history and consec-wrong stay untouched.
