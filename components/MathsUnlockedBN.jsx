@@ -10,7 +10,7 @@ import {
   createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
   getMyTeacher, createClass, myTeacherClasses, updateClass, deleteClass,
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
-  loadAssignments, createAssignment, deleteAssignment, classLicensed,
+  loadAssignments, createAssignment, deleteAssignment, setAssignmentArchived, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
   submitDailyResult, dailyBoard, myDailyResult, adminStudents,
@@ -11029,6 +11029,10 @@ export default function MathsUnlockedBN() {
     await deleteAssignment(id);
     setClassAsg((a) => a.filter((x) => x.id !== id));
   }
+  async function doArchiveAssignment(id, archived) {
+    setClassAsg((a) => a.map((x) => (x.id === id ? { ...x, archived } : x)));
+    await setAssignmentArchived(id, archived);
+  }
   function exportClassCSV() {
     if (!activeClass || !rosterRows.length) return;
     const cols = ["Name", "Level", "Prestige", "Best streak", "Total correct", "Topics started", "Achievements", "Last active"];
@@ -11854,8 +11858,9 @@ export default function MathsUnlockedBN() {
                 borderRadius: 12, padding: "9px 6px", cursor: "pointer", boxShadow: "0 1px 3px var(--shadow-soft)",
               };
               const perksOk = anyPerkUnlocked(profile);
-              const showAsg = assignments.length > 0 || studentClasses.some((c) => !c.archived);
-              const openHw = showAsg && assignments.some((a) => !assignmentProgress(profile, a).complete);
+              const liveAsg = assignments.filter((a) => !a.archived);
+              const showAsg = liveAsg.length > 0 || studentClasses.some((c) => !c.archived);
+              const openHw = showAsg && liveAsg.some((a) => !assignmentProgress(profile, a).complete);
               return (
                 <div style={{ display: "flex", alignItems: "stretch", gap: 8, marginBottom: 12, maxWidth: 460 }}>
                   <button onClick={() => setInventoryOpen(true)} style={{ ...util, color: "var(--blue)" }}>
@@ -11967,11 +11972,11 @@ export default function MathsUnlockedBN() {
                 {c.name}{c.teacher_name ? ` · ${c.teacher_name}` : ""}
               </div>
             ))}
-            {assignments.length === 0 ? (
+            {assignments.filter((a) => !a.archived).length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 14 }}>No homework set yet.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
-                {[...assignments].sort((x, y) => Number(assignmentProgress(profile, x).complete) - Number(assignmentProgress(profile, y).complete)).map((a) => {
+                {[...assignments].filter((a) => !a.archived).sort((x, y) => Number(assignmentProgress(profile, x).complete) - Number(assignmentProgress(profile, y).complete)).map((a) => {
                   const p = assignmentProgress(profile, a);
                   const topic = TOPIC_BY_ID[a.topic_id];
                   const locked = topic && !isUnlocked(topic, profile);
@@ -13183,8 +13188,8 @@ export default function MathsUnlockedBN() {
 
               <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Join code</div>
-                <div className="mub-mono" style={{ fontSize: 30, fontWeight: 800, letterSpacing: 4, margin: "4px 0" }}>{activeClass.join_code}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 6px" }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", margin: "4px 0 8px" }}>
+                  <div className="mub-mono" style={{ fontSize: 30, fontWeight: 800, letterSpacing: 4 }}>{activeClass.join_code}</div>
                   <button
                     onClick={async () => {
                       const link = `${window.location.origin}/?join=${activeClass.join_code}`;
@@ -13206,34 +13211,34 @@ export default function MathsUnlockedBN() {
               </div>
 
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Homework</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-                <input value={asgForm.name} onChange={(e) => setAsgForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name (e.g. Arithmetic 1)" style={{ ...inp, padding: "8px 10px", width: 170 }} />
-                <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value, subs: [] }))} style={{ ...inp, padding: "8px 8px", maxWidth: 160 }}>
-                  {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <input type="number" min={1} max={200} value={asgForm.count} onChange={(e) => setAsgForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 60, padding: "8px 6px" }} />
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>questions, in</span>
-                <input type="number" min={0} max={90} value={asgForm.days} onChange={(e) => setAsgForm((f) => ({ ...f, days: e.target.value }))} style={{ ...inp, width: 52, padding: "8px 6px" }} />
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>days</span>
-                <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1 }}>Set</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                <input value={asgForm.name} onChange={(e) => setAsgForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name (e.g. Arithmetic 1)" style={{ ...inp, padding: "8px 10px", width: "100%", maxWidth: 280, boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={asgForm.topicId} onChange={(e) => setAsgForm((f) => ({ ...f, topicId: e.target.value, subs: [] }))} style={{ ...inp, padding: "8px 8px", maxWidth: 170 }}>
+                    {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  {SUBTOPICS[asgForm.topicId] && (() => {
+                    const list = SUBTOPICS[asgForm.topicId];
+                    const chosen = (asgForm.subs || []).filter((k) => list.some((s) => s.key === k));
+                    const label = chosen.length === 0 ? "General"
+                      : chosen.length === 1 ? list.find((s) => s.key === chosen[0]).name
+                        : `${chosen.length} subtopics`;
+                    return (
+                      <button onClick={() => setSubPickerOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 10px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        🎯 <span style={{ color: "var(--muted)", fontWeight: 500 }}>{label}</span> <span style={{ color: "var(--blue)" }}>change</span>
+                      </button>
+                    );
+                  })()}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <input type="number" min={1} max={200} value={asgForm.count} onChange={(e) => setAsgForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 56, padding: "8px 6px" }} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>questions in</span>
+                  <input type="number" min={0} max={90} value={asgForm.days} onChange={(e) => setAsgForm((f) => ({ ...f, days: e.target.value }))} style={{ ...inp, width: 52, padding: "8px 6px" }} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>days</span>
+                  <button onClick={doCreateAssignment} disabled={asgBusy} style={{ ...prim, opacity: asgBusy ? 0.5 : 1, marginLeft: 4 }}>Set</button>
+                </div>
               </div>
-              {SUBTOPICS[asgForm.topicId] && (() => {
-                const list = SUBTOPICS[asgForm.topicId];
-                const chosen = (asgForm.subs || []).filter((k) => list.some((s) => s.key === k));
-                const label = chosen.length === 0
-                  ? "General — whole topic"
-                  : chosen.length === 1
-                    ? list.find((s) => s.key === chosen[0]).name
-                    : `${chosen.length} subtopics`;
-                return (
-                  <div style={{ marginBottom: 12 }}>
-                    <button onClick={() => setSubPickerOpen(true)} style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "7px 12px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      🎯 Subtopics: <span style={{ color: "var(--muted)", fontWeight: 500 }}>{label}</span> <span style={{ color: "var(--blue)" }}>change</span>
-                    </button>
-                  </div>
-                );
-              })()}
-              {classAsg.map((a) => {
+              {(() => { const renderAsgCard = (a) => {
                 const rows = rosterRows.map((s) => ({ s, p: assignmentProgress(s, a) }));
                 const scores = rows.map((r) => r.p.best).filter((v) => v != null);
                 const done = scores.length;
@@ -13243,11 +13248,12 @@ export default function MathsUnlockedBN() {
                 const started = rows.filter((r) => !r.p.complete && (r.p.running || r.p.attempts > 0));
                 const notStarted = rows.filter((r) => !r.p.complete && !r.p.running && !(r.p.attempts > 0));
                 return (
-                  <div key={a.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5, overflow: "hidden" }}>
+                  <div key={a.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, marginBottom: 6, fontSize: 12.5, overflow: "hidden", opacity: a.archived ? 0.65 : 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px" }}>
                       <button onClick={() => setOpenAsgId(open ? null : a.id)} style={{ minWidth: 0, flex: 1, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--ink)" }}>
                         <strong>{a.title || `${a.count} ${TOPIC_BY_ID[a.topic_id]?.name || a.topic_id} questions`}</strong>
-                        {a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
+                        {a.archived && <span style={{ color: "var(--green)", fontWeight: 700 }}> · ✓ complete</span>}
+                        {!a.archived && a.due_at && <span style={{ color: "var(--muted)" }}> · due {new Date(a.due_at).toLocaleDateString()}</span>}
                         <div style={{ color: "var(--muted)", marginTop: 2 }}>
                           {TOPIC_BY_ID[a.topic_id]?.name}{asgSubLabel(a) ? ` · ${asgSubLabel(a)}` : ""} · {a.count} Qs
                         </div>
@@ -13255,7 +13261,10 @@ export default function MathsUnlockedBN() {
                           {done}/{rosterRows.length} submitted{avg != null ? ` · class average ${avg}/${a.count}` : ""}
                         </div>
                       </button>
-                      <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}>Remove</button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+                        <button onClick={() => doArchiveAssignment(a.id, !a.archived)} style={{ fontSize: 11, fontWeight: 600, color: a.archived ? "var(--blue)" : "var(--green)", background: "none", border: `1px solid ${a.archived ? "var(--blue)" : "var(--green)"}`, borderRadius: 6, padding: "3px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>{a.archived ? "Reopen" : "✓ Mark complete"}</button>
+                        <button onClick={() => doDeleteAssignment(a.id)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                      </div>
                     </div>
                     {open && (
                       <div style={{ borderTop: "1px solid var(--grid)", background: "var(--paper)", padding: "8px 10px" }}>
@@ -13303,7 +13312,17 @@ export default function MathsUnlockedBN() {
                     )}
                   </div>
                 );
-              })}
+              };
+                const active = classAsg.filter((a) => !a.archived);
+                const doneAsg = classAsg.filter((a) => a.archived);
+                return (<>
+                  {active.map(renderAsgCard)}
+                  {doneAsg.length > 0 && (<>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, margin: "12px 0 6px" }}>Marked complete · {doneAsg.length}</div>
+                    {doneAsg.map(renderAsgCard)}
+                  </>)}
+                </>);
+              })()}
               {classAsg.length === 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>No homework set.</div>}
 
               {rosterRows.length > 0 && (<>

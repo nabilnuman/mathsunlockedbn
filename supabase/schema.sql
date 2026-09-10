@@ -351,6 +351,7 @@ create table if not exists assignments (
   created_at timestamptz not null default now()
 );
 alter table assignments add column if not exists subs text[] not null default '{}';
+alter table assignments add column if not exists archived boolean not null default false; -- teacher "mark complete" — hidden from students, kept for history
 alter table assignments enable row level security;
 
 drop policy if exists asg_select on assignments;
