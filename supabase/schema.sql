@@ -82,9 +82,11 @@ create policy kv_shared_write on kv_store for all to authenticated
 --     plus the owner's uid so the app can mark "you".
 --
 --     Teacher accounts are hidden by default (they don't belong on
---     the school or top-players boards). Pass include_teachers =>
---     true for the boards where they ARE allowed (friends, Blitz,
---     Daily); each row carries an `is_teacher` flag either way.
+--     the school or top-players boards) — both activated teachers
+--     (in `teachers`) AND anyone who signed up as a teacher but
+--     hasn't redeemed a code yet (profile.teacherSignup). Pass
+--     include_teachers => true for the boards where they ARE allowed
+--     (friends, Blitz, Daily); each row carries an `is_teacher` flag.
 -- ============================================================
 drop function if exists public.get_leaderboard();
 create or replace function public.get_leaderboard(include_teachers boolean default false)
@@ -96,7 +98,8 @@ set search_path = public
 as $$
   select jsonb_build_object(
            'uid', scope,
-           'is_teacher', scope in (select uid::text from teachers))
+           'is_teacher', scope in (select uid::text from teachers)
+                         or coalesce((value::jsonb ->> 'teacherSignup')::boolean, false))
          || ((value::jsonb) - 'pin' - 'parentToken')
   from kv_store
   where key = 'profile'
@@ -104,7 +107,9 @@ as $$
     and value <> ''
     and (value::jsonb) ? 'name'
     and coalesce((value::jsonb) ->> 'name', '') <> ''
-    and (include_teachers or scope not in (select uid::text from teachers))
+    and (include_teachers or (
+          scope not in (select uid::text from teachers)
+          and coalesce((value::jsonb ->> 'teacherSignup')::boolean, false) = false))
 $$;
 revoke all on function public.get_leaderboard(boolean) from public;
 revoke all on function public.get_leaderboard(boolean) from anon;

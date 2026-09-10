@@ -9940,6 +9940,7 @@ export default function MathsUnlockedBN() {
     setGfx(null);
     let all = [];
     try { all = await getLeaderboard(); } catch (e) { /* offline */ }
+    all = all.filter((m) => m && !m.is_teacher && !m.teacherSignup); // no teachers on the schools graphic
     const stats = weeklySchoolStats(all);
     const activeTotal = stats.reduce((s, r) => s + r.active, 0);
     const top = stats.slice(0, 10);
@@ -11374,7 +11375,7 @@ export default function MathsUnlockedBN() {
     let all = [];
     try { all = await getLeaderboard(); } catch (e) { /* offline */ }
     const out = all
-      .filter((m) => m && m.name && slug(m.name).includes(qs))
+      .filter((m) => m && m.name && !m.is_teacher && !m.teacherSignup && slug(m.name).includes(qs))
       .sort((a, b) => leaderboardScore(b) - leaderboardScore(a) || (a.name || "").localeCompare(b.name || ""))
       .slice(0, 30);
     setFriendResults(out);
@@ -11405,6 +11406,10 @@ export default function MathsUnlockedBN() {
     setBoard({ loading: true, schools: [], weekly: [], players: [] });
     let all = [];
     try { all = await getLeaderboard(); } catch (e) { /* leave all empty */ }
+    // Belt-and-braces: keep teacher accounts (activated OR signed-up-but-
+    // not-yet-licensed) off the School and Top Players boards even if the
+    // server filter hasn't been updated yet.
+    all = all.filter((m) => m && !m.is_teacher && !m.teacherSignup);
 
     const bySchool = {};
     for (const s of all) {
