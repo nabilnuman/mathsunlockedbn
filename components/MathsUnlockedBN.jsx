@@ -11882,7 +11882,7 @@ export default function MathsUnlockedBN() {
               disabled={!nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting}
               style={{ width: "100%", padding: "10px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", opacity: !nameInput.trim() || !/^\d{6}$/.test(pinInput) || starting ? 0.6 : 1 }}
             >
-              {starting ? "Loading…" : "Start / continue"}
+              {starting ? "Loading…" : "Start / Continue"}
             </button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <button onClick={() => { setForgotOpen((o) => !o); setForgotMsg(null); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
@@ -11891,7 +11891,7 @@ export default function MathsUnlockedBN() {
             </div>
             <div style={{ textAlign: "center", marginTop: 10, borderTop: "1px solid var(--grid)", paddingTop: 12 }}>
               <button onClick={() => { setTSignErr(""); setTSignName(""); setTSignPin(""); setTSignEmail(""); setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); }} style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
-                I&rsquo;m a teacher — set up a class →
+                I&rsquo;m a teacher
               </button>
             </div>
             {forgotOpen && (
