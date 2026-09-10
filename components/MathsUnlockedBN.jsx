@@ -8020,6 +8020,7 @@ function lockedReason(topic) {
 --------------------------------------------------------- */
 const DAILY_XP = { showup: 5, task: 40 };  // show-up is deliberately tiny — can't reach Level 2 alone
 const MILESTONE_XP = 50;
+const DAILY_SOLVE_XP = 50;  // for clearing the Daily Challenge (once a day)
 
 function todayKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -9076,6 +9077,7 @@ export default function MathsUnlockedBN() {
   const [dailyInput, setDailyInput] = useState("");
   const [dailyElapsed, setDailyElapsed] = useState(0);
   const [dailyDone, setDailyDone] = useState(null); // seconds once cleared / already played
+  const [dailyXp, setDailyXp] = useState(null);     // { xp, lv } shown on the cleared card for this run
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
   const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
   const [dailyWrong, setDailyWrong] = useState(0);
@@ -9882,7 +9884,7 @@ export default function MathsUnlockedBN() {
     setModesOpen(false);
     const key = bruneiDayKey();
     setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
-    setDailyPrevRows(null);
+    setDailyPrevRows(null); setDailyXp(null);
     dailyBoard(bruneiDayKey(Date.now() - 24 * 3600 * 1000)).then(setDailyPrevRows); // yesterday's board
     setWritePad(false); setSketchOn(false); setSketchStrokes([]);
     setDailyQ(dailyChallenge(key));
@@ -9900,7 +9902,7 @@ export default function MathsUnlockedBN() {
       setDailyStart(0);
       dailyBoard().then(setDailyBoardRows);
       if (!run || run.cleared == null) {
-        patchProfile(() => ({ dailyRun: { day: key, startedAt: (run && run.startedAt) || Date.now(), cleared } }));
+        patchProfile(() => ({ dailyRun: { day: key, startedAt: (run && run.startedAt) || Date.now(), cleared, paid: !!(run && run.paid) } }));
       }
       return;
     }
@@ -9982,7 +9984,21 @@ export default function MathsUnlockedBN() {
     const run = profileRef.current.dailyRun;
     const startedAt = run && run.day === dailyQ.dayKey ? run.startedAt : Date.now();
     const secs = Math.max(0.1, (Date.now() - startedAt) / 1000);
-    patchProfile(() => ({ dailyRun: { day: dailyQ.dayKey, startedAt, cleared: secs } }));
+    // +XP for clearing it — once a day (dailyDone / server PK block a repeat).
+    const alreadyPaid = run && run.day === dailyQ.dayKey && run.paid;
+    const n = JSON.parse(JSON.stringify(profileRef.current));
+    const before = totalExp(n);
+    n.dailyRun = { day: dailyQ.dayKey, startedAt, cleared: secs, paid: true };
+    let dxp = 0, dlv = null;
+    if (!alreadyPaid) {
+      n.bonusExp = (n.bonusExp || 0) + DAILY_SOLVE_XP;
+      bumpWeek(n, DAILY_SOLVE_XP);
+      dxp = DAILY_SOLVE_XP;
+      dlv = creditLevelUps(n, before);
+    }
+    setDailyXp({ xp: dxp, lv: dlv });
+    saveProfile(n);
+    if (dlv) setTimeout(() => playJingle(true), 260);
     setDailyDone(secs);
     setDailyDoneToday(secs);
     setDailyElapsed(secs);
@@ -12258,7 +12274,7 @@ export default function MathsUnlockedBN() {
               {dailyDone == null ? (
                 <>
                   <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", lineHeight: 1.5 }}>
-                    One question — the same for every player today. The clock is running; wrong answers just cost you time.
+                    One question — the same for every player today. The clock is running; wrong answers just cost you time. Solving it earns +{DAILY_SOLVE_XP} XP.
                   </div>
                   {dailyQ && (
                     <div style={{ position: "relative", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, background: "var(--card)", marginBottom: 18, minHeight: sketchOn ? 360 : undefined }}>
@@ -12306,6 +12322,11 @@ export default function MathsUnlockedBN() {
                 <>
                   <div style={{ background: "color-mix(in srgb, var(--green) 10%, var(--card))", border: "1px solid var(--green)", borderRadius: 14, padding: 16, margin: "10px 0 16px" }}>
                     <div className="mub-display" style={{ fontWeight: 800, fontSize: 17 }}>✓ Cleared in {dailyDone.toFixed(1)}s</div>
+                    {dailyXp && dailyXp.xp > 0 && (
+                      <div style={{ fontSize: 12.5, color: "var(--green)", fontWeight: 700, marginTop: 3 }}>
+                        +{dailyXp.xp} XP{dailyXp.lv ? ` · ⭐ Level ${dailyXp.lv}!` : ""}
+                      </div>
+                    )}
                     {myRank >= 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>#{myRank + 1} of {rows.length} today{myRank === 0 ? " — fastest so far 🏆" : ""}</div>}
                   </div>
                   {dailyQ && Array.isArray(dailyQ.steps) && dailyQ.steps.length > 0 && (
@@ -14300,7 +14321,7 @@ export default function MathsUnlockedBN() {
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Challenge</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      One question, same for everyone. Fastest clean solve tops the board.
+                      One question, same for everyone. Fastest clean solve tops the board. +{DAILY_SOLVE_XP} XP.
                     </span>
                   </span>
                 </button>
