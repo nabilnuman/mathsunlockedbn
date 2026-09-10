@@ -8134,6 +8134,80 @@ function dailyChallenge(dayKey) {
   }
 }
 
+/* ---- Mathle — a daily "guess the equation" (Nerdle-style). One
+   8-character equation a day, seeded from the Brunei calendar day;
+   6 guesses, green / present / absent feedback per tile. ADMIN-ONLY
+   for now (Special Modes → Mathle, gated on isAdmin). ------------- */
+const MATHLE_LEN = 8;
+const MATHLE_ROWS = 6;
+const MATHLE_XP = 30;
+const MATHLE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "−", "×", "÷", "="];
+
+// LHS value as a non-negative integer, or null.
+function _mathleLhs(lhs) {
+  const r = calcEval(lhs, 0);
+  if (!r || r.error) return null;
+  const v = r.value;
+  return Number.isFinite(v) && Number.isInteger(v) && v >= 0 ? v : null;
+}
+// Is `eq` a legal Mathle answer/guess? 8 chars, one "=", a plain integer
+// on the right, num (op num)+ on the left with no leading-zero numbers,
+// and the two sides equal.
+function mathleValid(eq) {
+  if (typeof eq !== "string" || eq.length !== MATHLE_LEN) return false;
+  if (!/^[0-9+\-−×÷=]+$/.test(eq)) return false;
+  const parts = eq.split("=");
+  if (parts.length !== 2) return false;
+  const [lhs, rhs] = parts;
+  if (!/^\d+$/.test(rhs) || (rhs.length > 1 && rhs[0] === "0")) return false;
+  const toks = lhs.match(/(\d+|[+\-−×÷])/g);
+  if (!toks || toks.join("") !== lhs) return false;
+  let wantNum = true, ops = 0;
+  for (const t of toks) {
+    const isNum = /^\d+$/.test(t);
+    if (isNum !== wantNum) return false;
+    if (isNum && t.length > 1 && t[0] === "0") return false;
+    if (!isNum) ops++;
+    wantNum = !wantNum;
+  }
+  if (wantNum || ops < 1) return false; // ended on an operator / no operator
+  const v = _mathleLhs(lhs);
+  return v !== null && v === Number(rhs);
+}
+// Per-tile feedback with Wordle-style duplicate handling.
+function mathleScore(guess, answer) {
+  const res = Array(MATHLE_LEN).fill("absent");
+  const left = {};
+  for (const c of answer) left[c] = (left[c] || 0) + 1;
+  for (let i = 0; i < MATHLE_LEN; i++) if (guess[i] === answer[i]) { res[i] = "correct"; left[guess[i]]--; }
+  for (let i = 0; i < MATHLE_LEN; i++) if (res[i] === "absent" && left[guess[i]] > 0) { res[i] = "present"; left[guess[i]]--; }
+  return res;
+}
+function dailyMathle(dayKey) {
+  const rnd = _mulberry32(_hashStr("mub-mathle::" + dayKey));
+  const ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
+  const build = () => {
+    const form = ri(0, 5);
+    if (form === 0) { const a = ri(10, 80), b = ri(10, 99 - a); return `${a}+${b}=${a + b}`; }
+    if (form === 1) { const a = ri(21, 98), b = ri(10, a - 10); return `${a}−${b}=${a - b}`; }
+    if (form === 2) { const a = ri(1, 9), b = ri(1, 9), c = ri(1, 9); return a + b + c >= 10 ? `${a}+${b}+${c}=${a + b + c}` : null; }
+    if (form === 3) {
+      const a = ri(2, 9), b = ri(2, 9);
+      if (rnd() < 0.5) { const c = ri(1, 9), v = a * b + c; return v >= 10 && v <= 99 ? `${a}×${b}+${c}=${v}` : null; }
+      const c = ri(1, 9), v = a * b - c; return v >= 10 && v <= 99 ? `${a}×${b}−${c}=${v}` : null;
+    }
+    if (form === 4) { const c = ri(2, 9), a = ri(Math.max(10, Math.ceil(100 / c)), Math.min(99, Math.floor(999 / c))), v = a * c; return v >= 100 && v <= 999 ? `${a}×${c}=${v}` : null; }
+    const c = ri(2, 9), b = ri(Math.max(10, Math.ceil(100 / c)), Math.min(99, Math.floor(999 / c))), a = b * c;
+    return a >= 100 && a <= 999 ? `${a}÷${c}=${b}` : null;
+  };
+  for (let i = 0; i < 5000; i++) {
+    const eq = build();
+    if (eq && eq.length === MATHLE_LEN && mathleValid(eq)) return eq;
+  }
+  return "12+34=46";
+}
+const MATHLE_EMOJI = { correct: "🟩", present: "🟪", absent: "⬛" };
+
 // Roll the weekly XP bucket over on a new week (stashing last week's total
 // for the "champions" banner), then add this session's gain.
 function bumpWeek(profile, gain) {
@@ -9158,6 +9232,14 @@ export default function MathsUnlockedBN() {
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
   const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
   const [dailyPeople, setDailyPeople] = useState({}); // uid -> full profile, so board names open a profile
+  // Mathle (admin-only daily equation game)
+  const [mathleAns, setMathleAns] = useState("");
+  const [mathleGuesses, setMathleGuesses] = useState([]); // [{ eq, score }]
+  const [mathleInput, setMathleInput] = useState("");
+  const [mathleState, setMathleState] = useState("playing"); // playing | win | lose
+  const [mathleMsg, setMathleMsg] = useState("");
+  const [mathleXp, setMathleXp] = useState(null); // { xp, lv } on a win
+  const [mathleShared, setMathleShared] = useState(false);
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
@@ -9452,7 +9534,7 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (!ready) return;
     const adminOk = teacherActive && teacherAccount && teacherAccount.admin;
-    if (!adminOk && (screen === "admin" || screen === "questions" || screen === "weeklygfx")) {
+    if (!adminOk && (screen === "admin" || screen === "questions" || screen === "weeklygfx" || screen === "mathle")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
     if (!teacherActive && (screen === "classes" || screen === "classDetail")) {
@@ -9467,6 +9549,25 @@ export default function MathsUnlockedBN() {
   }, [teacherMode, teacherAccount, teacherActive, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
 
   useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
+
+  // Mathle — physical keyboard support while the screen is open.
+  useEffect(() => {
+    if (screen !== "mathle") return;
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key;
+      if (k === "Enter") { e.preventDefault(); mathleKey("ENTER"); }
+      else if (k === "Backspace") { e.preventDefault(); mathleKey("DEL"); }
+      else if (/^[0-9]$/.test(k)) mathleKey(k);
+      else if (k === "+") mathleKey("+");
+      else if (k === "-") mathleKey("−");
+      else if (k === "*" || k === "x" || k === "X") mathleKey("×");
+      else if (k === "/") mathleKey("÷");
+      else if (k === "=") mathleKey("=");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, mathleState, mathleInput, mathleGuesses, mathleAns]);
   // Drop the saved calculator working whenever the question changes so it
   // only persists across a close/reopen on the *same* question.
   useEffect(() => { calcSessionRef.current = null; }, [question, dailyQ, lessonQuizQ, screen]);
@@ -10093,6 +10194,80 @@ export default function MathsUnlockedBN() {
     if (board.length && board[0].uid && board[0].uid === authUid) celebrate("daily1");
     setDailyBusy(false);
   }
+
+  // ---- Mathle (admin trial) ----
+  function startMathle() {
+    setModesOpen(false);
+    const day = bruneiDayKey();
+    const ans = dailyMathle(day);
+    setMathleAns(ans);
+    setMathleInput(""); setMathleMsg(""); setMathleShared(false); setMathleXp(null);
+    const run = profile.mathleRun && profile.mathleRun.day === day ? profile.mathleRun : null;
+    if (run) {
+      setMathleGuesses((run.guesses || []).map((eq) => ({ eq, score: mathleScore(eq, ans) })));
+      setMathleState(run.state || "playing");
+    } else {
+      setMathleGuesses([]); setMathleState("playing");
+    }
+    setScreen("mathle");
+  }
+  function mathleKey(k) {
+    if (mathleState !== "playing") return;
+    setMathleMsg("");
+    if (k === "DEL") { setMathleInput((s) => s.slice(0, -1)); return; }
+    if (k === "ENTER") { mathleSubmit(); return; }
+    setMathleInput((s) => (s.length >= MATHLE_LEN ? s : s + k));
+  }
+  function mathleSubmit() {
+    if (mathleState !== "playing") return;
+    const g = mathleInput;
+    if (g.length !== MATHLE_LEN) { setMathleMsg(`Fill all ${MATHLE_LEN} tiles.`); return; }
+    if (!mathleValid(g)) { setMathleMsg("Not a correct equation."); playWrong(); return; }
+    const score = mathleScore(g, mathleAns);
+    const next = [...mathleGuesses, { eq: g, score }];
+    const won = g === mathleAns;
+    const lost = !won && next.length >= MATHLE_ROWS;
+    const state = won ? "win" : lost ? "lose" : "playing";
+    setMathleGuesses(next);
+    setMathleInput("");
+    setMathleState(state);
+    const day = bruneiDayKey();
+    const n = JSON.parse(JSON.stringify(profileRef.current));
+    n.mathleRun = { day, guesses: next.map((x) => x.eq), state };
+    if (state !== "playing" && n.mathleLast !== day) {
+      const yday = bruneiDayKey(Date.now() - 86400000);
+      if (won) {
+        n.mathleStreak = (n.mathleLast === yday ? (n.mathleStreak || 0) : 0) + 1;
+        n.mathleBest = Math.max(n.mathleBest || 0, n.mathleStreak);
+        const before = totalExp(n);
+        n.bonusExp = (n.bonusExp || 0) + MATHLE_XP;
+        bumpWeek(n, MATHLE_XP);
+        const lv = creditLevelUps(n, before);
+        setMathleXp({ xp: MATHLE_XP, lv });
+        if (lv) setTimeout(() => playJingle(true), 300);
+      } else {
+        n.mathleStreak = 0;
+      }
+      n.mathleLast = day;
+    }
+    saveProfile(n);
+    if (won) playJingle(true);
+    else if (lost) playWrong();
+    else playCorrect();
+  }
+  async function shareMathle() {
+    const n = mathleGuesses.length;
+    const head = `Mathle · ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short" })}  ${mathleState === "win" ? n : "X"}/${MATHLE_ROWS}`;
+    const grid = mathleGuesses.map((x) => x.score.map((s) => MATHLE_EMOJI[s]).join("")).join("\n");
+    const streak = profile.mathleStreak ? `\n🔥 ${profile.mathleStreak}` : "";
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    const text = `${head}\n${grid}${streak}\n${url}`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    try { await navigator.clipboard.writeText(text); setMathleShared(true); setTimeout(() => setMathleShared(false), 2000); } catch (e) { /* ignore */ }
+  }
+
   // Challenge a friend: I play first, my questions + score seed the row.
   function startChallenge(friend) {
     if (!friend || !friend.uid) return;
@@ -12751,6 +12926,82 @@ export default function MathsUnlockedBN() {
           );
         })()}
 
+        {/* MATHLE (admin preview) */}
+        {screen === "mathle" && (() => {
+          const done = mathleState !== "playing";
+          const rank = { correct: 3, present: 2, absent: 1 };
+          const keySt = {};
+          for (const gg of mathleGuesses) for (let i = 0; i < MATHLE_LEN; i++) {
+            const c = gg.eq[i], s = gg.score[i];
+            if (!keySt[c] || rank[s] > rank[keySt[c]]) keySt[c] = s;
+          }
+          const tc = (s) => s === "correct" ? { background: "var(--green)", color: "#fff", borderColor: "var(--green)" }
+            : s === "present" ? { background: "#7A5AF8", color: "#fff", borderColor: "#7A5AF8" }
+            : s === "absent" ? { background: "var(--muted)", color: "#fff", borderColor: "var(--muted)" }
+            : { background: "var(--card)", color: "var(--ink)", borderColor: "var(--grid)" };
+          const gridRows = [];
+          for (let r = 0; r < MATHLE_ROWS; r++) {
+            if (r < mathleGuesses.length) gridRows.push({ chars: mathleGuesses[r].eq.split(""), score: mathleGuesses[r].score });
+            else if (r === mathleGuesses.length && !done) gridRows.push({ chars: mathleInput.padEnd(MATHLE_LEN).split("").map((c) => (c === " " ? "" : c)), live: true });
+            else gridRows.push({ chars: Array(MATHLE_LEN).fill("") });
+          }
+          const PX = "'Silkscreen', ui-monospace, monospace";
+          return (
+            <div>
+              <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}><ArrowLeft size={14} /> back</button>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🔢 Mathle</div>
+                <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px" }}>ADMIN PREVIEW</span>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
+              </div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", lineHeight: 1.5 }}>
+                Guess the hidden 8-tile equation in {MATHLE_ROWS} tries. 🟩 right tile · 🟪 in the equation, wrong spot · ⬛ not used. × ÷ are worked out before + −. Solving earns +{MATHLE_XP} XP once a day.
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center", marginBottom: 12 }}>
+                {gridRows.map((row, ri) => (
+                  <div key={ri} style={{ display: "grid", gridTemplateColumns: `repeat(${MATHLE_LEN}, 1fr)`, gap: 5, width: "100%", maxWidth: 344 }}>
+                    {row.chars.map((ch, ci) => {
+                      const s = row.score ? tc(row.score[ci]) : tc(null);
+                      return (
+                        <div key={ci} style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: PX, fontSize: 17, fontWeight: 700, borderRadius: 6, border: `2px solid ${row.live && ch ? "var(--ink)" : s.borderColor}`, background: s.background, color: s.color }}>{ch}</div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              {mathleMsg && <div style={{ textAlign: "center", fontSize: 12.5, fontWeight: 700, color: "var(--red)", marginBottom: 10 }}>{mathleMsg}</div>}
+
+              {done ? (
+                <div style={{ maxWidth: 344, margin: "0 auto", background: mathleState === "win" ? "color-mix(in srgb, var(--green) 10%, var(--card))" : "var(--card)", border: `1px solid ${mathleState === "win" ? "var(--green)" : "var(--grid)"}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+                  <div className="mub-display" style={{ fontWeight: 800, fontSize: 17 }}>{mathleState === "win" ? `Solved in ${mathleGuesses.length}/${MATHLE_ROWS}` : "Out of guesses"}</div>
+                  {mathleState === "lose" && <div className="mub-mono" style={{ fontSize: 19, fontWeight: 700, marginTop: 6 }}>{mathleAns}</div>}
+                  {mathleXp && mathleXp.xp > 0 && <div style={{ fontSize: 12.5, color: "var(--green)", fontWeight: 700, marginTop: 4 }}>+{mathleXp.xp} XP{mathleXp.lv ? ` · ⭐ Level ${mathleXp.lv}!` : ""}</div>}
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>🔥 {profile.mathleStreak || 0} day streak{profile.mathleBest ? ` · best ${profile.mathleBest}` : ""}</div>
+                  <button onClick={shareMathle} style={{ marginTop: 12, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 18px", cursor: "pointer" }}>{mathleShared ? "Copied!" : "Share result"}</button>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>Come back tomorrow for a new one.</div>
+                </div>
+              ) : (
+                <div style={{ maxWidth: 344, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[["1", "2", "3", "4", "5"], ["6", "7", "8", "9", "0"], ["+", "−", "×", "÷", "="]].map((kr, ri) => (
+                    <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                      {kr.map((k) => {
+                        const kc = keySt[k] ? tc(keySt[k]) : { background: "var(--card)", color: "var(--ink)", borderColor: "var(--grid)" };
+                        return <button key={k} onClick={() => mathleKey(k)} style={{ padding: "13px 0", fontFamily: PX, fontSize: 16, fontWeight: 700, borderRadius: 6, border: `1px solid ${kc.borderColor}`, background: kc.background, color: kc.color, cursor: "pointer" }}>{k}</button>;
+                      })}
+                    </div>
+                  ))}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <button onClick={() => mathleKey("DEL")} style={{ padding: "13px 0", fontSize: 13, fontWeight: 700, borderRadius: 6, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--ink)", cursor: "pointer" }}>DELETE</button>
+                    <button onClick={() => mathleKey("ENTER")} disabled={mathleInput.length !== MATHLE_LEN} style={{ padding: "13px 0", fontSize: 13, fontWeight: 700, borderRadius: 6, border: "none", background: "var(--green)", color: "var(--on-accent)", cursor: "pointer", opacity: mathleInput.length !== MATHLE_LEN ? 0.5 : 1 }}>ENTER</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* WEEKLY SCHOOLS GRAPHIC (admin) */}
         {screen === "weeklygfx" && (
           <div>
@@ -14732,6 +14983,23 @@ export default function MathsUnlockedBN() {
                     {LESSON_IDS.filter((id) => ((profile.lessons || {})[id] || {}).done).length}/{LESSON_IDS.length}
                   </span>
                 </button>
+                {isAdmin && (() => {
+                  const r = profile.mathleRun;
+                  const doneToday = r && r.day === bruneiDayKey() && r.state !== "playing";
+                  return (
+                    <button onClick={() => go(startMathle)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
+                      {!doneToday && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                      <span style={{ fontSize: 28 }}>🔢</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                          Mathle <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
+                        </span>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Guess today's hidden equation in 6 tries.</span>
+                      </span>
+                      {(profile.mathleStreak || 0) > 0 && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--amber)" }}>🔥 {profile.mathleStreak}</span>}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
