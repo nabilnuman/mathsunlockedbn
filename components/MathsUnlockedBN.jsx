@@ -14954,7 +14954,7 @@ export default function MathsUnlockedBN() {
                 ? [{ icon: "🎓", label: "Teacher tools", chevron: true, onClick: () => { setSettingsOpen(false); openClasses(); } }]
                 : teacherPending
                   ? [{ icon: "🎓", label: "Activate teacher tools", value: "Code", chevron: true, onClick: () => { setSettingsOpen(false); setActMsg(null); setActCode(""); setScreen("teacherActivate"); } }]
-                  : [{ icon: "🎓", label: "Set up a teacher account", chevron: true, onClick: () => { setSettingsOpen(false); setTSignErr(""); setTSignName(profile.name || ""); setTSignPin(""); setTSignEmail(""); setSchoolInput(profile.school || SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); } }]),
+                  : []),
               isAdmin
                 ? { icon: "💬", label: "View feedback", dot: fbNew, chevron: true, onClick: openFeedbackInbox }
                 : { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
