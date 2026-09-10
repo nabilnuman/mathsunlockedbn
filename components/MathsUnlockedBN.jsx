@@ -9147,6 +9147,7 @@ export default function MathsUnlockedBN() {
   const [dailyXp, setDailyXp] = useState(null);     // { xp, lv } shown on the cleared card for this run
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
   const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
+  const [dailyPeople, setDailyPeople] = useState({}); // uid -> full profile, so board names open a profile
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
@@ -9954,6 +9955,11 @@ export default function MathsUnlockedBN() {
     setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
     setDailyPrevRows(null); setDailyXp(null);
     dailyBoard(bruneiDayKey(Date.now() - 24 * 3600 * 1000)).then(setDailyPrevRows); // yesterday's board
+    getLeaderboard(true).then((all) => { // full profiles so board names are tappable
+      const m = {};
+      for (const p of all || []) if (p && p.uid) m[p.uid] = p;
+      setDailyPeople(m);
+    });
     setWritePad(false); setSketchOn(false); setSketchStrokes([]);
     setDailyQ(dailyChallenge(key));
     setScreen("daily");
@@ -12694,13 +12700,17 @@ export default function MathsUnlockedBN() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {rows.slice(0, 100).map((r, i) => {
                     const mine = r.uid === authUid;
+                    const full = !mine && r.uid ? dailyPeople[r.uid] : null;
+                    const Tag = full ? "button" : "div";
                     return (
-                      <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                      <Tag key={r.uid || i}
+                        onClick={full ? () => { setRosterProfile(full); markMilestone("friendview"); } : undefined}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: "100%", textAlign: "left", cursor: full ? "pointer" : "default", color: "var(--ink)",
                         background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
                         <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "Someone"}{mine ? " · you" : ""}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: full ? "underline" : "none", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{r.name || "Someone"}{mine ? " · you" : ""}</span>
                         <span className="mub-mono" style={{ fontWeight: 700 }}>{Number(r.seconds).toFixed(1)}s</span>
-                      </div>
+                      </Tag>
                     );
                   })}
                 </div>
@@ -12710,13 +12720,20 @@ export default function MathsUnlockedBN() {
                 <div style={{ marginTop: 20 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Yesterday's top 10</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {dailyPrevRows.slice(0, 10).map((r, i) => (
-                      <div key={r.uid || i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 12px", borderRadius: 8, fontSize: 12.5, background: "var(--card)", border: "1px solid var(--grid)", opacity: 0.85 }}>
+                    {dailyPrevRows.slice(0, 10).map((r, i) => {
+                      const mine = r.uid === authUid;
+                      const full = !mine && r.uid ? dailyPeople[r.uid] : null;
+                      const Tag = full ? "button" : "div";
+                      return (
+                      <Tag key={r.uid || i}
+                        onClick={full ? () => { setRosterProfile(full); markMilestone("friendview"); } : undefined}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 12px", borderRadius: 8, fontSize: 12.5, width: "100%", textAlign: "left", cursor: full ? "pointer" : "default", color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", opacity: 0.85 }}>
                         <span className="mub-display" style={{ fontSize: 13, fontWeight: 700, minWidth: 22, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name || "Someone"}{r.uid === authUid ? " · you" : ""}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: full ? "underline" : "none", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{r.name || "Someone"}{mine ? " · you" : ""}</span>
                         <span className="mub-mono" style={{ fontWeight: 700, color: "var(--muted)" }}>{Number(r.seconds).toFixed(1)}s</span>
-                      </div>
-                    ))}
+                      </Tag>
+                      );
+                    })}
                   </div>
                 </div>
               )}
