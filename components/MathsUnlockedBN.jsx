@@ -11461,6 +11461,18 @@ export default function MathsUnlockedBN() {
       });
     } catch (e) { /* clipboard unavailable — the link is shown for manual copy */ }
   }
+  // Native share sheet where available (phones), else fall back to copy.
+  async function shareParentLink(url) {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: "MathsUnlocked progress", text: `${profile.name || "My"}'s MathsUnlocked progress`, url });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return; // dismissed — nothing to do
+      }
+    }
+    copyParentLink(url);
+  }
 
   // Client-side aggregation: pull every public profile in one RPC call,
   // then build the boards — all-time (top-10 leaderboard scores), this
@@ -15197,6 +15209,7 @@ export default function MathsUnlockedBN() {
 
       {showParentLink && (() => {
         const url = typeof window !== "undefined" && profile.parentToken ? `${window.location.origin}/?p=${profile.parentToken}` : "";
+        const canShare = typeof navigator !== "undefined" && !!navigator.share;
         return (
           <div onClick={() => setShowParentLink(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 420, fontFamily: "Inter, sans-serif" }}>
@@ -15209,8 +15222,8 @@ export default function MathsUnlockedBN() {
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button onClick={() => setShowParentLink(false)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>Close</button>
-                <button onClick={() => copyParentLink(url)} disabled={!url} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
-                  {linkCopied ? "Copied!" : "Copy link"}
+                <button onClick={() => shareParentLink(url)} disabled={!url} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                  {linkCopied ? "Copied!" : canShare ? "Share link" : "Copy link"}
                 </button>
               </div>
             </div>
