@@ -9072,7 +9072,9 @@ export default function MathsUnlockedBN() {
   const [fbRating, setFbRating] = useState(0);
   const [fbBusy, setFbBusy] = useState(false);
   const [fbDone, setFbDone] = useState(false);
-  const [fbInbox, setFbInbox] = useState(null); // teacher: null=unloaded, []=loaded
+  const [fbInbox, setFbInbox] = useState(null); // admin: null=unloaded, []=loaded
+  const [fbInboxOpen, setFbInboxOpen] = useState(false); // admin: View feedback modal
+  const [fbLatestAt, setFbLatestAt] = useState(null); // newest feedback created_at (for the red dot)
   const [groupOpen, setGroupOpen] = useState(null); // dashboard: which of the 5 topic groups is expanded
   const [modesOpen, setModesOpen] = useState(false); // dashboard: Special Modes overlay
   // Guided lessons (Special Modes → Learn)
@@ -11216,6 +11218,17 @@ export default function MathsUnlockedBN() {
     setFbInbox(null);
     const rows = await recentFeedback(300);
     setFbInbox(rows);
+    if (rows && rows[0] && rows[0].created_at) {
+      setFbLatestAt(rows[0].created_at);
+      if (rows[0].created_at !== profileRef.current.fbSeenAt) {
+        patchProfile(() => ({ fbSeenAt: rows[0].created_at })); // clears the red dot
+      }
+    }
+  }
+  function openFeedbackInbox() {
+    setSettingsOpen(false);
+    setFbInboxOpen(true);
+    loadFeedbackInbox();
   }
 
   async function doPinReset(uid) {
@@ -11562,6 +11575,16 @@ export default function MathsUnlockedBN() {
   const isAdmin = !!(teacherActive && teacherAccount && teacherAccount.admin);
   const devUnlocked = isAdmin;
 
+  // Admin only: is there feedback newer than the last time this admin
+  // opened the inbox? Drives the red dot on ⚙ Settings + "View feedback".
+  useEffect(() => {
+    if (!isAdmin) { setFbLatestAt(null); return; }
+    recentFeedback(1).then((rows) => {
+      if (rows && rows[0] && rows[0].created_at) setFbLatestAt(rows[0].created_at);
+    });
+  }, [isAdmin, settingsOpen]);
+  const fbNew = !!(isAdmin && fbLatestAt && (!profile.fbSeenAt || fbLatestAt > profile.fbSeenAt));
+
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
   return (
@@ -11677,6 +11700,7 @@ export default function MathsUnlockedBN() {
                   border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
                 }}>
                   <Settings size={16} />
+                  {fbNew && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
               </>) : (<>
                 <button onClick={toggleSound} title={soundOn ? "Achievement sound: on" : "Achievement sound: off"} aria-label="Toggle achievement sound" style={{ fontSize: 15, lineHeight: 1, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
@@ -13402,37 +13426,6 @@ export default function MathsUnlockedBN() {
                 ))}
               </div>
 
-              <div style={{ marginTop: 24, borderTop: "1px solid var(--grid)", paddingTop: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div className="mub-display" style={{ fontSize: 15, fontWeight: 700 }}>💬 Beta feedback</div>
-                  <button onClick={loadFeedbackInbox} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
-                    {fbInbox === null ? "Load" : "Refresh"}
-                  </button>
-                </div>
-                {fbInbox !== null && (
-                  fbInbox.length === 0
-                    ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>No feedback yet.</div>
-                    : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                        {fbInbox.map((f) => (
-                          <div key={f.id} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
-                              <span><strong style={{ color: "var(--ink)" }}>{f.name || "Someone"}</strong>{f.rating ? ` · ${"⭐".repeat(f.rating)}` : ""}</span>
-                              <span>{timeAgo(f.created_at)}</span>
-                            </div>
-                            <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{f.message}</div>
-                            {f.context && (f.context.topic || f.context.screen) && (
-                              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
-                                {f.context.topic ? `Topic: ${f.context.topic}` : `Screen: ${f.context.screen}`}
-                                {f.context.question ? ` · “${f.context.question}”` : ""}
-                                {f.context.version ? ` · ${f.context.version}` : ""}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                )}
-              </div>
-
               {isAdmin && (
                 <div style={{ marginTop: 24, borderTop: "1px solid var(--grid)", paddingTop: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -14899,7 +14892,9 @@ export default function MathsUnlockedBN() {
                 : teacherPending
                   ? [{ icon: "🎓", label: "Activate teacher tools", value: "Code", chevron: true, onClick: () => { setSettingsOpen(false); setActMsg(null); setActCode(""); setScreen("teacherActivate"); } }]
                   : [{ icon: "🎓", label: "Set up a teacher account", chevron: true, onClick: () => { setSettingsOpen(false); setTSignErr(""); setTSignName(profile.name || ""); setTSignPin(""); setTSignEmail(""); setSchoolInput(profile.school || SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); } }]),
-              { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
+              isAdmin
+                ? { icon: "💬", label: "View feedback", dot: fbNew, chevron: true, onClick: openFeedbackInbox }
+                : { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
               ...((!isStandalone() && (canInstallApp || isIos())) ? [{
                 icon: "📲", label: "Install app", chevron: true,
                 onClick: () => {
@@ -14925,6 +14920,44 @@ export default function MathsUnlockedBN() {
                 {it.chevron && <span style={{ fontSize: 13, color: "var(--muted)" }}>›</span>}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {fbInboxOpen && isAdmin && (
+        <div onClick={() => setFbInboxOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", zIndex: 85, overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 22, maxWidth: 460, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>Feedback</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={loadFeedbackInbox} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> refresh</button>
+                <button onClick={() => setFbInboxOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+            </div>
+            {fbInbox === null ? (
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+            ) : fbInbox.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>No feedback yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {fbInbox.map((f) => (
+                  <div key={f.id} style={{ background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
+                      <span><strong style={{ color: "var(--ink)" }}>{f.name || "Someone"}</strong>{f.rating ? ` · ${"⭐".repeat(f.rating)}` : ""}</span>
+                      <span>{timeAgo(f.created_at)}</span>
+                    </div>
+                    <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{f.message}</div>
+                    {f.context && (f.context.topic || f.context.screen) && (
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                        {f.context.topic ? `Topic: ${f.context.topic}` : `Screen: ${f.context.screen}`}
+                        {f.context.question ? ` · “${f.context.question}”` : ""}
+                        {f.context.version ? ` · ${f.context.version}` : ""}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

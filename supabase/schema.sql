@@ -556,9 +556,9 @@ grant execute on function public.class_licensed(uuid) to authenticated;
 -- ============================================================
 --  11. BETA FEEDBACK
 --     Any signed-in student can drop a note from ⚙ Settings.
---     They can read their own notes back; teachers (uid in
---     `teachers`) read everything through recent_feedback().
---     No updates or deletes from the client.
+--     They can read their own notes back; only ADMIN teachers
+--     (teachers.admin = true) read everything through
+--     recent_feedback(). No updates or deletes from the client.
 -- ============================================================
 create table if not exists feedback (
   id uuid primary key default gen_random_uuid(),
@@ -579,8 +579,8 @@ drop policy if exists fb_own_select on feedback;
 create policy fb_own_select on feedback for select to authenticated
   using (student_uid = auth.uid());
 
--- Teacher inbox: newest first, capped. Teacher-only (returns nothing
--- for a non-teacher caller).
+-- Feedback inbox: newest first, capped. ADMIN-only (returns nothing
+-- for a non-admin caller).
 create or replace function public.recent_feedback(lim int default 200)
 returns setof jsonb
 language sql
@@ -592,7 +592,7 @@ as $$
            'id', id, 'name', coalesce(name, ''), 'message', message,
            'rating', rating, 'context', context, 'created_at', created_at)
   from feedback
-  where auth.uid() in (select uid from teachers)
+  where auth.uid() in (select uid from teachers where admin)
   order by created_at desc
   limit greatest(1, least(coalesce(lim, 200), 500))
 $$;
