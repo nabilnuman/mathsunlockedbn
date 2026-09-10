@@ -10240,16 +10240,15 @@ export default function MathsUnlockedBN() {
           if (r && r.value) prof = JSON.parse(r.value);
         } catch (e) { /* account exists but no saved profile yet */ }
       }
+      const brandNew = created || !prof; // → show the one-time onboarding (school etc.)
       if (prof) {
         prof.name = prof.name || nm;
         prof.pin = pin;
-        if (!prof.school) prof.school = schoolInput;
         if (!prof.achievedAt) prof.achievedAt = {};
       } else {
         prof = emptyProfile();
         prof.name = nm;
         prof.pin = pin;
-        prof.school = schoolInput;
         prof.createdAt = Date.now();
       }
       // Seed "seen" icons so the new-unlock dots only flag genuinely new ones.
@@ -10262,7 +10261,8 @@ export default function MathsUnlockedBN() {
       loadCustomQuestions(); // shared reads need a session
       refreshFriends();
       refreshClasses();
-      setScreen("dashboard");
+      setSchoolInput(SOLO_SCHOOL); setSchoolQuery("");
+      setScreen(brandNew ? "onboarding" : "dashboard");
     } catch (e) {
       setStartError(e && e.message ? e.message : "Could not sign in. Try again.");
     }
@@ -11513,7 +11513,7 @@ export default function MathsUnlockedBN() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 10px", minWidth: 0 }}>
             {(() => {
-              const home = profile.name && screen !== "login" && screen !== "parent";
+              const home = profile.name && screen !== "login" && screen !== "onboarding" && screen !== "parent";
               return (
                 <img
                   src="/logo-mark.png" alt="MathsUnlocked"
@@ -11527,28 +11527,28 @@ export default function MathsUnlockedBN() {
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
-            {screen !== "login" && screen !== "parent" && screen !== "leaderboard" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && screen !== "leaderboard" && (
               <button onClick={openLeaderboard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Leaderboard
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && teacherAccount && screen !== "classes" && screen !== "classDetail" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && teacherAccount && screen !== "classes" && screen !== "classDetail" && (
               <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
                 🎓 Classes
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && devUnlocked && screen !== "admin" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && devUnlocked && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
               </button>
             )}
-            {screen !== "login" && screen !== "parent" && devUnlocked && screen !== "questions" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && devUnlocked && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              {screen !== "login" && screen !== "parent" ? (<>
+              {screen !== "login" && screen !== "onboarding" && screen !== "parent" ? (<>
                 <button onClick={openFriends} aria-label="Friends" title="Friends" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
@@ -11597,6 +11597,74 @@ export default function MathsUnlockedBN() {
         </div>
 
         {/* LOGIN */}
+        {screen === "onboarding" && (
+          <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Welcome, {profile.name || "there"}! 🎉</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>Just one quick thing to set up — you only do this once.</div>
+
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your school <span style={{ fontWeight: 400 }}>(for the school leaderboard — optional)</span></label>
+            {schoolInput !== SOLO_SCHOOL ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 8, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
+                <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+                <span style={{ flex: 1, minWidth: 0 }}>{schoolInput}</span>
+                <button type="button" onClick={() => { setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); }} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>change</button>
+              </div>
+            ) : (
+              <div style={{ position: "relative", marginTop: 6, marginBottom: 8 }}>
+                <input
+                  value={schoolQuery} onChange={(e) => setSchoolQuery(e.target.value)}
+                  placeholder="Start typing your school…"
+                  style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                />
+                {schoolQuery.trim().length >= 1 && (() => {
+                  const q = schoolQuery.trim().toLowerCase();
+                  const hits = ALL_SCHOOLS.filter((s) => s.toLowerCase().includes(q)).slice(0, 8);
+                  return (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, marginTop: 4, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, maxHeight: 220, overflowY: "auto", boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+                      {hits.map((s) => (
+                        <button key={s} type="button" onClick={() => { setSchoolInput(s); setSchoolQuery(s); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 13, background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", color: "var(--ink)" }}>
+                          {s}
+                        </button>
+                      ))}
+                      {hits.length === 0 && (
+                        <div style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--muted)" }}>
+                          No match — ask your teacher to add your school, or skip for now.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: EMAIL_RECOVERY ? 18 : 22 }}>You can change or clear this any time in ⚙ Settings.</div>
+
+            {EMAIL_RECOVERY && (<>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Recovery email <span style={{ fontWeight: 400 }}>(optional — for resetting a forgotten PIN)</span></label>
+              <input
+                type="email" value={recEmail} onChange={(e) => setRecEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{ width: "100%", marginTop: 6, marginBottom: 6, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+              />
+              {recMsg && <div style={{ fontSize: 11.5, color: recMsg.ok ? "var(--green)" : "var(--red)", marginBottom: 6 }}>{recMsg.text}</div>}
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 22 }}>Without one, only your teacher can reset your PIN.</div>
+            </>)}
+
+            <button
+              onClick={async () => {
+                if (EMAIL_RECOVERY && recEmail.trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recEmail.trim())) {
+                  try { await addRecoveryEmail(profile.name, profile.pin, recEmail.trim()); } catch (e) { /* non-fatal */ }
+                }
+                if (schoolInput && schoolInput !== SOLO_SCHOOL) patchProfile(() => ({ school: schoolInput }));
+                setRecEmail(""); setRecMsg(null);
+                setScreen("dashboard");
+              }}
+              style={{ width: "100%", padding: "11px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+            >
+              {schoolInput !== SOLO_SCHOOL ? "Continue" : "Continue without a school"}
+            </button>
+          </div>
+        )}
+
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Start practising</div>
@@ -11622,41 +11690,7 @@ export default function MathsUnlockedBN() {
               inputMode="numeric" placeholder="e.g. 405126"
               style={{ width: "100%", marginTop: 6, marginBottom: 4, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }}
             />
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 14 }}>Two students can share a name but not a name + PIN. Forgot your PIN? Your teacher can set a new one.</div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(for the leaderboard — optional)</span></label>
-            {schoolInput !== SOLO_SCHOOL ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 16, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13, background: "var(--card)" }}>
-                <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
-                <span style={{ flex: 1, minWidth: 0 }}>{schoolInput}</span>
-                <button type="button" onClick={() => { setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); }} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>change</button>
-              </div>
-            ) : (
-              <div style={{ position: "relative", marginTop: 6, marginBottom: 16 }}>
-                <input
-                  value={schoolQuery} onChange={(e) => setSchoolQuery(e.target.value)}
-                  placeholder="Start typing your school… (leave blank for Solo)"
-                  style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-                />
-                {schoolQuery.trim().length >= 1 && (() => {
-                  const q = schoolQuery.trim().toLowerCase();
-                  const hits = ALL_SCHOOLS.filter((s) => s.toLowerCase().includes(q)).slice(0, 8);
-                  return (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, marginTop: 4, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, maxHeight: 220, overflowY: "auto", boxShadow: "0 6px 20px var(--shadow-soft)" }}>
-                      {hits.map((s) => (
-                        <button key={s} type="button" onClick={() => { setSchoolInput(s); setSchoolQuery(s); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 13, background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", color: "var(--ink)" }}>
-                          {s}
-                        </button>
-                      ))}
-                      {hits.length === 0 && (
-                        <div style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--muted)" }}>
-                          No match. You&rsquo;ll be entered as Solo — ask your teacher to add your school.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 16 }}>Two students can share a name but not a name + PIN.</div>
             <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, color: "var(--ink)", marginBottom: 12, cursor: "pointer" }}>
               <input
                 type="checkbox"
