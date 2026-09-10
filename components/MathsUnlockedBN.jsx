@@ -8,7 +8,8 @@ import {
   teacherResetPin, changePin,
   sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
   createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
-  getMyTeacher, createClass, myTeacherClasses, updateClass, deleteClass,
+  getMyTeacher, myTeacherLicense, registerTeacher, activateTeacher, recentTeacherApplicants,
+  createClass, myTeacherClasses, updateClass, deleteClass,
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
   loadAssignments, createAssignment, deleteAssignment, setAssignmentArchived, classLicensed,
   sendFeedback, recentFeedback,
@@ -9029,6 +9030,24 @@ export default function MathsUnlockedBN() {
   const [teacherMode, setTeacherMode] = useState(false);
   // ---- classes / licences / assignments (B2B) ----
   const [teacherAccount, setTeacherAccount] = useState(null); // { uid, name } if this login is a teacher
+  const [teacherLicense, setTeacherLicense] = useState(null); // { active, expires_at?, source? } | null=unknown
+  // teacher sign-up / activation form state
+  const [tSignName, setTSignName] = useState("");
+  const [tSignPin, setTSignPin] = useState("");
+  const [tSignEmail, setTSignEmail] = useState("");
+  const [tSignBusy, setTSignBusy] = useState(false);
+  const [tSignErr, setTSignErr] = useState("");
+  const [actCode, setActCode] = useState("");
+  const [actBusy, setActBusy] = useState(false);
+  const [actMsg, setActMsg] = useState(null); // { ok, text }
+  const [teacherApplicants, setTeacherApplicants] = useState(null); // admin list
+
+  // A teacher account only gets teacher features while its licence is
+  // active. Without one it behaves as a plain student account — same
+  // access as before sign-up. `teacherPending` = signed up as (or once
+  // was) a teacher but not currently licensed; needs a code / renewal.
+  const teacherActive = !!(teacherAccount && teacherLicense && teacherLicense.active);
+  const teacherPending = !teacherActive && (!!teacherAccount || !!profile.teacherSignup);
   const [studentClasses, setStudentClasses] = useState([]);   // classes the student is in (my_classes)
   const [assignments, setAssignments] = useState([]);         // assignment rows for those classes
   const [teacherClasses, setTeacherClasses] = useState([]);   // classes this teacher owns
@@ -9369,14 +9388,15 @@ export default function MathsUnlockedBN() {
   }, [theme]);
 
 
-  // Admin screens need teachers.admin; class screens just need a teacher account.
+  // Admin screens need teachers.admin + an active licence; class screens
+  // need an active teacher licence.
   useEffect(() => {
     if (!ready) return;
-    const adminOk = !!(teacherAccount && teacherAccount.admin);
+    const adminOk = teacherActive && teacherAccount && teacherAccount.admin;
     if (!adminOk && (screen === "admin" || screen === "questions" || screen === "weeklygfx")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-    if (!teacherAccount && (screen === "classes" || screen === "classDetail")) {
+    if (!teacherActive && (screen === "classes" || screen === "classDetail")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
     if (screen === "assignments" && !(assignments.length || studentClasses.some((c) => !c.archived))) {
@@ -9385,7 +9405,7 @@ export default function MathsUnlockedBN() {
     if (screen === "lesson" && (!profile.name || !LESSONS[lessonId])) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-  }, [teacherMode, teacherAccount, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
+  }, [teacherMode, teacherAccount, teacherActive, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
 
   useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
   // Drop the saved calculator working whenever the question changes so it
@@ -9869,7 +9889,7 @@ export default function MathsUnlockedBN() {
   }
   async function loadBlitzBoard() {
     try {
-      const all = await getLeaderboard();
+      const all = await getLeaderboard(true); // teachers are allowed on the Blitz board
       const rows = (all || [])
         .filter((m) => m && (m.blitzBest || 0) > 0 && m.name)
         .map((m) => ({ uid: m.uid, name: m.name, best: m.blitzBest || 0, prestige: m.prestige || 0, full: m }))
@@ -10267,6 +10287,71 @@ export default function MathsUnlockedBN() {
       setStartError(e && e.message ? e.message : "Could not sign in. Try again.");
     }
     setStarting(false);
+  }
+
+  // Register (or convert) a teacher account. It behaves as a plain
+  // student account until an access code is redeemed on the next screen.
+  async function startTeacherSession() {
+    if (tSignBusy) return;
+    const alreadyIn = !!profile.name;
+    const nm = (alreadyIn ? profile.name : tSignName).trim();
+    const pin = (alreadyIn ? (profile.pin || "") : tSignPin).trim();
+    const email = tSignEmail.trim();
+    if (!nm) { setTSignErr("Enter your name."); return; }
+    if (!/^\d{6}$/.test(pin)) { setTSignErr(alreadyIn ? "Couldn't confirm your account — please log out and sign in again first." : "Your PIN must be exactly 6 digits."); return; }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setTSignErr("That email address doesn't look right."); return; }
+    setTSignErr("");
+    setTSignBusy(true);
+    try {
+      const school = schoolInput && schoolInput !== SOLO_SCHOOL ? schoolInput : null;
+      const { user, created } = await registerTeacher({ name: nm, pin, school, email });
+      setAuthUid(user.id);
+
+      if (alreadyIn) {
+        patchProfile(() => (school ? { teacherSignup: true, school } : { teacherSignup: true }));
+      } else {
+        let prof = null;
+        if (!created) {
+          try { const r = await storage.get("profile"); if (r && r.value) prof = JSON.parse(r.value); } catch (e) { /* no saved profile yet */ }
+        }
+        if (prof) { prof.name = prof.name || nm; prof.pin = pin; if (!prof.achievedAt) prof.achievedAt = {}; }
+        else { prof = emptyProfile(); prof.name = nm; prof.pin = pin; prof.createdAt = Date.now(); }
+        if (!Array.isArray(prof.seenIcons)) prof.seenIcons = unlockedAvatarIds(prof);
+        if (!Array.isArray(prof.seenAch)) prof.seenAch = [...(prof.achievements || [])];
+        prof.teacherSignup = true;
+        if (school) prof.school = school;
+        await saveProfile(prof);
+        if (rememberMe) writeRememberedLogin(nm, pin); else clearRememberedLogin();
+      }
+      loadCustomQuestions();
+      refreshFriends();
+      refreshClasses();
+      setSchoolInput(SOLO_SCHOOL); setSchoolQuery("");
+      setActMsg(null); setActCode("");
+      setScreen("teacherActivate");
+    } catch (e) {
+      setTSignErr(e && e.message ? e.message : "Could not set up the account. Try again.");
+    }
+    setTSignBusy(false);
+  }
+
+  // Redeem an access code -> teacher role + a time-limited licence.
+  async function doActivateTeacher() {
+    const code = actCode.trim();
+    if (!code || actBusy) return;
+    setActBusy(true); setActMsg(null);
+    const res = await activateTeacher(code);
+    if (!res.ok) {
+      setActMsg({ ok: false, text: res.error || "That access code didn't work." });
+      setActBusy(false);
+      return;
+    }
+    await refreshClasses();
+    setActBusy(false);
+    setActCode("");
+    setActMsg({ ok: true, text: "Teacher tools are active. 🎉" });
+    playJingle(true);
+    setTimeout(() => { openClasses(); }, 1000);
   }
 
   // "Forgot your PIN?" — email a reset link to the student's recovery
@@ -11198,10 +11283,14 @@ export default function MathsUnlockedBN() {
     try {
       const tch = await getMyTeacher();
       setTeacherAccount(tch);
-      if (tch) {
+      const lic = await myTeacherLicense();
+      setTeacherLicense(lic);
+      if (tch && lic && lic.active) {
         setTeacherClasses(await myTeacherClasses());
         return;
       }
+      // Not a licensed teacher (student, or a pending / lapsed teacher):
+      // load the student side so they keep full student access.
       const classes = await myStudentClasses();
       setStudentClasses(classes);
       const ids = classes.map((c) => c.class_id);
@@ -11216,7 +11305,7 @@ export default function MathsUnlockedBN() {
   async function refreshFriends() {
     try {
       const [graph, all, challenges] = await Promise.all([
-        loadFriendGraph(), getLeaderboard(), loadBlitzChallenges(),
+        loadFriendGraph(), getLeaderboard(true), loadBlitzChallenges(),
       ]);
       setFriendGraph(graph);
       const map = {};
@@ -11465,7 +11554,7 @@ export default function MathsUnlockedBN() {
   // Admin (a teachers row with admin = true): dev/cheat tools, Admin view,
   // Question bank, the weekly graphic. Plain teacher accounts get only the
   // class tools. Everyone else gets neither.
-  const isAdmin = !!(teacherAccount && teacherAccount.admin);
+  const isAdmin = !!(teacherActive && teacherAccount && teacherAccount.admin);
   const devUnlocked = isAdmin;
 
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
@@ -11513,7 +11602,7 @@ export default function MathsUnlockedBN() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 10px", minWidth: 0 }}>
             {(() => {
-              const home = profile.name && screen !== "login" && screen !== "onboarding" && screen !== "parent";
+              const home = profile.name && screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent";
               return (
                 <img
                   src="/logo-mark.png" alt="MathsUnlocked"
@@ -11527,28 +11616,28 @@ export default function MathsUnlockedBN() {
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
-            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && screen !== "leaderboard" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && screen !== "leaderboard" && (
               <button onClick={openLeaderboard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Leaderboard
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && teacherAccount && screen !== "classes" && screen !== "classDetail" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "classes" && screen !== "classDetail" && (
               <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
                 🎓 Classes
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && devUnlocked && screen !== "admin" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "parent" && devUnlocked && screen !== "questions" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              {screen !== "login" && screen !== "onboarding" && screen !== "parent" ? (<>
+              {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" ? (<>
                 <button onClick={openFriends} aria-label="Friends" title="Friends" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
@@ -11728,6 +11817,11 @@ export default function MathsUnlockedBN() {
                 Forgot your PIN?
               </button>
             </div>
+            <div style={{ textAlign: "center", marginTop: 10, borderTop: "1px solid var(--grid)", paddingTop: 12 }}>
+              <button onClick={() => { setTSignErr(""); setTSignName(""); setTSignPin(""); setTSignEmail(""); setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); }} style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
+                I&rsquo;m a teacher — set up a class →
+              </button>
+            </div>
             {forgotOpen && (
               <div style={{ marginTop: 10, padding: 12, border: "1px solid var(--grid)", borderRadius: 10, background: "var(--paper)" }}>
                 {EMAIL_RECOVERY ? (<>
@@ -11788,6 +11882,126 @@ export default function MathsUnlockedBN() {
             </button>
           </div>
         )}
+
+        {/* TEACHER SIGN-UP */}
+        {screen === "teacherSignup" && (() => {
+          const alreadyIn = !!profile.name;
+          const nmOk = alreadyIn || tSignName.trim().length > 0;
+          const pinOk = alreadyIn || /^\d{6}$/.test(tSignPin);
+          return (
+            <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+              <button onClick={() => setScreen(alreadyIn ? "dashboard" : "login")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+                <ArrowLeft size={14} /> back
+              </button>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Set up a teacher account</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18, lineHeight: 1.5 }}>
+                Your account works like a student one until you enter an access code. A code adds the class dashboard — rosters, homework and progress in one place — for a year.
+              </div>
+
+              {alreadyIn ? (
+                <div style={{ fontSize: 12.5, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "10px 12px", marginBottom: 14 }}>
+                  Signed in as <strong>{profile.name}</strong> — teacher tools will be added to this account.
+                </div>
+              ) : (<>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Your name</label>
+                <input value={tSignName} onChange={(e) => setTSignName(e.target.value)}
+                  placeholder="e.g. Ms Lim"
+                  style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>6-digit PIN <span style={{ fontWeight: 400 }}>(pick one you'll remember)</span></label>
+                <input value={tSignPin}
+                  onChange={(e) => setTSignPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric" placeholder="e.g. 405126"
+                  style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 4 }} />
+              </>)}
+
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>School <span style={{ fontWeight: 400 }}>(optional)</span></label>
+              {schoolInput !== SOLO_SCHOOL ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 14, padding: "10px 12px", border: "1px solid var(--green)", borderRadius: 8, fontSize: 13 }}>
+                  <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>{schoolInput}</span>
+                  <button type="button" onClick={() => { setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); }} style={{ fontSize: 12, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>change</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative", marginTop: 6, marginBottom: 14 }}>
+                  <input value={schoolQuery} onChange={(e) => setSchoolQuery(e.target.value)}
+                    placeholder="Start typing your school…"
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+                  {schoolQuery.trim().length >= 1 && (() => {
+                    const q = schoolQuery.trim().toLowerCase();
+                    const hits = ALL_SCHOOLS.filter((s) => s.toLowerCase().includes(q)).slice(0, 8);
+                    return (
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, marginTop: 4, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, maxHeight: 220, overflowY: "auto", boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+                        {hits.map((s) => (
+                          <button key={s} type="button" onClick={() => { setSchoolInput(s); setSchoolQuery(s); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 10px", fontSize: 13, background: "none", border: "none", borderBottom: "1px solid var(--grid)", cursor: "pointer", color: "var(--ink)" }}>{s}</button>
+                        ))}
+                        {hits.length === 0 && <div style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--muted)" }}>No match — you can add it later.</div>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Contact email <span style={{ fontWeight: 400 }}>(optional)</span></label>
+              <input type="email" inputMode="email" value={tSignEmail} onChange={(e) => setTSignEmail(e.target.value)}
+                placeholder="you@school.edu.bn"
+                style={{ width: "100%", marginTop: 6, marginBottom: 6, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }} />
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 16 }}>So we can send your access code and reach you about your class licence.</div>
+
+              {tSignErr && <div style={{ fontSize: 12, color: "var(--red)", fontWeight: 600, marginBottom: 8 }}>{tSignErr}</div>}
+              <button onClick={startTeacherSession} disabled={!nmOk || !pinOk || tSignBusy}
+                style={{ width: "100%", padding: "11px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: !nmOk || !pinOk || tSignBusy ? 0.6 : 1 }}>
+                {tSignBusy ? "Setting up…" : "Continue"}
+              </button>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10, textAlign: "center" }}>Already have an access code? You&rsquo;ll enter it on the next step.</div>
+            </div>
+          );
+        })()}
+
+        {/* TEACHER — ACTIVATE WITH AN ACCESS CODE */}
+        {screen === "teacherActivate" && (() => {
+          const lapsed = teacherLicense && teacherLicense.expires_at && new Date(teacherLicense.expires_at) <= new Date();
+          const expDate = teacherLicense && teacherLicense.expires_at ? new Date(teacherLicense.expires_at).toLocaleDateString() : null;
+          return (
+            <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
+              <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+                <ArrowLeft size={14} /> back
+              </button>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Activate teacher tools</div>
+
+              {teacherActive ? (
+                <>
+                  <div style={{ fontSize: 13, color: "var(--green)", fontWeight: 700, marginBottom: 6 }}>✓ Your teacher licence is active{expDate ? ` until ${expDate}` : ""}.</div>
+                  <button onClick={openClasses} style={{ width: "100%", marginTop: 8, padding: "11px 12px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Open the class dashboard →</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                    {lapsed
+                      ? <>Your teacher licence ended on <strong>{expDate}</strong>. Enter a new access code to renew — you still have full student access in the meantime.</>
+                      : <>Enter the access code from MathsUnlockedBN. Until you do, this is a normal student account — nothing is locked except the class dashboard.</>}
+                  </div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Access code</label>
+                  <input value={actCode}
+                    onChange={(e) => setActCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 32))}
+                    onKeyDown={(e) => { if (e.key === "Enter") doActivateTeacher(); }}
+                    placeholder="e.g. BRUNEI-PILOT-2026"
+                    style={{ width: "100%", marginTop: 6, marginBottom: 6, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 14, boxSizing: "border-box", letterSpacing: 1 }} />
+                  {actMsg && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: actMsg.ok ? "var(--green)" : "var(--red)" }}>{actMsg.text}</div>}
+                  <button onClick={doActivateTeacher} disabled={!actCode.trim() || actBusy}
+                    style={{ width: "100%", marginTop: 6, padding: "11px 12px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: "pointer", opacity: !actCode.trim() || actBusy ? 0.6 : 1 }}>
+                    {actBusy ? "Activating…" : "Activate"}
+                  </button>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>
+                    Don&rsquo;t have a code yet? Contact MathsUnlockedBN (see the links at the bottom of the page) and we&rsquo;ll set you up.
+                  </div>
+                  <div style={{ textAlign: "center", marginTop: 12 }}>
+                    <button onClick={() => setScreen("dashboard")} style={{ fontSize: 12.5, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Skip for now</button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* DASHBOARD */}
         {screen === "dashboard" && (
@@ -11920,9 +12134,13 @@ export default function MathsUnlockedBN() {
                     style={{ ...util, color: perksOk ? "var(--blue)" : "var(--muted)", opacity: perksOk ? 1 : 0.55, cursor: perksOk ? "pointer" : "default" }}>
                     <span style={{ fontSize: 17 }}>🎖</span>{perksOk ? "Perks" : "Perks 🔒"}
                   </button>
-                  {teacherAccount ? (
+                  {teacherActive ? (
                     <button onClick={openClasses} style={{ ...util, color: "var(--blue)" }}>
                       <span style={{ fontSize: 17 }}>🎓</span>Classes
+                    </button>
+                  ) : teacherPending ? (
+                    <button onClick={() => { setActMsg(null); setActCode(""); setScreen("teacherActivate"); }} style={{ ...util, color: "var(--muted)" }}>
+                      <span style={{ fontSize: 17 }}>🎓</span>Teacher 🔒
                     </button>
                   ) : showAsg ? (
                     <button onClick={() => setScreen("assignments")} style={{ ...util, color: "var(--blue)", position: "relative" }}>
@@ -13209,6 +13427,34 @@ export default function MathsUnlockedBN() {
                       </div>
                 )}
               </div>
+
+              {isAdmin && (
+                <div style={{ marginTop: 24, borderTop: "1px solid var(--grid)", paddingTop: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div className="mub-display" style={{ fontSize: 15, fontWeight: 700 }}>🎓 Teacher sign-ups</div>
+                    <button onClick={async () => setTeacherApplicants(await recentTeacherApplicants(100))} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
+                      {teacherApplicants === null ? "Load" : "Refresh"}
+                    </button>
+                  </div>
+                  {teacherApplicants !== null && (
+                    teacherApplicants.length === 0
+                      ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>No teacher sign-ups yet.</div>
+                      : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                          {teacherApplicants.map((a) => (
+                            <div key={a.uid} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, marginBottom: 2 }}>
+                                <span style={{ fontWeight: 700 }}>{a.name || "—"}</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: a.licensed ? "var(--green)" : "var(--muted)" }}>{a.licensed ? "licensed" : a.is_teacher ? "lapsed" : "pending"}</span>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                                {a.school ? `${a.school} · ` : ""}{a.email || "no email"}{a.created_at ? ` · ${timeAgo(a.created_at)}` : ""}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -14642,7 +14888,12 @@ export default function MathsUnlockedBN() {
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },
               { icon: "👪", label: "Parent link", chevron: true, onClick: () => { setSettingsOpen(false); openParentLink(); } },
-              ...(teacherAccount ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
+              ...(teacherActive ? [] : [{ icon: "🎓", label: "Join a class", value: studentClasses.filter((c) => !c.archived).length || "", chevron: true, onClick: () => { setSettingsOpen(false); setJoinMsg(null); setJoinCode(""); setJoinClassOpen(true); } }]),
+              ...(teacherActive
+                ? [{ icon: "🎓", label: "Teacher tools", chevron: true, onClick: () => { setSettingsOpen(false); openClasses(); } }]
+                : teacherPending
+                  ? [{ icon: "🎓", label: "Activate teacher tools", value: "Code", chevron: true, onClick: () => { setSettingsOpen(false); setActMsg(null); setActCode(""); setScreen("teacherActivate"); } }]
+                  : [{ icon: "🎓", label: "Set up a teacher account", chevron: true, onClick: () => { setSettingsOpen(false); setTSignErr(""); setTSignName(profile.name || ""); setTSignPin(""); setTSignEmail(""); setSchoolInput(profile.school || SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); } }]),
               { icon: "💬", label: "Send feedback", chevron: true, onClick: () => { setSettingsOpen(false); openFeedback(); } },
               ...((!isStandalone() && (canInstallApp || isIos())) ? [{
                 icon: "📲", label: "Install app", chevron: true,

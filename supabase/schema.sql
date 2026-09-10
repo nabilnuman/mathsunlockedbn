@@ -80,15 +80,23 @@ create policy kv_shared_write on kv_store for all to authenticated
 --     app reads them through this function instead. It returns
 --     each profile as JSON with pin + parentToken stripped out,
 --     plus the owner's uid so the app can mark "you".
+--
+--     Teacher accounts are hidden by default (they don't belong on
+--     the school or top-players boards). Pass include_teachers =>
+--     true for the boards where they ARE allowed (friends, Blitz,
+--     Daily); each row carries an `is_teacher` flag either way.
 -- ============================================================
-create or replace function public.get_leaderboard()
+drop function if exists public.get_leaderboard();
+create or replace function public.get_leaderboard(include_teachers boolean default false)
 returns setof jsonb
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select jsonb_build_object('uid', scope)
+  select jsonb_build_object(
+           'uid', scope,
+           'is_teacher', scope in (select uid::text from teachers))
          || ((value::jsonb) - 'pin' - 'parentToken')
   from kv_store
   where key = 'profile'
@@ -96,11 +104,11 @@ as $$
     and value <> ''
     and (value::jsonb) ? 'name'
     and coalesce((value::jsonb) ->> 'name', '') <> ''
-    and scope not in (select uid::text from teachers)  -- teacher accounts don't appear on any leaderboard
+    and (include_teachers or scope not in (select uid::text from teachers))
 $$;
-revoke all on function public.get_leaderboard() from public;
-revoke all on function public.get_leaderboard() from anon;
-grant execute on function public.get_leaderboard() to authenticated;
+revoke all on function public.get_leaderboard(boolean) from public;
+revoke all on function public.get_leaderboard(boolean) from anon;
+grant execute on function public.get_leaderboard(boolean) to authenticated;
 
 -- ============================================================
 --  5. PARENT LINK
@@ -613,7 +621,8 @@ create policy ps_own on push_subscriptions for all to authenticated
 --     One question a day, the same for everyone (the client seeds
 --     it from the Brunei calendar day). One result per player per
 --     day; the time is final. `daily_board` ranks today fastest-
---     first with teachers excluded.
+--     first (teachers included — the Daily board is one of the
+--     boards they're allowed on).
 -- ============================================================
 create table if not exists daily_results (
   day date not null default ((now() at time zone 'Asia/Brunei')::date),
@@ -644,7 +653,6 @@ as $$
   select jsonb_build_object('uid', r.uid, 'name', coalesce(r.name, ''), 'seconds', r.seconds)
   from daily_results r
   where r.day = coalesce(d, (now() at time zone 'Asia/Brunei')::date)
-    and r.uid not in (select uid from teachers)
   order by r.seconds asc, r.created_at asc
   limit 300
 $$;
@@ -687,3 +695,139 @@ as $$
 $$;
 revoke all on function public.admin_students() from public, anon;
 grant execute on function public.admin_students() to authenticated;
+
+-- ============================================================
+--  15. TEACHER SIGN-UP & LICENCE ACTIVATION
+--     Anyone can register a teacher account from the login screen,
+--     but it behaves as a plain student account until an access
+--     code is redeemed. The `teacher-activate` Edge Function
+--     (service role, Verify JWT ON) validates the code, inserts the
+--     `teachers` row and a `licenses` row good for the code's
+--     `months`. When that licence lapses the account drops back to
+--     student-only access until a new code is redeemed.
+-- ============================================================
+
+-- Access codes — minted here by hand / service role only.
+--   insert into teacher_codes (code, months, max_uses, note)
+--   values ('BRUNEI-PILOT-2026', 12, 20, 'Free pilot - 20 seats');
+create table if not exists teacher_codes (
+  code            text primary key,
+  months          int not null default 12,
+  max_uses        int not null default 1,
+  uses            int not null default 0,
+  code_expires_at timestamptz,        -- the code itself stops working after this (optional)
+  note            text,
+  created_at      timestamptz not null default now()
+);
+alter table teacher_codes enable row level security;
+-- no client policies: only the teacher-activate Edge Function (service role) touches it.
+
+-- A lead record: who has registered wanting a teacher account.
+create table if not exists teacher_applicants (
+  uid        uuid primary key default auth.uid(),
+  name       text,
+  school     text,
+  email      text,
+  activated  boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table teacher_applicants enable row level security;
+
+drop policy if exists ta_self on teacher_applicants;
+create policy ta_self on teacher_applicants for all to authenticated
+  using (uid = auth.uid()) with check (uid = auth.uid());
+
+-- The caller's teacher-licence status:
+--   { active:false }                         -> not a teacher / lapsed
+--   { active:true, source:'role' }            -> in `teachers`, no licence
+--                                               row (hand-added / comp account)
+--   { active:bool, expires_at, note }         -> has teacher licence row(s);
+--                                               active iff the newest hasn't expired
+-- So an activated teacher whose licence lapses drops to { active:false },
+-- but existing hand-added teacher accounts keep working with no migration.
+create or replace function public.my_teacher_license()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when not exists (
+      select 1 from licenses
+      where scope_type = 'teacher' and scope_value = auth.uid()::text)
+    then jsonb_build_object(
+           'active', exists (select 1 from teachers where uid = auth.uid()),
+           'source', 'role')
+    else (
+      select jsonb_build_object(
+               'active', (l.expires_at is null or l.expires_at > now()),
+               'expires_at', l.expires_at,
+               'note', l.note)
+      from licenses l
+      where l.scope_type = 'teacher' and l.scope_value = auth.uid()::text
+      order by l.expires_at desc nulls first
+      limit 1)
+  end;
+$$;
+revoke all on function public.my_teacher_license() from public, anon;
+grant execute on function public.my_teacher_license() to authenticated;
+
+-- Atomically claim one use of an access code. service_role only (the
+-- teacher-activate Edge Function). Returns the granted months, or NULL
+-- when the code is unknown / exhausted / expired.
+create or replace function public.claim_teacher_code(p_code text)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare m int;
+begin
+  update teacher_codes
+     set uses = uses + 1
+   where code = p_code
+     and uses < max_uses
+     and (code_expires_at is null or code_expires_at > now())
+  returning months into m;
+  return m;
+end;
+$$;
+revoke all on function public.claim_teacher_code(text) from public, anon, authenticated;
+grant execute on function public.claim_teacher_code(text) to service_role;
+
+-- Give back a use if activation fails after the claim. service_role only.
+create or replace function public.release_teacher_code(p_code text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update teacher_codes set uses = greatest(uses - 1, 0) where code = p_code;
+$$;
+revoke all on function public.release_teacher_code(text) from public, anon, authenticated;
+grant execute on function public.release_teacher_code(text) to service_role;
+
+-- Admin: teacher sign-ups, newest first (teachers.admin = true only).
+create or replace function public.recent_teacher_applicants(lim int default 100)
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+           'uid', a.uid, 'name', a.name, 'school', a.school, 'email', a.email,
+           'activated', a.activated, 'created_at', a.created_at,
+           'is_teacher', a.uid in (select uid from teachers),
+           'licensed', exists (
+             select 1 from licenses l
+             where l.scope_type = 'teacher' and l.scope_value = a.uid::text
+               and (l.expires_at is null or l.expires_at > now())))
+  from teacher_applicants a
+  where auth.uid() in (select uid from teachers where admin)
+  order by a.created_at desc
+  limit lim
+$$;
+revoke all on function public.recent_teacher_applicants(int) from public, anon;
+grant execute on function public.recent_teacher_applicants(int) to authenticated;
