@@ -8543,10 +8543,20 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
     } catch (e) { /* ignore */ }
   };
 
+  // After "=", an operator key (+ − × ÷ /, ×10^, x², x³) continues from
+  // the previous answer — the line starts "Ans…" instead of clearing.
+  // Digits, brackets, functions, π, Ans still start a fresh line.
+  const CONT_OP = "+−×÷/^";
   const ins = (text, back = 0) => {
     koRef.current = "";
     setRes(null);
-    if (postEq.current) { postEq.current = false; setSt({ s: text, c: text.length - back }); return; }
+    if (postEq.current) {
+      postEq.current = false;
+      const cont = text === "²" || text === "³" || CONT_OP.includes(text[0]);
+      const s = (cont ? "Ans" : "") + text;
+      setSt({ s, c: s.length - back });
+      return;
+    }
     setSt(({ s, c }) => ({ s: s.slice(0, c) + text + s.slice(c), c: c + text.length - back }));
   };
   const del = () => { koRef.current = ""; postEq.current = false; setRes(null); setSt(({ s, c }) => (c > 0 ? { s: s.slice(0, c - 1) + s.slice(c), c: c - 1 } : { s, c })); };
