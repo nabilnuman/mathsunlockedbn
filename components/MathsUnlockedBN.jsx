@@ -7485,15 +7485,21 @@ function bannerBadges(profile) {
     .slice(0, slots);
 }
 
-// one badge chip with a tier-coloured border (bronze/silver/gold/platinum)
-function BadgeChip({ a, size = 40, on = true }) {
+// one badge chip with a tier-coloured border (bronze/silver/gold/platinum).
+// Tappable when `onClick` is given (used on read-only cards to reveal the name).
+function BadgeChip({ a, size = 40, on = true, onClick }) {
   const col = TIER_COLOR[a.tier];
+  const style = {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: size, height: size, borderRadius: 9, fontSize: Math.round(size * 0.55), lineHeight: 1,
+    border: `2px solid ${col}`, background: on ? "var(--paper)" : "transparent", padding: 0,
+  };
+  if (!onClick) return <span title={a.name} style={style}>{a.icon}</span>;
   return (
-    <span title={a.name} style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: size, height: size, borderRadius: 9, fontSize: Math.round(size * 0.55), lineHeight: 1,
-      border: `2px solid ${col}`, background: on ? "var(--paper)" : "transparent",
-    }}>{a.icon}</span>
+    <button type="button" onClick={onClick} title={a.name}
+      style={{ ...style, cursor: "pointer", color: "inherit", WebkitTapHighlightColor: "transparent" }}>
+      {a.icon}
+    </button>
   );
 }
 
@@ -7501,6 +7507,8 @@ function BadgeChip({ a, size = 40, on = true }) {
    onEditIcon / onEditBanner are supplied (own card) — then the icon and
    the banner are tappable to open their pickers. */
 function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
+  const [pickedBadge, setPickedBadge] = useState(null); // read-only card: tapped banner badge
+  useEffect(() => { setPickedBadge(null); }, [profile.uid, profile.name]);
   const level = levelFromExp(totalExp(profile));
   const title = titleFor(profile);
   const prestige = profile.prestige || 0;
@@ -7541,10 +7549,28 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
       }}
     >
       {badges.length > 0
-        ? badges.map((a) => <BadgeChip key={a.id} a={a} />)
+        ? badges.map((a) => (
+            <BadgeChip key={a.id} a={a}
+              onClick={onEditBanner ? undefined : (e) => { e.stopPropagation(); setPickedBadge((cur) => (cur && cur.id === a.id ? null : a)); }} />
+          ))
         : <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>＋ Choose badges</span>}
     </div>
   );
+  const badgeCaption = !onEditBanner && pickedBadge && (() => {
+    const hidden = pickedBadge.secret && !pickedBadge.showName;
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, padding: "8px 10px", borderRadius: 10, background: "var(--card)", border: `1px solid ${TIER_COLOR[pickedBadge.tier]}` }}>
+        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{pickedBadge.icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>
+            {hidden ? "Secret badge" : pickedBadge.name}
+            <span style={{ fontWeight: 500, color: "var(--muted)" }}> · {pickedBadge.tier}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>{hidden ? "Earn it yourself to reveal it." : pickedBadge.desc}</div>
+        </div>
+      </div>
+    );
+  })();
   return (
     <div className={cardBg.grid ? "mub-grid" : undefined} style={{
       width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22,
@@ -7576,7 +7602,8 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         {showBanner ? bannerBox : nameBlock}
       </div>
 
-      {showBanner && <div style={{ marginBottom: 14 }}>{nameBlock}</div>}
+      {showBanner && <div style={{ marginBottom: badgeCaption ? 10 : 14 }}>{nameBlock}</div>}
+      {badgeCaption}
 
       <div style={{ display: "flex", justifyContent: "space-around", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "12px 8px", marginBottom: 14 }}>
         {stat("Best streak", profile.bestStreak || 0)}
