@@ -7556,22 +7556,23 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         : <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>＋ Choose badges</span>}
     </div>
   );
-  const badgeCaption = !onEditBanner && pickedBadge && (() => {
+  const badgeOverlay = !onEditBanner && pickedBadge && (() => {
     const hidden = pickedBadge.secret && !pickedBadge.showName;
+    const col = TIER_COLOR[pickedBadge.tier];
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, padding: "8px 10px", borderRadius: 10, background: "var(--card)", border: `1px solid ${TIER_COLOR[pickedBadge.tier]}` }}>
-        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>{pickedBadge.icon}</span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink)" }}>
-            {hidden ? "Secret badge" : pickedBadge.name}
-            <span style={{ fontWeight: 500, color: "var(--muted)" }}> · {pickedBadge.tier}</span>
-          </div>
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>{hidden ? "Earn it yourself to reveal it." : pickedBadge.desc}</div>
+      <div onClick={() => setPickedBadge(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 95, fontFamily: "Inter, sans-serif" }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: 300, maxWidth: "100%", background: "var(--card)", color: "var(--ink)", border: `2px solid ${col}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.45)" }}>
+          <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 12 }}>{pickedBadge.icon}</div>
+          <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{hidden ? "Secret badge" : pickedBadge.name}</div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: col, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 3 }}>{pickedBadge.tier}</div>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>{hidden ? "Earn it yourself to reveal it." : pickedBadge.desc}</div>
+          <button onClick={() => setPickedBadge(null)} style={{ marginTop: 18, fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 20px", cursor: "pointer" }}>Close</button>
         </div>
       </div>
     );
   })();
   return (
+   <>
     <div className={cardBg.grid ? "mub-grid" : undefined} style={{
       width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22,
       color: cardBg.dark ? "#F2F5F8" : "var(--ink)",
@@ -7602,8 +7603,7 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         {showBanner ? bannerBox : nameBlock}
       </div>
 
-      {showBanner && <div style={{ marginBottom: badgeCaption ? 10 : 14 }}>{nameBlock}</div>}
-      {badgeCaption}
+      {showBanner && <div style={{ marginBottom: 14 }}>{nameBlock}</div>}
 
       <div style={{ display: "flex", justifyContent: "space-around", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "12px 8px", marginBottom: 14 }}>
         {stat("Best streak", profile.bestStreak || 0)}
@@ -7620,6 +7620,8 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
         <RadarChart profile={profile} dark={cardBg.dark} />
       </div>
     </div>
+    {badgeOverlay}
+   </>
   );
 }
 
