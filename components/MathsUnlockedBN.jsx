@@ -6709,16 +6709,16 @@ const ACHIEVEMENTS = [
     check: (p) => (p.totalCorrect || 0) >= 100 },
   { id: "perfectionist", tier: "Silver", name: "Perfectionist", icon: "💯", desc: "Reach S rank in any topic",
     check: (p) => TOPICS.some((t) => topicRankAtLeast(p, t.id, "S")) },
-  { id: "aristocrat", tier: "Silver", name: "Arithmetic Aristocrat", icon: "🥸", desc: "Reach rank A in the first 8 topics",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(0, 8), "A") },
-  { id: "aficionado", tier: "Silver", name: "Algebra Aficionado", icon: "🧮", desc: "Reach rank A in topics 9–14",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(8, 14), "A") },
-  { id: "grandmaster", tier: "Silver", name: "Graphical Grandmaster", icon: "📉", desc: "Reach rank A in topics 15–20",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(14, 20), "A") },
-  { id: "shapeshifter", tier: "Silver", name: "Shapeshifter", icon: "🔷", desc: "Reach rank A in topics 21–26",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(20, 26), "A") },
-  { id: "statslayer", tier: "Silver", name: "Statistics Slayer", icon: "🗡️", desc: "Reach rank A in topics 27–29",
-    check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(26, 29), "A") },
+  { id: "aristocrat", tier: "Silver", name: "Arithmetic Aristocrat", icon: "🥸", desc: "Reach rank A in every Arithmetic topic",
+    check: (p) => groupAllRankAtLeast(p, "Arithmetic", "A") },
+  { id: "aficionado", tier: "Silver", name: "Algebra Aficionado", icon: "🧮", desc: "Reach rank A in every Algebra topic",
+    check: (p) => groupAllRankAtLeast(p, "Algebra", "A") },
+  { id: "grandmaster", tier: "Silver", name: "Graphical Grandmaster", icon: "📉", desc: "Reach rank A in every Graphs topic",
+    check: (p) => groupAllRankAtLeast(p, "Graphs", "A") },
+  { id: "shapeshifter", tier: "Silver", name: "Shapeshifter", icon: "🔷", desc: "Reach rank A in every Shapes topic",
+    check: (p) => groupAllRankAtLeast(p, "Shapes", "A") },
+  { id: "statslayer", tier: "Silver", name: "Statistics Slayer", icon: "🗡️", desc: "Reach rank A in every Statistics topic",
+    check: (p) => groupAllRankAtLeast(p, "Statistics", "A") },
   { id: "ohyeah", tier: "Silver", name: "OH YEAH!!!", icon: "🧡", desc: "Reach rank A in topic 30 (Vectors)",
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(29, 30), "A") },
   { id: "triplethreat", tier: "Silver", name: "Triple Threat", icon: "⚠️", desc: "Get 33 Trigonometry questions correct in a row",
@@ -6735,8 +6735,13 @@ const ACHIEVEMENTS = [
     check: (p) => (p.prestige || 0) >= 1 },
   { id: "aura", tier: "Gold", name: "+100 AURA", icon: "🌌", desc: "100 correct answers in a row",
     check: (p) => (p.bestStreak || 0) >= 100 },
-  { id: "perkilicious", tier: "Gold", name: "Perkilicious", icon: "💃", desc: "Level up every perk",
-    check: (p) => PERK_IDS.every((id) => perkPlus(p, id)) },
+  { id: "perkilicious", tier: "Gold", name: "Perkilicious", icon: "💃", desc: "Level up every perk you've unlocked",
+    check: (p) => {
+      const base = PERK_IDS.filter((id) => !PERKS[id].pr);
+      const pres = PERK_IDS.filter((id) => PERKS[id].pr);
+      return base.every((id) => perkUnlocked(p, id) && perkPlus(p, id))
+        && pres.every((id) => !perkUnlocked(p, id) || perkPlus(p, id));
+    } },
 
   /* ---------------- Platinum ---------------- */
   { id: "unlocked", tier: "Platinum", name: "Touch Grass", icon: "🏕", desc: "Reach S+ rank in every topic",
@@ -7180,26 +7185,45 @@ const PERKS = {
     up: 30, upHow: "the speed bonus procs 30 times",
     upDesc: "Answer correctly in under 10 seconds for +3 XP" },
   secondwind: { name: "Second Wind", icon: "💨", lv: 16,
-    desc: "Once a day, breaking a streak of 15+ keeps half of it",
+    desc: "Breaking a streak of 15+ keeps half of it (re-arms once you rebuild to 15)",
     up: 10, upHow: "it saves a streak 10 times",
     upDesc: "From a streak of 10+, keeps two-thirds" },
   forgive: { name: "Error Correction", icon: "🛟", lv: 18,
-    desc: "Your first slip in each topic each day doesn't break your streak",
-    up: 30, upHow: "a slip is forgiven 30 times",
-    upDesc: "Your first two slips in each topic each day are forgiven" },
+    desc: "Once a day, a slip doesn't break your streak",
+    up: 12, upHow: "a slip is forgiven 12 times",
+    upDesc: "Your first two slips each day are forgiven" },
   marathoner: { name: "Marathoner", icon: "🏃", lv: 19,
     desc: "Every 25 questions in a day → +15 XP",
     up: 10, upHow: "the bonus fires 10 times",
     upDesc: "Every 20 questions in a day → +15 XP" },
+  // Prestige-gated perks — unlock at prestige 2 / 5 / 10 (see perkUnlocked).
+  seasoned: { name: "Seasoned", icon: "🧭", lv: 99, pr: 2,
+    desc: "+1 XP on every correct answer",
+    up: 150, upHow: "150 correct answers while equipped",
+    upDesc: "+2 XP on every correct answer" },
+  polymath: { name: "Polymath", icon: "🧩", lv: 99, pr: 5,
+    desc: "Mixed Review correct answers give +3 XP",
+    up: 40, upHow: "40 correct Mixed Review answers while equipped",
+    upDesc: "Mixed Review correct answers give +5 XP" },
+  ascendant: { name: "Ascendant", icon: "🌟", lv: 99, pr: 10,
+    desc: "Every correct answer scores +20% XP",
+    up: 150, upHow: "150 correct answers while equipped",
+    upDesc: "Every correct answer scores +35% XP" },
 };
 const PERK_IDS = Object.keys(PERKS);
 const perkProgOf = (p, id) => ((p && p.perkProg && p.perkProg[id]) || 0);
 const perkPlus = (p, id) => perkProgOf(p, id) >= (PERKS[id] ? PERKS[id].up : Infinity);
 const perkProgFrac = (p, id) => Math.min(1, PERKS[id] ? perkProgOf(p, id) / PERKS[id].up : 1);
-// A perk is yours for good once earned — and prestige only happens at the
-// level cap, so any prestige means every perk was already unlocked.
-const perkUnlocked = (profile, id) =>
-  (profile && (profile.prestige || 0) > 0) || levelFromExp(totalExp(profile)) >= (PERKS[id] ? PERKS[id].lv : 99);
+// A level-perk is yours for good once earned — and prestige only happens
+// at the level cap, so any prestige means every level-perk was unlocked.
+// Prestige-perks (PERKS[id].pr) unlock only at that prestige count.
+const perkUnlocked = (profile, id) => {
+  const P = PERKS[id];
+  if (!P) return false;
+  const pr = (profile && profile.prestige) || 0;
+  if (P.pr) return pr >= P.pr;
+  return pr > 0 || levelFromExp(totalExp(profile)) >= (P.lv || 99);
+};
 const anyPerkUnlocked = (profile) => PERK_IDS.some((id) => perkUnlocked(profile, id));
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
@@ -7951,6 +7975,13 @@ function topicRankAtLeast(profile, topicId, label) {
 }
 function allTopicsRankAtLeast(profile, topics, label) {
   return topics.every((t) => topicRankAtLeast(profile, t.id, label));
+}
+// Every topic in one of the dashboard STAT_GROUPS is at least `label`.
+function groupAllRankAtLeast(profile, groupName, label) {
+  const g = STAT_GROUPS.find((x) => x.name === groupName);
+  if (!g) return false;
+  const ids = g.ids.filter((id) => TOPIC_BY_ID[id]);
+  return ids.length > 0 && ids.every((id) => topicRankAtLeast(profile, id, label));
 }
 function topicHasCorrect(profile, topicId) {
   return ((((profile.topics || {})[topicId] || {}).history) || []).some((v) => v === 1);
@@ -10791,7 +10822,8 @@ export default function MathsUnlockedBN() {
     next.perkProg = { ...(next.perkProg || {}) };
     const bumpPerk = (id, n = 1) => { if (perks.includes(id) && !plus(id)) next.perkProg[id] = (next.perkProg[id] || 0) + n; };
     const ecMax = plus("forgive") ? 2 : 1;
-    const forgivenHere = (d.forgiven || []).filter((x) => x === scoredId).length;
+    const forgivenHere = (d.forgiven || []).length; // Error Correction is now a per-DAY budget, not per-topic
+    const swMin = plus("secondwind") ? 10 : 15;
     let secondWindKept = null; // set if Second Wind saved the streak this answer
 
     // Wrong, holding a Streak Shield, and the Error Correction perk didn't
@@ -10903,14 +10935,23 @@ export default function MathsUnlockedBN() {
       // Specialist — bonus in a topic already at rank A (rank B once upgraded).
       const specMin = plus("specialist") ? RANK_ORDER.indexOf("B") : RANK_ORDER.indexOf("A");
       if (perks.includes("specialist") && rankBefore >= specMin) { gain += plus("specialist") ? 2 : 1; bumpPerk("specialist"); }
+      // Seasoned (P2) — flat bonus on every correct answer.
+      if (perks.includes("seasoned")) { gain += plus("seasoned") ? 2 : 1; bumpPerk("seasoned"); }
+      // Polymath (P5) — bonus on Mixed Review answers.
+      if (perks.includes("polymath") && activeTopic.id === MIXED_TOPIC.id) { gain += plus("polymath") ? 5 : 3; bumpPerk("polymath"); }
+      // Ascendant (P10) — percentage multiplier, applied last.
+      if (perks.includes("ascendant")) { gain = Math.round(gain * (plus("ascendant") ? 1.35 : 1.2)); bumpPerk("ascendant"); }
       next.bonusExp = (next.bonusExp || 0) + gain;
+      // Second Wind re-arms once the streak is rebuilt to the threshold.
+      if (perks.includes("secondwind") && (next.streak || 0) >= swMin) d.secondWindUsed = false;
       // Resourceful — a Hint coin every Nth correct answer.
       const resN = plus("resourceful") ? 10 : 15;
       if (perks.includes("resourceful") && (next.totalCorrect || 0) % resN === 0) { next.hints = (next.hints || 0) + 1; bumpPerk("resourceful"); }
     } else if (!forgiven) {
-      // Second Wind — once a day, a broken streak of 15+ (10+ upgraded)
-      // keeps a fraction of itself instead of resetting to zero.
-      const swMin = plus("secondwind") ? 10 : 15;
+      // Second Wind — a broken streak of 15+ (10+ upgraded) keeps a
+      // fraction of itself instead of resetting to zero. Re-arms each
+      // time the streak is rebuilt to the threshold (see the correct
+      // branch), so it's once per 15+ streak rather than once per day.
       const swKept = perks.includes("secondwind") && !d.secondWindUsed && (profile.streak || 0) >= swMin
         ? Math.floor((profile.streak || 0) * (plus("secondwind") ? 2 / 3 : 1 / 2))
         : null;
@@ -14474,7 +14515,7 @@ export default function MathsUnlockedBN() {
                         <span style={{ fontWeight: up && owned ? 800 : 700, fontSize: 13, color: up && owned ? GOLD : "var(--ink)" }}>
                           {p.name}{up && owned ? " +" : ""}
                         </span>
-                        {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · Level {p.lv}</span>}
+                        {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · {p.pr ? `Prestige ${p.pr}` : `Level ${p.lv}`}</span>}
                         <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{up && owned ? p.upDesc : p.desc}</div>
                         {owned && (
                           <div style={{ marginTop: 6 }}>
