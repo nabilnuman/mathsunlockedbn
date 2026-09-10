@@ -836,3 +836,55 @@ as $$
 $$;
 revoke all on function public.recent_teacher_applicants(int) from public, anon;
 grant execute on function public.recent_teacher_applicants(int) to authenticated;
+
+-- Admin: every teacher account (activated + still-pending sign-ups), for
+-- the "Registered Teachers" tab in the Admin view. teachers.admin only.
+--   status: 'licensed' (active licence) | 'lapsed' (had one, expired)
+--         | 'active' (in `teachers`, no licence row — hand-added / comp)
+--         | 'pending' (signed up, no code redeemed, not in `teachers`)
+create or replace function public.admin_teachers()
+returns setof jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with is_admin as (select 1 from teachers where uid = auth.uid() and admin)
+  select jsonb_build_object(
+           'uid', x.uid, 'name', x.name, 'admin', x.admin,
+           'school', x.school, 'email', x.email,
+           'signed_up_at', x.signed_up_at, 'last_active', x.last_active,
+           'status', x.status, 'license_expires', x.license_expires,
+           'classes', x.classes)
+  from (
+    select t.uid,
+           coalesce(nullif(t.name, ''), a.name, '') as name,
+           coalesce(t.admin, false) as admin,
+           a.school, a.email, a.created_at as signed_up_at,
+           k.updated_at as last_active,
+           (select max(l.expires_at) from licenses l
+              where l.scope_type = 'teacher' and l.scope_value = t.uid::text) as license_expires,
+           case
+             when exists (select 1 from licenses l where l.scope_type = 'teacher'
+                          and l.scope_value = t.uid::text
+                          and (l.expires_at is null or l.expires_at > now())) then 'licensed'
+             when exists (select 1 from licenses l where l.scope_type = 'teacher'
+                          and l.scope_value = t.uid::text) then 'lapsed'
+             else 'active'
+           end as status,
+           (select count(*) from classes c where c.teacher_uid = t.uid) as classes
+    from teachers t
+    left join teacher_applicants a on a.uid = t.uid
+    left join kv_store k on k.scope = t.uid::text and k.key = 'profile'
+    union all
+    select a.uid, coalesce(a.name, ''), false, a.school, a.email, a.created_at,
+           k.updated_at, null::timestamptz, 'pending', 0
+    from teacher_applicants a
+    left join kv_store k on k.scope = a.uid::text and k.key = 'profile'
+    where not exists (select 1 from teachers t where t.uid = a.uid)
+  ) x
+  where exists (select 1 from is_admin)
+  order by x.signed_up_at desc nulls last
+$$;
+revoke all on function public.admin_teachers() from public, anon;
+grant execute on function public.admin_teachers() to authenticated;

@@ -8,13 +8,13 @@ import {
   teacherResetPin, changePin,
   sendFriendRequest, acceptFriend, removeFriend, loadFriendGraph,
   createBlitzChallenge, submitBlitzChallengeScore, loadBlitzChallenges, deleteBlitzChallenge,
-  getMyTeacher, myTeacherLicense, registerTeacher, activateTeacher, recentTeacherApplicants,
+  getMyTeacher, myTeacherLicense, registerTeacher, activateTeacher,
   createClass, myTeacherClasses, updateClass, deleteClass,
   classRoster, removeClassMember, joinClass, myStudentClasses, leaveClass,
   loadAssignments, createAssignment, deleteAssignment, setAssignmentArchived, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
-  submitDailyResult, dailyBoard, myDailyResult, adminStudents,
+  submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 import {
@@ -9120,6 +9120,8 @@ export default function MathsUnlockedBN() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [pinResetFor, setPinResetFor] = useState(null); // student uid whose PIN reset panel is open
   const [adminExpanded, setAdminExpanded] = useState(null); // admin table: which student row is expanded
+  const [adminTab, setAdminTab] = useState("students"); // "students" | "teachers"
+  const [adminTeacherRows, setAdminTeacherRows] = useState(null); // admin_teachers(); null = not loaded
   const [adminSort, setAdminSort] = useState("active"); // "active" | "name" | "level"
   const [pinResetVal, setPinResetVal] = useState("");
   const [pinResetBusy, setPinResetBusy] = useState(false);
@@ -9170,7 +9172,6 @@ export default function MathsUnlockedBN() {
   const [actCode, setActCode] = useState("");
   const [actBusy, setActBusy] = useState(false);
   const [actMsg, setActMsg] = useState(null); // { ok, text }
-  const [teacherApplicants, setTeacherApplicants] = useState(null); // admin list
 
   // A teacher account only gets teacher features while its licence is
   // active. Without one it behaves as a plain student account — same
@@ -11292,10 +11293,21 @@ export default function MathsUnlockedBN() {
     setAdminLoading(false);
   }
 
+  async function loadAdminTeachers() {
+    setAdminLoading(true);
+    try {
+      const rows = await adminTeachers();
+      setAdminTeacherRows(Array.isArray(rows) ? rows : []);
+    } catch (e) { setAdminTeacherRows([]); }
+    setAdminLoading(false);
+  }
   function openAdmin() {
     setScreen("admin");
+    setAdminTab("students");
     loadStudents();
   }
+  // Cycle the sort: Recent → Name → Level → Recent
+  const cycleAdminSort = () => setAdminSort((s) => (s === "active" ? "name" : s === "name" ? "level" : "active"));
 
   /* ---- teacher: classes ---- */
   async function openClasses() {
@@ -13040,35 +13052,41 @@ export default function MathsUnlockedBN() {
             <button onClick={() => setScreen(profile.name ? "dashboard" : "login")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
               <ArrowLeft size={14} /> back
             </button>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Registered Students ({students.length})</div>
-              <button onClick={loadStudents} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Admin</div>
+              <button onClick={() => (adminTab === "students" ? loadStudents() : loadAdminTeachers())} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
 
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {[["students", `Students${students.length ? ` (${students.length})` : ""}`], ["teachers", `Teachers${adminTeacherRows ? ` (${adminTeacherRows.length})` : ""}`]].map(([k, label]) => (
+                <button key={k} onClick={() => { setAdminTab(k); if (k === "teachers" && adminTeacherRows === null) loadAdminTeachers(); }} style={{
+                  flex: 1, fontSize: 12.5, fontWeight: 700, padding: "8px 10px", borderRadius: 10, cursor: "pointer",
+                  color: adminTab === k ? "var(--on-accent)" : "var(--muted)",
+                  background: adminTab === k ? "var(--blue)" : "var(--card)",
+                  border: `1.5px solid ${adminTab === k ? "var(--blue)" : "var(--grid)"}`,
+                }}>{label}</button>
+              ))}
+            </div>
+
             {adminLoading && <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>}
+
+            {adminTab === "students" && (<>
             {!adminLoading && students.length === 0 && (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>No students have registered yet.</div>
             )}
-
             {students.length > 0 && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-                {[["active", "Recent"], ["name", "Name"], ["level", "Level"]].map(([k, label]) => (
-                  <button key={k} onClick={() => setAdminSort(k)} style={{
-                    fontSize: 11.5, fontWeight: 700, padding: "4px 11px", borderRadius: 999, cursor: "pointer",
-                    color: adminSort === k ? "var(--on-accent)" : "var(--muted)",
-                    background: adminSort === k ? "var(--blue)" : "var(--card)",
-                    border: `1px solid ${adminSort === k ? "var(--blue)" : "var(--grid)"}`,
-                  }}>{label}</button>
-                ))}
-              </div>
+              <button onClick={cycleAdminSort} style={{
+                fontSize: 11.5, fontWeight: 700, padding: "5px 13px", borderRadius: 999, cursor: "pointer", marginBottom: 10,
+                color: "var(--on-accent)", background: "var(--blue)", border: "1px solid var(--blue)",
+              }}>Sort: {adminSort === "active" ? "Recent" : adminSort === "name" ? "Name" : "Level"} ⇅</button>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {(() => {
                 const list = [...students];
                 if (adminSort === "name") list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-                else if (adminSort === "level") list.sort((a, b) => totalExp(b) - totalExp(a));
+                else if (adminSort === "level") list.sort((a, b) => (b.prestige || 0) - (a.prestige || 0) || totalExp(b) - totalExp(a));
                 return list.map((s) => {
                   const attempted = TOPICS.filter((t) => (s.topics && s.topics[t.id] || {}).history?.length > 0);
                   const achCount = (s.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
@@ -13079,7 +13097,7 @@ export default function MathsUnlockedBN() {
                       <button onClick={() => setAdminExpanded(open ? null : s.uid)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "9px 12px", color: "var(--ink)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontWeight: 700, fontSize: 14, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
-                          <span className="mub-display" style={{ fontSize: 10.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>LV {levelFromExp(totalExp(s))}</span>
+                          <span className="mub-display" style={{ fontSize: 10.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", borderRadius: 999, padding: "1px 7px", flexShrink: 0 }}>{(s.prestige || 0) > 0 ? `P${s.prestige} · ` : ""}LV {levelFromExp(totalExp(s))}</span>
                           <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>{s.last_active ? timeAgo(s.last_active) : "—"}</span>
                           <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▸</span>
                         </div>
@@ -13142,6 +13160,47 @@ export default function MathsUnlockedBN() {
                 });
               })()}
             </div>
+            </>)}
+
+            {adminTab === "teachers" && (<>
+              {!adminLoading && adminTeacherRows && adminTeacherRows.length === 0 && (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>No teacher accounts yet.</div>
+              )}
+              {adminTeacherRows && adminTeacherRows.length > 0 && (() => {
+                const list = [...adminTeacherRows];
+                if (adminSort === "name") list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+                // "level" has no meaning for teachers → fall back to recent
+                const badge = { licensed: "var(--green)", active: "var(--blue)", lapsed: "var(--amber)", pending: "var(--muted)" };
+                return (
+                  <>
+                    <button onClick={cycleAdminSort} style={{
+                      fontSize: 11.5, fontWeight: 700, padding: "5px 13px", borderRadius: 999, cursor: "pointer", marginBottom: 10,
+                      color: "var(--on-accent)", background: "var(--blue)", border: "1px solid var(--blue)",
+                    }}>Sort: {adminSort === "name" ? "Name" : "Recent"} ⇅</button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {list.map((t) => (
+                        <div key={t.uid} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                            <span style={{ fontWeight: 700, fontSize: 14, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {t.name || "—"}{t.admin ? <span style={{ fontSize: 10, fontWeight: 800, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "0 5px", marginLeft: 6, verticalAlign: "middle" }}>ADMIN</span> : null}
+                            </span>
+                            <span style={{ fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, color: badge[t.status] || "var(--muted)", flexShrink: 0 }}>{t.status}</span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.6 }}>
+                            {t.school ? `${t.school} · ` : ""}{t.email || "no email"}<br />
+                            {t.classes ? `${t.classes} class${t.classes === 1 ? "" : "es"} · ` : ""}
+                            {t.status === "licensed" && t.license_expires ? `licence to ${new Date(t.license_expires).toLocaleDateString()} · ` : ""}
+                            {t.status === "lapsed" && t.license_expires ? `expired ${new Date(t.license_expires).toLocaleDateString()} · ` : ""}
+                            {t.signed_up_at ? `signed up ${timeAgo(t.signed_up_at)}` : ""}
+                            {t.last_active ? ` · active ${timeAgo(t.last_active)}` : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </>)}
           </div>
         )}
 
@@ -13765,34 +13824,6 @@ export default function MathsUnlockedBN() {
                   </button>
                 ))}
               </div>
-
-              {isAdmin && (
-                <div style={{ marginTop: 24, borderTop: "1px solid var(--grid)", paddingTop: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <div className="mub-display" style={{ fontSize: 15, fontWeight: 700 }}>🎓 Teacher sign-ups</div>
-                    <button onClick={async () => setTeacherApplicants(await recentTeacherApplicants(100))} style={{ fontSize: 12, fontWeight: 600, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
-                      {teacherApplicants === null ? "Load" : "Refresh"}
-                    </button>
-                  </div>
-                  {teacherApplicants !== null && (
-                    teacherApplicants.length === 0
-                      ? <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>No teacher sign-ups yet.</div>
-                      : <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                          {teacherApplicants.map((a) => (
-                            <div key={a.uid} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, marginBottom: 2 }}>
-                                <span style={{ fontWeight: 700 }}>{a.name || "—"}</span>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: a.licensed ? "var(--green)" : "var(--muted)" }}>{a.licensed ? "licensed" : a.is_teacher ? "lapsed" : "pending"}</span>
-                              </div>
-                              <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                                {a.school ? `${a.school} · ` : ""}{a.email || "no email"}{a.created_at ? ` · ${timeAgo(a.created_at)}` : ""}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                  )}
-                </div>
-              )}
             </div>
           );
         })()}
