@@ -6735,13 +6735,8 @@ const ACHIEVEMENTS = [
     check: (p) => (p.prestige || 0) >= 1 },
   { id: "aura", tier: "Gold", name: "+100 AURA", icon: "🌌", desc: "100 correct answers in a row",
     check: (p) => (p.bestStreak || 0) >= 100 },
-  { id: "perkilicious", tier: "Gold", name: "Perkilicious", icon: "💃", desc: "Level up every perk you've unlocked",
-    check: (p) => {
-      const base = PERK_IDS.filter((id) => !PERKS[id].pr);
-      const pres = PERK_IDS.filter((id) => PERKS[id].pr);
-      return base.every((id) => perkUnlocked(p, id) && perkPlus(p, id))
-        && pres.every((id) => !perkUnlocked(p, id) || perkPlus(p, id));
-    } },
+  { id: "perkilicious", tier: "Gold", name: "Perkilicious", icon: "💃", desc: "Level up every perk",
+    check: (p) => PERK_IDS.every((id) => perkPlus(p, id)) },
 
   /* ---------------- Platinum ---------------- */
   { id: "unlocked", tier: "Platinum", name: "Touch Grass", icon: "🏕", desc: "Reach S+ rank in every topic",
@@ -7196,35 +7191,21 @@ const PERKS = {
     desc: "Every 25 questions in a day → +15 XP",
     up: 10, upHow: "the bonus fires 10 times",
     upDesc: "Every 20 questions in a day → +15 XP" },
-  // Prestige-gated perks — unlock at prestige 2 / 5 / 10 (see perkUnlocked).
-  seasoned: { name: "Seasoned", icon: "🧭", lv: 99, pr: 2,
-    desc: "+1 XP on every correct answer",
-    up: 150, upHow: "150 correct answers while equipped",
-    upDesc: "+2 XP on every correct answer" },
-  polymath: { name: "Polymath", icon: "🧩", lv: 99, pr: 5,
-    desc: "Mixed Review correct answers give +3 XP",
-    up: 40, upHow: "40 correct Mixed Review answers while equipped",
-    upDesc: "Mixed Review correct answers give +5 XP" },
-  ascendant: { name: "Ascendant", icon: "🌟", lv: 99, pr: 10,
-    desc: "Every correct answer scores +20% XP",
-    up: 150, upHow: "150 correct answers while equipped",
-    upDesc: "Every correct answer scores +35% XP" },
 };
 const PERK_IDS = Object.keys(PERKS);
 const perkProgOf = (p, id) => ((p && p.perkProg && p.perkProg[id]) || 0);
 const perkPlus = (p, id) => perkProgOf(p, id) >= (PERKS[id] ? PERKS[id].up : Infinity);
 const perkProgFrac = (p, id) => Math.min(1, PERKS[id] ? perkProgOf(p, id) / PERKS[id].up : 1);
-// A level-perk is yours for good once earned — and prestige only happens
-// at the level cap, so any prestige means every level-perk was unlocked.
-// Prestige-perks (PERKS[id].pr) unlock only at that prestige count.
-const perkUnlocked = (profile, id) => {
-  const P = PERKS[id];
-  if (!P) return false;
-  const pr = (profile && profile.prestige) || 0;
-  if (P.pr) return pr >= P.pr;
-  return pr > 0 || levelFromExp(totalExp(profile)) >= (P.lv || 99);
-};
+// A perk is yours for good once earned — and prestige only happens at the
+// level cap, so any prestige means every perk was already unlocked.
+const perkUnlocked = (profile, id) =>
+  (profile && (profile.prestige || 0) > 0) || levelFromExp(totalExp(profile)) >= (PERKS[id] ? PERKS[id].lv : 99);
 const anyPerkUnlocked = (profile) => PERK_IDS.some((id) => perkUnlocked(profile, id));
+// Equip slots grow with prestige: 2 → 3 (P2) → 4 (P5) → 5 (P10).
+const perkSlots = (profile) => {
+  const pr = (profile && profile.prestige) || 0;
+  return pr >= 10 ? 5 : pr >= 5 ? 4 : pr >= 2 ? 3 : 2;
+};
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
 const CALC_LV = 4;
@@ -10644,14 +10625,14 @@ export default function MathsUnlockedBN() {
     startTimeRef.current = Date.now();
   }
 
-  // Equip / unequip a perk (max 2). Ignores locked perks.
+  // Equip / unequip a perk (up to perkSlots(profile)). Ignores locked perks.
   function togglePerk(id) {
     const p = PERKS[id];
     if (!p || !perkUnlocked(profile, id)) return;
     patchProfile((prev) => {
       const cur = (prev.perks || []).filter((x) => PERKS[x]);
       if (cur.includes(id)) return { perks: cur.filter((x) => x !== id) };
-      if (cur.length >= 2) return {};
+      if (cur.length >= perkSlots(prev)) return {};
       return { perks: [...cur, id] };
     });
   }
@@ -10935,12 +10916,6 @@ export default function MathsUnlockedBN() {
       // Specialist — bonus in a topic already at rank A (rank B once upgraded).
       const specMin = plus("specialist") ? RANK_ORDER.indexOf("B") : RANK_ORDER.indexOf("A");
       if (perks.includes("specialist") && rankBefore >= specMin) { gain += plus("specialist") ? 2 : 1; bumpPerk("specialist"); }
-      // Seasoned (P2) — flat bonus on every correct answer.
-      if (perks.includes("seasoned")) { gain += plus("seasoned") ? 2 : 1; bumpPerk("seasoned"); }
-      // Polymath (P5) — bonus on Mixed Review answers.
-      if (perks.includes("polymath") && activeTopic.id === MIXED_TOPIC.id) { gain += plus("polymath") ? 5 : 3; bumpPerk("polymath"); }
-      // Ascendant (P10) — percentage multiplier, applied last.
-      if (perks.includes("ascendant")) { gain = Math.round(gain * (plus("ascendant") ? 1.35 : 1.2)); bumpPerk("ascendant"); }
       next.bonusExp = (next.bonusExp || 0) + gain;
       // Second Wind re-arms once the streak is rebuilt to the threshold.
       if (perks.includes("secondwind") && (next.streak || 0) >= swMin) d.secondWindUsed = false;
@@ -14469,6 +14444,7 @@ export default function MathsUnlockedBN() {
 
       {perksOpen && (() => {
         const equipped = (profile.perks || []).filter((p) => PERKS[p]);
+        const slots = perkSlots(profile);
         const holdFor = (id) => ({
           onPointerDown: () => {
             perkHeldRef.current = false;
@@ -14491,13 +14467,13 @@ export default function MathsUnlockedBN() {
                 <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>Perks</span>
                 <button onClick={() => { setPerksOpen(false); setPerkInfoId(null); }} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to 2. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}, and <b style={{ color: "var(--ink)" }}>level up</b> the more you use them — hold a perk for its goal. <b style={{ color: "var(--ink)" }}>{equipped.length}/2</b> equipped.</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Equip up to {slots}{slots < 5 ? " (more slots at prestige 2, 5 and 10)" : ""}. They apply in every quiz{equipped.includes("momentum") || perkUnlocked(profile, "momentum") ? " (Momentum works in Blitz too)" : ""}, and <b style={{ color: "var(--ink)" }}>level up</b> the more you use them — hold a perk for its goal. <b style={{ color: "var(--ink)" }}>{equipped.length}/{slots}</b> equipped.</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {PERK_IDS.map((id) => {
                   const p = PERKS[id];
                   const owned = perkUnlocked(profile, id);
                   const on = equipped.includes(id);
-                  const full = !on && equipped.length >= 2;
+                  const full = !on && equipped.length >= slots;
                   const up = perkPlus(profile, id);
                   const frac = perkProgFrac(profile, id);
                   const GOLD = "#C99A1E";
@@ -14515,7 +14491,7 @@ export default function MathsUnlockedBN() {
                         <span style={{ fontWeight: up && owned ? 800 : 700, fontSize: 13, color: up && owned ? GOLD : "var(--ink)" }}>
                           {p.name}{up && owned ? " +" : ""}
                         </span>
-                        {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · {p.pr ? `Prestige ${p.pr}` : `Level ${p.lv}`}</span>}
+                        {!owned && <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}> · Level {p.lv}</span>}
                         <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{up && owned ? p.upDesc : p.desc}</div>
                         {owned && (
                           <div style={{ marginTop: 6 }}>
@@ -15217,6 +15193,9 @@ export default function MathsUnlockedBN() {
             </div>
             <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
               Every topic goes back to <b>ungraded</b> and your level resets to <b>1</b>. You keep your achievements, Skeleton Keys, and lifetime stats — and you move up to Prestige {(profile.prestige || 0) + 1} permanently. <b>This cannot be undone.</b>
+              {[2, 5, 10].includes((profile.prestige || 0) + 1) && (
+                <><br /><br /><b style={{ color: "var(--ink)" }}>Prestige {(profile.prestige || 0) + 1} unlocks a {(profile.prestige || 0) + 1 === 2 ? "3rd" : (profile.prestige || 0) + 1 === 5 ? "4th" : "5th"} perk slot.</b></>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button onClick={() => setConfirmPrestige(false)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>
