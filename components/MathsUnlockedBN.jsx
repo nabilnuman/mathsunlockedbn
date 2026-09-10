@@ -7506,7 +7506,7 @@ function BadgeChip({ a, size = 40, on = true, onClick }) {
 /* Shareable summary of a student's progress. Pure display unless
    onEditIcon / onEditBanner are supplied (own card) — then the icon and
    the banner are tappable to open their pickers. */
-function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
+function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch }) {
   const [pickedBadge, setPickedBadge] = useState(null); // read-only card: tapped banner badge
   useEffect(() => { setPickedBadge(null); }, [profile.uid, profile.name]);
   const level = levelFromExp(totalExp(profile));
@@ -7557,15 +7557,20 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons }) {
     </div>
   );
   const badgeOverlay = !onEditBanner && pickedBadge && (() => {
-    const hidden = pickedBadge.secret && !pickedBadge.showName;
+    // A secret badge keeps its unlock requirement hidden unless the
+    // viewer has earned it themselves; its name shows only if it's a
+    // "showName" teaser (same rule as the achievements screen).
+    const viewerHas = Array.isArray(viewerAch) && viewerAch.includes(pickedBadge.id);
+    const secretHidden = pickedBadge.secret && !viewerHas;
+    const nameHidden = secretHidden && !pickedBadge.showName;
     const col = TIER_COLOR[pickedBadge.tier];
     return (
       <div onClick={() => setPickedBadge(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 95, fontFamily: "Inter, sans-serif" }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: 300, maxWidth: "100%", background: "var(--card)", color: "var(--ink)", border: `2px solid ${col}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 16px 48px rgba(0,0,0,0.45)" }}>
           <div style={{ fontSize: 44, lineHeight: 1, marginBottom: 12 }}>{pickedBadge.icon}</div>
-          <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{hidden ? "Secret badge" : pickedBadge.name}</div>
+          <div className="mub-display" style={{ fontSize: 18, fontWeight: 700 }}>{nameHidden ? "Secret badge" : pickedBadge.name}</div>
           <div style={{ fontSize: 10.5, fontWeight: 800, color: col, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 3 }}>{pickedBadge.tier}</div>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>{hidden ? "Earn it yourself to reveal it." : pickedBadge.desc}</div>
+          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 12, lineHeight: 1.5 }}>{secretHidden ? "Secret — revealed when you earn it." : pickedBadge.desc}</div>
           <button onClick={() => setPickedBadge(null)} style={{ marginTop: 18, fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 20px", cursor: "pointer" }}>Close</button>
         </div>
       </div>
@@ -7856,11 +7861,11 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
 
 /* Read-only view of one student — their card plus a grade for every
    topic. Used by the Parent Link page and the friend search. */
-function StudentProfileView({ profile }) {
+function StudentProfileView({ profile, viewerAch }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-        <ProfileCard profile={profile} />
+        <ProfileCard profile={profile} viewerAch={viewerAch} />
       </div>
       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Grade in every topic</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
@@ -13809,7 +13814,7 @@ export default function MathsUnlockedBN() {
                     <button onClick={() => doFriendAction("request", friendView.uid)} disabled={busy} style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>+ Add friend</button>
                   );
                 })()}
-                <StudentProfileView profile={friendView} />
+                <StudentProfileView profile={friendView} viewerAch={profile.achievements || []} />
               </div>
             ) : !friendFind ? (
               <div>
@@ -14440,7 +14445,7 @@ export default function MathsUnlockedBN() {
                 })}
               </div>
             )}
-            <StudentProfileView profile={rosterProfile} />
+            <StudentProfileView profile={rosterProfile} viewerAch={profile.achievements || []} />
           </div>
         </div>
       )}
