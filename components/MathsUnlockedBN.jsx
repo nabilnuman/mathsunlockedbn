@@ -791,6 +791,128 @@ function HistogramGraph({ bars, xLabel, yStep = 0.2 }) {
   );
 }
 
+// A scatter plot of (x, y) points with a clear upward or downward trend, for
+// "is the correlation positive or negative" questions. No axis numbers matter
+// here — just the shape of the cloud — so ticks are left off.
+function ScatterGraph({ points, xLabel, yLabel }) {
+  const W = 300, Hh = 200, ml = 16, mr = 16, mt = 12, mb = 28;
+  const pw = W - ml - mr, ph = Hh - mt - mb;
+  const xMin = Math.min(...points.map((p) => p[0])), xMax = Math.max(...points.map((p) => p[0]));
+  const yMin = Math.min(...points.map((p) => p[1])), yMax = Math.max(...points.map((p) => p[1]));
+  const X = (x) => ml + ((x - xMin) / (xMax - xMin || 1)) * pw;
+  const Y = (y) => mt + ph - ((y - yMin) / (yMax - yMin || 1)) * ph;
+  return (
+    <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label="scatter graph"
+      style={{ maxWidth: 320, display: "block", margin: "0 auto 10px" }}>
+      <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
+      {points.map((p, i) => (
+        <circle key={i} cx={X(p[0])} cy={Y(p[1])} r="4" fill="var(--blue)" fillOpacity="0.75" stroke="var(--blue)" strokeWidth="1" />
+      ))}
+      <text x={ml + pw / 2} y={Hh - 2} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
+      <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>{yLabel}</text>
+    </svg>
+  );
+}
+
+// Drag-to-construct bar chart: the student builds each bar's right-hand
+// boundary and height by dragging a handle at its top-right corner — same
+// pointer-capture / getBoundingClientRect-scale pattern as VennPlaceBoard.
+// `value` is [{to,h}, ...] (bar i's left edge is bar i-1's `to`, or 0 for
+// the first bar) — dragging bar i's handle sideways moves its OWN right
+// edge (and so also bar i+1's left edge, same as a real histogram). When
+// `lockWidth` is set the boundaries are fixed (drawn as guides) and only
+// height drags — used for the frequency-density version, so the only thing
+// being tested is the density calculation, not redrawing the table.
+function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, value, onChange, showAnswer, correct }) {
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(300);
+  const [dragIdx, setDragIdx] = useState(null);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => setW(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const VBW = 300, VBH = 220, ml = 38, mr = 12, mt = 10, mb = 28;
+  const pw = VBW - ml - mr, ph = VBH - mt - mb;
+  const svgH = w * (VBH / VBW);
+  const scale = w / VBW;
+  const X = (v) => ml + (v / xMax) * pw;
+  const Y = (v) => mt + ph - (v / yMax) * ph;
+  const snap = (v, step) => Math.round(v / step) * step;
+  const leftOf = (i) => (i === 0 ? 0 : value[i - 1].to);
+
+  const moveDrag = (e) => {
+    if (dragIdx == null || !wrapRef.current) return;
+    const b = wrapRef.current.getBoundingClientRect();
+    const px = (e.clientX - b.left) / scale, py = (e.clientY - b.top) / scale;
+    const newH = Math.max(0, Math.min(yMax, snap((mt + ph - py) / ph * yMax, yStep)));
+    let newTo = value[dragIdx].to;
+    if (!lockWidth) {
+      const lo = leftOf(dragIdx) + minWidth;
+      const hi = (dragIdx === n - 1 ? xMax : value[dragIdx + 1].to - minWidth);
+      newTo = Math.max(lo, Math.min(hi, snap((px - ml) / pw * xMax, xSnap)));
+    }
+    onChange(value.map((bar, j) => (j === dragIdx ? { to: newTo, h: newH } : bar)));
+  };
+  const startDrag = (i) => (e) => {
+    if (showAnswer) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragIdx(i);
+  };
+  const endDrag = () => setDragIdx(null);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", maxWidth: 340, margin: "0 auto 4px", height: svgH, touchAction: "none" }}
+      onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      <svg viewBox={`0 0 ${VBW} ${VBH}`} width="100%" height={svgH} style={{ display: "block" }}>
+        <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
+        {Array.from({ length: 5 }, (_, i) => (yMax / 4) * i).map((t) => (
+          <g key={`y${t}`}>
+            <line x1={ml} y1={Y(t)} x2={ml + pw} y2={Y(t)} stroke="var(--grid)" strokeWidth="0.5" />
+            <text x={ml - 5} y={Y(t) + 3} fontSize="7" textAnchor="end" fill="var(--muted)">{Math.round(t * 100) / 100}</text>
+          </g>
+        ))}
+        {lockWidth && value.map((bar, i) => (
+          <line key={`gx${i}`} x1={X(bar.to)} y1={mt} x2={X(bar.to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
+        ))}
+        {value.map((bar, i) => {
+          const left = leftOf(i);
+          const c = correct && correct[i];
+          const ok = showAnswer && c && bar.to === c.to && Math.abs(bar.h - c.h) < 1e-9;
+          const col = !showAnswer ? "var(--blue)" : ok ? "var(--green)" : "var(--red)";
+          return (
+            <g key={i}>
+              {showAnswer && c && !ok && (
+                <rect x={X(left)} y={Y(c.h)} width={Math.max(0, X(c.to) - X(left))} height={Y(0) - Y(c.h)}
+                  fill="none" stroke="var(--green)" strokeWidth="1.4" strokeDasharray="3,2" />
+              )}
+              <rect x={X(left)} y={Y(bar.h)} width={Math.max(0, X(bar.to) - X(left))} height={Y(0) - Y(bar.h)}
+                fill={col} fillOpacity="0.45" stroke={col} strokeWidth="1.4" />
+              {!showAnswer && (
+                <circle cx={X(bar.to)} cy={Y(bar.h)} r="8" fill="var(--card)" stroke="var(--blue)" strokeWidth="2"
+                  onPointerDown={startDrag(i)} style={{ cursor: "grab", touchAction: "none" }} />
+              )}
+              <text x={X(bar.to) - (lockWidth ? 0 : 10)} y={Y(bar.h) - 10} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
+              {!lockWidth && <text x={X(bar.to)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{bar.to}</text>}
+            </g>
+          );
+        })}
+        {lockWidth && [0, ...value.map((b) => b.to)].map((t, i) => (
+          <text key={`xt${i}`} x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{t}</text>
+        ))}
+        <text x={ml + pw / 2} y={VBH - 4} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
+        <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>{yLabel}</text>
+      </svg>
+    </div>
+  );
+}
+
 // Monotone cubic (Fritsch–Carlson) interpolation through the class-boundary
 // points, sampled densely so the ogive draws as a smooth curve that never
 // dips (a cumulative total can only rise). Returns a fine [x, y] array.
@@ -5254,8 +5376,46 @@ const TOPICS = [
         };
       }
 
-      // ---------- frequency-density histogram: read a frequency, or find
-      //            the mean from a grouped frequency table -------------
+      // ---------- scatter graph: positive or negative correlation ----------
+      if (r < 0.75) {
+        const PAIRS = [
+          ["hours of revision", "test score"],
+          ["temperature (°C)", "ice-cream sales"],
+          ["age of car (years)", "value of car (£)"],
+          ["advertising spend (£)", "sales (£)"],
+          ["distance from town centre (miles)", "house price (£1000s)"],
+          ["hours of sleep", "concentration score"],
+          ["speed (mph)", "braking distance (m)"],
+          ["hours of training", "race time (s)"],
+        ];
+        const [xLabel, yLabel] = pick(PAIRS);
+        const n = randInt(9, 12);
+        const positive = Math.random() < 0.5;
+        const slope = (positive ? 1 : -1) * (2.2 + Math.random() * 1.2);
+        const base = randInt(15, 30);
+        const jitterAmp = 3.5; // small relative to the trend, so the direction stays unambiguous
+        const points = Array.from({ length: n }, (_, i) => {
+          const x = i + 1;
+          const y = Math.max(1, base + slope * x + (Math.random() * 2 - 1) * jitterAmp);
+          return [x, Math.round(y * 10) / 10];
+        });
+        const answer = positive ? "Positive correlation" : "Negative correlation";
+        return {
+          sub: "correlation",
+          prompt: `The scatter graph shows ${yLabel} against ${xLabel} for a group of people.\nWhat type of correlation does it show?`,
+          scatter: { points, xLabel, yLabel },
+          choices: ["Positive correlation", "Negative correlation"], answer,
+          hint: "does y generally increase or decrease as x increases?",
+          steps: [
+            positive
+              ? `As ${xLabel} increases, ${yLabel} also tends to increase.`
+              : `As ${xLabel} increases, ${yLabel} tends to decrease.`,
+            `This is called ${positive ? "positive" : "negative"} correlation.`,
+          ],
+        };
+      }
+
+      // ---------- frequency-density histogram: read a frequency ----------
       if (r < 0.85) {
         const widthPool = [5, 10, 10, 15, 20, 10];
         const chosenW = shuffle(widthPool).slice(0, 4);
@@ -5279,23 +5439,92 @@ const TOPICS = [
       }
 
       // ---------- estimate the mean from a grouped frequency table -------
-      const widthPool2 = [5, 10, 10, 15, 20];
-      const chosenW2 = shuffle(widthPool2).slice(0, 4);
-      let x2 = pick([0, 10]);
-      const rows = chosenW2.map((w) => { const from = x2, to = x2 + w; x2 += w; return { from, to, mid: from + w / 2, freq: randInt(2, 12) }; });
-      const totalF = rows.reduce((s, row) => s + row.freq, 0);
-      const sumFM = rows.reduce((s, row) => s + row.freq * row.mid, 0);
-      const mean = Math.round((sumFM / totalF) * 10) / 10;
-      const tableTxt = rows.map((row) => `${row.from}–${row.to}: frequency ${row.freq}`).join("\n");
+      if (r < 0.90) {
+        const widthPool2 = [5, 10, 10, 15, 20];
+        const chosenW2 = shuffle(widthPool2).slice(0, 4);
+        let x2 = pick([0, 10]);
+        const rows = chosenW2.map((w) => { const from = x2, to = x2 + w; x2 += w; return { from, to, mid: from + w / 2, freq: randInt(2, 12) }; });
+        const totalF = rows.reduce((s, row) => s + row.freq, 0);
+        const sumFM = rows.reduce((s, row) => s + row.freq * row.mid, 0);
+        const mean = Math.round((sumFM / totalF) * 10) / 10;
+        const tableTxt = rows.map((row) => `${row.from}–${row.to}: frequency ${row.freq}`).join("\n");
+        return {
+          sub: "histogram",
+          prompt: `The grouped frequency table shows some data:\n${tableTxt}\nEstimate the mean, using the midpoint of each class.`,
+          answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place",
+          steps: [
+            `Midpoints: ${rows.map((row) => row.mid).join(", ")}`,
+            `Σ(frequency × midpoint) = ${sumFM}`,
+            `Σfrequency = ${totalF}`,
+            `Mean ≈ ${sumFM} ÷ ${totalF} = ${mean}`,
+          ],
+        };
+      }
+
+      // ---------- drag to build: a frequency bar chart from a table ------
+      // (dragging a bar's handle sideways sets its class width, dragging it
+      // up/down sets its height = frequency — both boundaries and heights
+      // are for the student to construct, matching the table given.)
+      if (r < 0.95) {
+        const widthPool3 = [5, 10, 10, 15, 20];
+        const chosenW3 = shuffle(widthPool3).slice(0, 4);
+        let x3 = 0;
+        const bars3 = chosenW3.map((w) => { const from = x3, to = x3 + w; x3 += w; return { from, to, w }; });
+        bars3.forEach((b) => { b.freq = randInt(2, 12); });
+        const xMax3 = bars3[bars3.length - 1].to;
+        const yMax3 = Math.ceil((Math.max(...bars3.map((b) => b.freq)) + 2) / 4) * 4;
+        const label3 = pick(["mark", "score", "time (min)", "mass (kg)"]);
+        const tableTxt3 = bars3.map((b) => `${b.from}–${b.to}: frequency ${b.freq}`).join("\n");
+        const correct3 = bars3.map((b) => ({ to: b.to, h: b.freq }));
+        const initial3 = bars3.map((b, i) => ({ to: Math.max(5, Math.round((xMax3 * (i + 1) / bars3.length) / 5) * 5), h: 0 }));
+        return {
+          sub: "histogram",
+          prompt: `The frequency table shows the ${label3} of a group of students:\n${tableTxt3}\nDrag to build the bar graph — drag sideways to set each bar's width, and up or down to set its height.`,
+          buildHist: {
+            n: bars3.length, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
+            yStep: 1, xSnap: 5, minWidth: 5, lockWidth: false,
+            initial: initial3, correct: correct3,
+            checkBars: (val) => val.every((b, i) => b.to === correct3[i].to && Math.abs(b.h - correct3[i].h) < 1e-9),
+          },
+          answer: bars3.map((b) => `${b.from}–${b.to} → ${b.freq}`).join(",  "),
+          hint: "each bar's right edge is a class boundary from the table; its height is that class's frequency",
+          steps: [
+            `Class boundaries (widths): ${bars3.map((b) => `${b.from}–${b.to}`).join(", ")}`,
+            `Heights (frequencies): ${bars3.map((b) => b.freq).join(", ")}`,
+            `Drag each bar's handle to its class boundary and frequency.`,
+          ],
+        };
+      }
+
+      // ---------- drag to build: a frequency density graph ---------------
+      // (class boundaries are fixed/shown — only the height is dragged, so
+      // this tests the density = frequency ÷ width calculation specifically.)
+      const widthPool4 = [5, 10, 10, 15, 20, 10];
+      const chosenW4 = shuffle(widthPool4).slice(0, 4);
+      let x4 = pick([0, 10]);
+      const bars4 = chosenW4.map((w) => { const from = x4, to = x4 + w; x4 += w; return { from, to, w }; });
+      const yStep4 = 0.2;
+      bars4.forEach((b) => { b.freq = randInt(2, 12); b.density = Math.round((b.freq / b.w) / yStep4) * yStep4; b.freq = Math.round(b.density * b.w); });
+      const xMax4 = bars4[bars4.length - 1].to;
+      const yMax4 = Math.ceil((Math.max(...bars4.map((b) => b.density)) + yStep4) / (yStep4 * 4)) * (yStep4 * 4);
+      const label4 = pick(["mark", "score", "time (min)", "mass (kg)"]);
+      const tableTxt4 = bars4.map((b) => `${b.from}–${b.to}: frequency ${b.freq}`).join("\n");
+      const correct4 = bars4.map((b) => ({ to: b.to, h: b.density }));
+      const initial4 = bars4.map((b) => ({ to: b.to, h: 0 }));
       return {
         sub: "histogram",
-        prompt: `The grouped frequency table shows some data:\n${tableTxt}\nEstimate the mean, using the midpoint of each class.`,
-        answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place",
+        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal):\n${tableTxt4}\nDrag to build the frequency density graph — work out each bar's frequency density, then drag its height into place.`,
+        buildHist: {
+          n: bars4.length, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
+          yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true,
+          initial: initial4, correct: correct4,
+          checkBars: (val) => val.every((b, i) => b.to === correct4[i].to && Math.abs(b.h - correct4[i].h) < 1e-9),
+        },
+        answer: bars4.map((b) => `${b.from}–${b.to} → ${b.density}`).join(",  "),
+        hint: "frequency density = frequency ÷ class width",
         steps: [
-          `Midpoints: ${rows.map((row) => row.mid).join(", ")}`,
-          `Σ(frequency × midpoint) = ${sumFM}`,
-          `Σfrequency = ${totalF}`,
-          `Mean ≈ ${sumFM} ÷ ${totalF} = ${mean}`,
+          ...bars4.map((b) => `${b.from}–${b.to}:  ${b.freq} ÷ ${b.w} = ${b.density}`),
+          `Drag each bar's height to its frequency density.`,
         ],
       };
     } },
@@ -6803,6 +7032,7 @@ const SUBTOPICS = {
     { key: "averages", name: "Averages & range (mean, median, mode, range)" },
     { key: "cumfreq", name: "Cumulative frequency graphs" },
     { key: "histogram", name: "Frequency density histograms & tables" },
+    { key: "correlation", name: "Scatter graphs — positive or negative correlation" },
   ],
 };
 
@@ -9464,6 +9694,7 @@ export default function MathsUnlockedBN() {
   const [vennPlace, setVennPlace] = useState({});     // { [element]: regionKey } on a "drag the numbers in" Venn question
   const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
   const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
+  const [barBuild, setBarBuild] = useState(null);    // [{to,h}, ...] bars dragged into place on a "build the histogram" question
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -10269,7 +10500,7 @@ export default function MathsUnlockedBN() {
     if (!gen) return null;
     const ok = (q) => q && q.prompt && (q.answer != null || q.check) &&
       Array.isArray(q.steps) && q.steps.length &&
-      !q.fields && !q.venn && !q.figure && !q.graph && !q.solid && !q.choices &&
+      !q.fields && !q.venn && !q.figure && !q.graph && !q.solid && !q.choices && !q.buildHist &&
       (!L.quizFilter || L.quizFilter(q));
     for (let i = 0; i < 60; i++) {
       let q; try { q = gen(); } catch (e) { continue; }
@@ -10432,6 +10663,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11202,6 +11434,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11261,6 +11494,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11290,6 +11524,7 @@ export default function MathsUnlockedBN() {
     setAnswerInput("");
     setMultiInput({});
     setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setVennPlace({}); setMcPick(null); setDrawTri([]);
+    setBarBuild(question.buildHist ? question.buildHist.initial.map((b) => ({ ...b })) : null);
     startTimeRef.current = Date.now();
     if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
@@ -11430,6 +11665,9 @@ export default function MathsUnlockedBN() {
       correct = question.check
         ? !!question.check(multiInput)
         : question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
+    } else if (question.buildHist) {
+      if (!barBuild) return;
+      correct = question.buildHist.checkBars(barBuild);
     } else {
       if (!typed.trim()) return;
       correct = question.check ? !!question.check(typed) : checkEquivalent(typed, question.answer);
@@ -13828,6 +14066,7 @@ export default function MathsUnlockedBN() {
               {question.graph && <LineGraph data={question.graph} />}
               {question.motion && <MotionGraph {...question.motion} />}
               {question.histogram && <HistogramGraph {...question.histogram} />}
+              {question.scatter && <ScatterGraph {...question.scatter} />}
               {question.figure && (
                 <div>
                   <ShapeFigure shape={question.figure.shape} showSym={!!feedback && question.figure.showSymAfter} />
@@ -13909,6 +14148,16 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
+              {question.buildHist && barBuild && (
+                <div style={{ marginBottom: 12 }}>
+                  <HistBuildBoard {...question.buildHist} value={barBuild} onChange={setBarBuild} showAnswer={!!feedback} />
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 4 }}>
+                    {feedback ? (feedback.correct ? "Every bar is correct" : "Dashed outlines show the correct bars")
+                      : question.buildHist.lockWidth ? "Drag each handle up or down to set its frequency density" : "Drag each handle to set its class boundary and height"}
+                  </div>
+                </div>
+              )}
+
               {question.transform && (
                 <div style={{ marginBottom: 12 }}>
                   <TransformFigure
@@ -13958,7 +14207,7 @@ export default function MathsUnlockedBN() {
                 )
               )}
 
-              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror || question.tapPoint) ? null : question.vector ? (
+              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror || question.tapPoint || question.buildHist) ? null : question.vector ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>(</span>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -16087,7 +16336,7 @@ export default function MathsUnlockedBN() {
             // vector, tap/draw, Venn or multiple-choice questions.
             : (screen === "quiz" && question && !question.drawGraph && !question.region && !question.venn
                 && !question.placeVenn && !question.choices && !question.drawTransform && !question.drawMirror
-                && !question.tapPoint && !question.vector && !question.fields)
+                && !question.tapPoint && !question.vector && !question.fields && !question.buildHist)
               ? (text) => setAnswerInput(text)
             : undefined
           }
