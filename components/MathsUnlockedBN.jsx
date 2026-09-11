@@ -877,6 +877,12 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
   const leftOf = (i) => (i === 0 ? 0 : lockWidth ? fixedTo[i - 1] : (value[i - 1] ? value[i - 1].to : 0));
   const firstEmpty = value.findIndex((b) => b == null);
   const filledCount = firstEmpty === -1 ? n : firstEmpty;
+  // A round step (5, 10, 20, ...) for the generic x-axis scale, aiming for
+  // roughly 4-6 ticks — never a fraction like 13.75.
+  const xStepNice = [5, 10, 20, 25, 50, 100].find((s) => xMax / s <= 6) || 200;
+  const xTicks = [];
+  for (let t = 0; t <= xMax; t += xStepNice) xTicks.push(t);
+  if (xTicks[xTicks.length - 1] !== xMax) xTicks.push(xMax);
 
   const posOf = (e) => {
     const b = wrapRef.current.getBoundingClientRect();
@@ -942,13 +948,14 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
             <text x={ml - 5} y={Y(t) + 3} fontSize="7" textAnchor="end" fill="var(--muted)">{Math.round(t * 100) / 100}</text>
           </g>
         ))}
-        {/* generic x-axis scale — always shown, so there's a frame of reference to drag against
-            even before anything is built (kept scale-only in unlocked mode so it doesn't give
-            away the table's actual class boundaries) */}
-        {Array.from({ length: 5 }, (_, i) => (xMax / 4) * i).map((t) => (
+        {/* generic x-axis scale (round numbers, not raw fractions) — always shown so there's a
+            frame of reference to drag against even before anything is built. Skipped in
+            lockWidth mode, which already labels its own (given) boundaries below, to avoid two
+            sets of numbers competing for the same space. */}
+        {!lockWidth && xTicks.map((t) => (
           <g key={`xg${t}`}>
             <line x1={X(t)} y1={mt} x2={X(t)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
-            <text x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{Math.round(t * 10) / 10}</text>
+            <text x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{t}</text>
           </g>
         ))}
         {lockWidth && fixedTo.map((to, i) => (
