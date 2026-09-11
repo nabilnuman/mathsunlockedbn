@@ -854,7 +854,7 @@ function FreqTable({ rows, unitLabel }) {
 // bar's height (only), and pressing an already-placed one removes just
 // that one — used for the frequency-density version, so the only thing
 // being tested is the density calculation, not redrawing the table.
-function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, fixedTo, value, onChange, showAnswer, correct }) {
+function HistBuildBoard({ n, xMin = 0, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, fixedTo, value, onChange, showAnswer, correct }) {
   const wrapRef = useRef(null);
   const [w, setW] = useState(300);
   const [dragIdx, setDragIdx] = useState(null);
@@ -873,24 +873,25 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
   const pw = VBW - ml - mr, ph = VBH - mt - mb;
   const svgH = w * (VBH / VBW);
   const scale = w / VBW;
-  const X = (v) => ml + (v / xMax) * pw;
+  const X = (v) => ml + ((v - xMin) / (xMax - xMin)) * pw;
   const Y = (v) => mt + ph - (v / yMax) * ph;
   const snap = (v, step) => Math.round(v / step) * step;
-  const leftOf = (i) => (i === 0 ? 0 : lockWidth ? fixedTo[i - 1] : (value[i - 1] ? value[i - 1].to : 0));
+  const leftOf = (i) => (i === 0 ? xMin : lockWidth ? fixedTo[i - 1] : (value[i - 1] ? value[i - 1].to : xMin));
   const firstEmpty = value.findIndex((b) => b == null);
   const filledCount = firstEmpty === -1 ? n : firstEmpty;
   // A round step (5, 10, 20, ...) for the generic x-axis scale, aiming for
   // roughly 4-6 ticks — never a fraction like 13.75.
-  const xStepNice = [5, 10, 20, 25, 50, 100].find((s) => xMax / s <= 6) || 200;
+  const xStepNice = [5, 10, 20, 25, 50, 100].find((s) => (xMax - xMin) / s <= 6) || 200;
   const xTicks = [];
-  for (let t = 0; t <= xMax; t += xStepNice) xTicks.push(t);
+  for (let t = Math.ceil(xMin / xStepNice) * xStepNice; t <= xMax; t += xStepNice) xTicks.push(t);
+  if (xTicks[0] !== xMin) xTicks.unshift(xMin);
   if (xTicks[xTicks.length - 1] !== xMax) xTicks.push(xMax);
 
   const posOf = (e) => {
     const b = wrapRef.current.getBoundingClientRect();
     const px = (e.clientX - b.left) / scale, py = (e.clientY - b.top) / scale;
     return {
-      vx: Math.max(0, Math.min(xMax, (px - ml) / pw * xMax)),
+      vx: Math.max(xMin, Math.min(xMax, xMin + (px - ml) / pw * (xMax - xMin))),
       vy: Math.max(0, Math.min(yMax, (mt + ph - py) / ph * yMax)),
     };
   };
@@ -960,6 +961,12 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
             <text x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{t}</text>
           </g>
         ))}
+        {lockWidth && (
+          <g key="gx-start">
+            <line x1={X(xMin)} y1={mt} x2={X(xMin)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
+            <text x={X(xMin)} y={mt + ph + 21} fontSize="7" fontWeight="700" textAnchor="middle" fill="var(--ink)">{xMin}</text>
+          </g>
+        )}
         {lockWidth && fixedTo.map((to, i) => (
           <g key={`gx${i}`}>
             <line x1={X(to)} y1={mt} x2={X(to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
@@ -5564,7 +5571,7 @@ const TOPICS = [
           sub: "histogram",
           prompt: `The frequency table shows the ${label3} of a group of students. Drag on the graph to build the bar chart.`,
           buildHist: {
-            n: bars3.length, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
+            n: bars3.length, xMin: bars3[0].from, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
             yStep: 1, xSnap: 5, minWidth: 5, lockWidth: false,
             rows: bars3.map((b) => ({ from: b.from, to: b.to, freq: b.freq })),
             initial: Array(bars3.length).fill(null), correct: correct3,
@@ -5599,7 +5606,7 @@ const TOPICS = [
         sub: "histogram",
         prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then drag its height into place.`,
         buildHist: {
-          n: bars4.length, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
+          n: bars4.length, xMin: bars4[0].from, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
           yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true, fixedTo: fixedTo4,
           rows: bars4.map((b) => ({ from: b.from, to: b.to, freq: b.freq })),
           initial: Array(bars4.length).fill(null), correct: correct4,
