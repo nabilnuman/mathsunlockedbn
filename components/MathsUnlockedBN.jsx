@@ -7298,6 +7298,7 @@ function unlocksAtLevel(L) {
   if (SHIELD_LEVELS.includes(L)) out.push("🛟 Streak Shield");
   if (L % 5 === 0) out.push("🗝 Skeleton Key");
   if (L % 4 === 0) out.push("⚡ ×2 XP Boost");
+  if (L % 3 === 0) out.push("❄️ Streak Freeze");
   out.push("🪙 +1 Hint coin");
   return out;
 }
@@ -8299,6 +8300,7 @@ function creditLevelUps(next, expBefore) {
       if (!next.levelReachedAt[L]) next.levelReachedAt[L] = Date.now();
       if (L % 5 === 0) next.keys = (next.keys || 0) + 1;
       if (L % 4 === 0) next.boosts = (next.boosts || 0) + 1;
+      if (L % 3 === 0) next.streakFreezes = Math.min(2, (next.streakFreezes || 0) + 1); // day-streak insurance, cap 2
       if (SHIELD_LEVELS.includes(L)) next.shields = (next.shields || 0) + 1;
       next.hints = (next.hints || 0) + 1; // one Hint coin per level
     }
@@ -8318,6 +8320,7 @@ const emptyProfile = () => ({
   cardBg: "graph", nameStyle: "plain", title: "", seenIcons: [], seenFriends: [],
   seenChallenges: [], seenAch: [], lastTopicId: null, dailyRun: null,
   usedHint: false, gotCircle: false, gotFriend: false, playStreak: 0,
+  bestPlayStreak: 0, streakFreezes: 0, streakFrozeOn: null,
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
   bestRanks: {}, // lifetime best rank per topic — not reset by prestige (Mastery radar)
@@ -9615,15 +9618,42 @@ export default function MathsUnlockedBN() {
     if (newDay || newWeek) {
       const n = JSON.parse(JSON.stringify(profile));
       if (newDay) {
-        // "Practice Makes Perfect" — consecutive calendar days opened.
+        // Daily login streak — consecutive calendar days the app was opened.
+        // A missed day resets it to 1 unless Streak Freezes cover the gap
+        // (auto-consumed, one per missed day).
+        const today = todayKey();
         const yesterday = todayKey(new Date(Date.now() - 86400000));
-        n.playStreak = (profile.daily && profile.daily.date === yesterday) ? (n.playStreak || 0) + 1 : 1;
+        const last = profile.daily && profile.daily.date;
+        if (last === yesterday || !last) {
+          n.playStreak = (n.playStreak || 0) + 1;
+        } else {
+          const gap = Math.round((Date.parse(today) - Date.parse(last)) / 86400000) - 1; // days missed
+          if (gap >= 1 && (n.playStreak || 0) > 0 && gap <= (n.streakFreezes || 0)) {
+            n.streakFreezes = (n.streakFreezes || 0) - gap;
+            n.playStreak = (n.playStreak || 0) + 1;
+            n.streakFrozeOn = today; // → "streak saved" toast
+          } else {
+            n.playStreak = 1;
+          }
+        }
+        n.bestPlayStreak = Math.max(n.bestPlayStreak || 0, n.playStreak || 0);
         n.daily = freshDay(n);
       }
       if (newWeek) bumpWeek(n, 0);
       saveProfile(n);
     }
   }, [ready, profile.name, profile.daily && profile.daily.date, profile.week && profile.week.of]);
+
+  // "Streak Freeze used" toast — once, the day it happens.
+  const frozeToastRef = useRef(null);
+  useEffect(() => {
+    if (!ready || !profile.name) return;
+    const d = profile.streakFrozeOn;
+    if (d && d === todayKey() && frozeToastRef.current !== d) {
+      frozeToastRef.current = d;
+      flash(`❄️ Streak Freeze used — your ${profile.playStreak || 0}-day streak is safe`);
+    }
+  }, [ready, profile.name, profile.streakFrozeOn, profile.playStreak]);
 
   function flash(msg) {
     setToast(msg);
@@ -12370,10 +12400,25 @@ export default function MathsUnlockedBN() {
                   <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
-                    <span>· Current streak: {profile.streak || 0} 🔥</span>
+                    <span>· Level {levelFromExp(totalExp(profile))}</span>
                   </div>
                 </button>
               </div>
+              {(() => {
+                const ds = profile.playStreak || 0;
+                const fz = profile.streakFreezes || 0;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, padding: "10px 14px", borderRadius: 12, border: "1px solid var(--amber)", background: "color-mix(in srgb, var(--amber) 8%, var(--card))" }}>
+                    <span className="mub-display" style={{ fontSize: 24, fontWeight: 800, color: "var(--amber)", flexShrink: 0 }}>{ds}&nbsp;🔥</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--muted)", lineHeight: 1.5 }}>
+                      <span style={{ display: "block", fontWeight: 700, color: "var(--ink)", fontSize: 12.5 }}>
+                        {ds === 0 ? "Start your daily streak" : ds === 1 ? "Day 1 — come back tomorrow" : `${ds}-day streak`}
+                      </span>
+                      {fz > 0 ? `❄️ ${fz} Streak Freeze${fz > 1 ? "s" : ""} — a missed day won't reset it` : "Open the app every day to keep it going"}
+                    </span>
+                  </div>
+                );
+              })()}
               {EMAIL_RECOVERY && (
                 <div style={{ marginTop: 8 }}>
                   <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
@@ -14941,6 +14986,7 @@ export default function MathsUnlockedBN() {
           { icon: "🗝", n: profile.keys || 0, name: "Skeleton Key", desc: "Opens a locked topic early — use it from a locked topic's card." },
           { icon: "🪙", n: profile.hints || 0, name: "Hint coin", desc: "Reveals the first working step of a question. +1 every level up." },
           { icon: "🛟", n: profile.shields || 0, name: "Streak Shield", desc: "Keeps your streak alive after a wrong answer, and lets you retry." },
+          { icon: "❄️", n: profile.streakFreezes || 0, name: "Streak Freeze", desc: "Auto-used if you miss a day — your daily streak stays. One every 3 levels, keep up to 2." },
         ];
         return (
           <div onClick={() => setInventoryOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>

@@ -104,6 +104,8 @@ export async function GET(req) {
   const hwJob = new Map();
   const blitzJob = new Map();
   const dailyJob = new Map();
+  const streakJob = new Map();  // daily login streak about to break
+  const lapsedJob = new Map();  // engaged before, gone a few days
 
   // ---- 1. homework not done, due soon / overdue -----------------------
   {
@@ -202,12 +204,40 @@ export async function GET(req) {
     }
   }
 
-  // ---- cap: homework + blitz always; daily only if no homework -------
+  // ---- 4/5. daily login streak at risk + lapsed re-engagement --------
+  {
+    const meta = await readProfilesMeta(sb, [...subsByUid.keys()]);
+    for (const [uid, { p, updatedAt }] of meta) {
+      if (teacherSet.has(uid) || !p || !updatedAt) continue;
+      const lastDay = bruneiDayFromTs(updatedAt);
+      const streak = p.playStreak || 0;
+      if (streak >= 3 && lastDay === bruneiDate(-1)) {
+        streakJob.set(uid, {
+          title: `Your ${streak}-day streak ends tonight`,
+          body: "One question keeps it alive — open the app before midnight.",
+          url: "/", tag: "streak-risk",
+        });
+      }
+      const daysGone = Math.floor((now - Date.parse(updatedAt)) / DAY);
+      if ((p.totalCorrect || 0) >= 15 && daysGone >= 2 && daysGone <= 6 && daysGone % 2 === 0) {
+        lapsedJob.set(uid, {
+          title: "We miss you at MathsUnlocked",
+          body: "Your streak's waiting to be rebuilt, and today's Daily Challenge is up.",
+          url: "/", tag: "comeback",
+        });
+      }
+    }
+  }
+
+  // ---- cap: one nudge per student (homework > streak > daily > lapsed),
+  //      plus a Blitz ping can stack (it's a direct challenge). ----------
   const outbox = []; // { uid, payload }
   for (const uid of subsByUid.keys()) {
     if (hwJob.has(uid)) outbox.push({ uid, payload: hwJob.get(uid) });
-    if (blitzJob.has(uid)) outbox.push({ uid, payload: blitzJob.get(uid) });
-    if (dailyJob.has(uid) && !hwJob.has(uid)) outbox.push({ uid, payload: dailyJob.get(uid) });
+    else if (streakJob.has(uid)) outbox.push({ uid, payload: streakJob.get(uid) });
+    else if (dailyJob.has(uid)) outbox.push({ uid, payload: dailyJob.get(uid) });
+    else if (lapsedJob.has(uid)) outbox.push({ uid, payload: lapsedJob.get(uid) });
+    if (blitzJob.has(uid) && !hwJob.has(uid) && !streakJob.has(uid)) outbox.push({ uid, payload: blitzJob.get(uid) });
   }
 
   // ---- deliver ------------------------------------------------------
@@ -240,12 +270,39 @@ export async function GET(req) {
   return Response.json({
     ok: true,
     homework: hwJob.size,
+    streak: streakJob.size,
     blitz: blitzJob.size,
-    daily: [...dailyJob.keys()].filter((u) => !hwJob.has(u)).length,
+    daily: [...dailyJob.keys()].filter((u) => !hwJob.has(u) && !streakJob.has(u)).length,
+    lapsed: lapsedJob.size,
     notifications: outbox.length,
     sent,
     pruned: dead.length,
   });
+}
+
+// A Brunei calendar-date string (UTC+8) for a timestamp.
+function bruneiDayFromTs(ts) {
+  return new Date(Date.parse(ts) + 8 * HOUR).toISOString().slice(0, 10);
+}
+
+// Read each student's profile JSON plus the row's updated_at.
+async function readProfilesMeta(sb, uids) {
+  const map = new Map();
+  for (let i = 0; i < uids.length; i += 200) {
+    const chunk = uids.slice(i, i + 200);
+    if (!chunk.length) break;
+    const { data } = await sb
+      .from("kv_store")
+      .select("scope,value,updated_at")
+      .eq("key", "profile")
+      .in("scope", chunk);
+    for (const row of data || []) {
+      let p = null;
+      try { p = JSON.parse(row.value); } catch (e) { /* skip */ }
+      map.set(row.scope, { p, updatedAt: row.updated_at });
+    }
+  }
+  return map;
 }
 
 // Read `hw` progress etc. from each student's stored profile (kv_store).
