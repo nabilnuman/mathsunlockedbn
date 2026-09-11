@@ -8750,7 +8750,13 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
               <span style={{ fontSize: 13 }}>KONAMI CODE</span>
             </div>
           )}
-          <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 22 }}>
+          {res && !res.text && onUseAnswer && (
+            <button type="button" className="mub-px" onClick={useAnswer} title="Use this as your answer"
+              style={{ position: "absolute", top: 6, right: 7, zIndex: 4, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "3px 7px", borderRadius: 4, border: `1.5px solid ${P.face}`, background: P.eq, color: P.opInk, cursor: "pointer", fontFamily: PXFONT, lineHeight: 1 }}>
+              USE
+            </button>
+          )}
+          <div className="mub-mono" style={{ fontSize: 15, color: P.ink, lineHeight: 1.4, wordBreak: "break-all", display: "flex", flexWrap: "wrap", alignItems: "center", minHeight: 22, paddingRight: (res && !res.text && onUseAnswer) ? 34 : 0 }}>
             {blank ? <span style={{ opacity: 0.4 }}>0</span> : <>
               <MathText text={left || ""} />
               <span style={{ width: 2, alignSelf: "stretch", minHeight: 17, background: P.ink, animation: "calcCaret 1.1s step-end infinite" }} />
@@ -8758,12 +8764,6 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
             </>}
           </div>
           <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.3, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 30, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", gap: 8 }}>
-            {res && !res.text && onUseAnswer && (
-              <button type="button" className="mub-px" onClick={useAnswer} title="Use this as your answer"
-                style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "3px 7px", borderRadius: 4, border: `1.5px solid ${P.face}`, background: P.eq, color: P.opInk, cursor: "pointer", alignSelf: "center", fontFamily: PXFONT, lineHeight: 1, flexShrink: 0 }}>
-                USE
-              </button>
-            )}
             <MathText text={String(resStr)} />
           </div>
         </div>
