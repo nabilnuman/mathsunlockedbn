@@ -799,14 +799,16 @@ function ScatterGraph({ points, xLabel, yLabel }) {
   const pw = W - ml - mr, ph = Hh - mt - mb;
   const xMin = Math.min(...points.map((p) => p[0])), xMax = Math.max(...points.map((p) => p[0]));
   const yMin = Math.min(...points.map((p) => p[1])), yMax = Math.max(...points.map((p) => p[1]));
-  const X = (x) => ml + ((x - xMin) / (xMax - xMin || 1)) * pw;
-  const Y = (y) => mt + ph - ((y - yMin) / (yMax - yMin || 1)) * ph;
+  // inset so the outermost points sit clear of the box outline (not touching or clipped by it)
+  const r = 4, pad = r + 5;
+  const X = (x) => ml + pad + ((x - xMin) / (xMax - xMin || 1)) * (pw - pad * 2);
+  const Y = (y) => mt + pad + (1 - (y - yMin) / (yMax - yMin || 1)) * (ph - pad * 2);
   return (
     <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label="scatter graph"
       style={{ maxWidth: 320, display: "block", margin: "0 auto 10px" }}>
       <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
       {points.map((p, i) => (
-        <circle key={i} cx={X(p[0])} cy={Y(p[1])} r="4" fill="var(--blue)" fillOpacity="0.75" stroke="var(--blue)" strokeWidth="1" />
+        <circle key={i} cx={X(p[0])} cy={Y(p[1])} r={r} fill="var(--blue)" fillOpacity="0.75" stroke="var(--blue)" strokeWidth="1" />
       ))}
       <text x={ml + pw / 2} y={Hh - 2} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
       <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>{yLabel}</text>
