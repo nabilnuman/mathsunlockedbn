@@ -978,7 +978,7 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
               )}
               <rect x={X(left)} y={Y(bar.h)} width={Math.max(0, X(bar.to) - X(left))} height={Y(0) - Y(bar.h)}
                 fill={col} fillOpacity={dragIdx === i ? 0.65 : 0.45} stroke={col} strokeWidth="1.4" />
-              <text x={X(bar.to) - (lockWidth ? 0 : 10)} y={Y(bar.h) - 5} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
+              <text x={(X(left) + X(bar.to)) / 2} y={Y(bar.h) - 5} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
               {!lockWidth && <text x={X(bar.to)} y={mt + ph + 12} fontSize="7" fontWeight="700" textAnchor="middle" fill="var(--blue)">{bar.to}</text>}
             </g>
           );
@@ -5560,7 +5560,7 @@ const TOPICS = [
         const correct3 = bars3.map((b) => ({ to: b.to, h: b.freq }));
         return {
           sub: "histogram",
-          prompt: `The frequency table shows the ${label3} of a group of students. Drag on the graph to build the bar chart — drag out each bar's top-right corner; tap a bar to remove it.`,
+          prompt: `The frequency table shows the ${label3} of a group of students. Drag on the graph to build the bar chart.`,
           buildHist: {
             n: bars3.length, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
             yStep: 1, xSnap: 5, minWidth: 5, lockWidth: false,
@@ -5595,7 +5595,7 @@ const TOPICS = [
       const fixedTo4 = bars4.map((b) => b.to);
       return {
         sub: "histogram",
-        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then drag its height into place — tap a bar to remove it.`,
+        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then drag its height into place.`,
         buildHist: {
           n: bars4.length, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
           yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true, fixedTo: fixedTo4,
