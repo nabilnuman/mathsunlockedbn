@@ -7141,6 +7141,34 @@ const MIXED_UNLOCK_LEVEL = 3;
 // there's no topic scoring, just a personal best.
 const BLITZ_UNLOCK_LEVEL = 7;
 const BLITZ_SECONDS = 30;
+
+// Mock Exam — a fixed-length, cross-topic practice paper in the general
+// shape of a Cambridge-style O Level maths paper: a broad topic spread
+// roughly matching the real syllabus' content areas (Number, Algebra,
+// Coordinate geometry, Geometry, Mensuration, Trigonometry, Vectors,
+// Probability, Statistics). Every question is generated fresh by this
+// app's own topic generators — nothing here is drawn from, or written
+// to resemble, any specific real exam paper; only the paper SHAPE
+// (topic coverage, a stopwatch against a rough time guide) is modelled.
+const MOCK_EXAM_UNLOCK_LEVEL = MIXED_UNLOCK_LEVEL;
+const MOCK_EXAM_COUNT = 15;
+const MOCK_EXAM_TARGET_MIN = 20; // a rough time guide, shown but never enforced
+const MOCK_EXAM_POOL = [
+  "arithmetic", "hcflcm", "indices", "standardform", "sigfig",                // Number
+  "algebra", "factorization", "simultaneous", "sequences", "proportionality", // Algebra & graphs
+  "coordgeo", "graphicalsolutions",                                          // Coordinate geometry
+  "polygons", "transformations", "symmetry",                                 // Geometry
+  "mensuration", "similarity",                                               // Mensuration
+  "trigonometry", "circles",                                                 // Trigonometry
+  "vectors",                                                                 // Vectors
+  "probability", "statistics",                                              // Probability & Statistics
+];
+function pickMockExamPool(n) {
+  const pool = MOCK_EXAM_POOL.filter((id) => TOPIC_BY_ID[id]);
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) { const j = randInt(0, i); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+  return shuffled.slice(0, Math.min(n, shuffled.length));
+}
 function blitzQuestion() {
   const pick = (a) => a[randInt(0, a.length - 1)];
   const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = randInt(0, i); [r[i], r[j]] = [r[j], r[i]]; } return r; };
@@ -9790,6 +9818,15 @@ export default function MathsUnlockedBN() {
   const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
   const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
   const [barBuild, setBarBuild] = useState(null);    // [{to,h}, ...] bars dragged into place on a "build the histogram" question
+  // Mock Exam: mockExamRef is the authoritative run state (queue of topic ids,
+  // current index, running correct count, start time); mockProgress mirrors the
+  // bits the banner needs to re-render on. mockResult is the finished-run summary
+  // shown on the results screen. None of this is persisted to profile — a mock
+  // exam is a single-session practice run, not a tracked record (yet).
+  const mockExamRef = useRef(null);
+  const [mockProgress, setMockProgress] = useState(null); // { idx, total, correctCount }
+  const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec }
+  const [mockTick, setMockTick] = useState(0); // ticks every second while a Mock Exam is running, just to redraw its elapsed-time banner
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -11162,6 +11199,13 @@ export default function MathsUnlockedBN() {
     return () => clearInterval(iv);
   }, [profile.boostUntil]);
 
+  // Keep the Mock Exam banner's elapsed-time readout live while a run is on.
+  useEffect(() => {
+    if (!mockProgress) return;
+    const iv = setInterval(() => setMockTick((t) => t + 1), 1000);
+    return () => clearInterval(iv);
+  }, [mockProgress]);
+
   // Blitz countdown — one interval while a run is live.
   useEffect(() => {
     if (blitzPhase !== "playing") return;
@@ -11582,10 +11626,92 @@ export default function MathsUnlockedBN() {
       if (next.dodgeLocked) next.dodgeStuck = { ...(next.dodgeStuck || {}), [tid]: question };
       saveProfile(next);
     }
+    mockExamRef.current = null;
+    setMockProgress(null);
     setScreen("dashboard");
   }
 
+  // Start a Mock Exam: a fixed-length run across a shuffled slice of
+  // MOCK_EXAM_POOL, tracked by mockExamRef (see nextQuestion for how it
+  // advances/finishes). Reuses the same per-question reset block as
+  // startTopic/nextQuestion so every quiz-card interaction works exactly
+  // as normal — Mock Exam is just a driver deciding what comes next.
+  function startMockExam() {
+    if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
+    recentQRef.current = [];
+    const queue = pickMockExamPool(MOCK_EXAM_COUNT);
+    const topic = TOPIC_BY_ID[queue[0]];
+    setActiveTopic(topic);
+    const q = freshQuestion(() => pickQuestion(topic));
+    setQuestion(q);
+    const autoHint = autoHintDue(profile, q.topicId);
+    setHintFree(autoHint);
+    setAnswerInput(""); setWritePad(false);
+    setMultiInput({});
+    setDrawPts([]);
+    setRegionPick(null);
+    setCfPick([]);
+    setVennPressed([]);
+    setVennPlace({});
+    setMcPick(null);
+    setDrawTri([]);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
+    setSketchStrokes([]);
+    setSketchOn(false);
+    setHintShown(false);
+    setShieldOffer(false);
+    setShieldDeclined(false);
+    setFeedback(null);
+    startTimeRef.current = Date.now();
+    mockExamRef.current = { queue, idx: 0, correctCount: 0, startedAt: Date.now(), total: queue.length, targetSec: MOCK_EXAM_TARGET_MIN * 60 };
+    setMockProgress({ idx: 0, total: queue.length, correctCount: 0 });
+    setMockResult(null);
+    setScreen("quiz");
+  }
+
   function nextQuestion() {
+    // Mock Exam in progress: advance through its fixed queue instead of
+    // re-rolling the current topic. submitAnswer already scored the last
+    // answer normally (it reads question.topicId, so cross-topic scoring
+    // just works) — this only tracks the run's own correct count/progress.
+    if (mockExamRef.current) {
+      const mx = mockExamRef.current;
+      if (feedback && feedback.correct) mx.correctCount += 1;
+      mx.idx += 1;
+      if (mx.idx >= mx.total) {
+        const elapsedSec = Math.round((Date.now() - mx.startedAt) / 1000);
+        setMockResult({ correct: mx.correctCount, total: mx.total, elapsedSec, targetSec: mx.targetSec });
+        mockExamRef.current = null;
+        setMockProgress(null);
+        setScreen("mockresult");
+        return;
+      }
+      const topic = TOPIC_BY_ID[mx.queue[mx.idx]];
+      const q = freshQuestion(() => pickQuestion(topic));
+      setActiveTopic(topic);
+      setQuestion(q);
+      const autoHint = autoHintDue(profile, q.topicId);
+      setHintFree(autoHint);
+      setAnswerInput(""); setWritePad(false);
+      setMultiInput({});
+      setDrawPts([]);
+      setRegionPick(null);
+      setCfPick([]);
+      setVennPressed([]);
+      setVennPlace({});
+      setMcPick(null);
+      setDrawTri([]);
+      setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
+      setSketchStrokes([]);
+      setSketchOn(false);
+      setHintShown(false);
+      setShieldOffer(false);
+      setShieldDeclined(false);
+      setFeedback(null);
+      startTimeRef.current = Date.now();
+      setMockProgress({ idx: mx.idx, total: mx.total, correctCount: mx.correctCount });
+      return;
+    }
     const run = profileRef.current.hwRun;
     const subs = run && run.topicId === activeTopic.id ? run.subs : undefined;
     const q = freshQuestion(() => activeTopic.id === MIXED_TOPIC.id ? pickMixed() : pickQuestion(activeTopic, subs));
@@ -14095,6 +14221,37 @@ export default function MathsUnlockedBN() {
           </div>
         )}
 
+        {/* MOCK EXAM RESULTS */}
+        {screen === "mockresult" && mockResult && (() => {
+          const pct = Math.round((mockResult.correct / mockResult.total) * 100);
+          const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+          return (
+            <div style={{
+              maxWidth: 480, margin: "40px auto 0", background: "var(--card)", border: "1px solid var(--grid)",
+              borderRadius: 14, padding: "26px 22px", textAlign: "center", boxShadow: "0 6px 24px var(--shadow-soft)",
+            }}>
+              <div style={{ fontSize: 34, marginBottom: 4 }}>📝</div>
+              <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginBottom: 6 }}>Mock Exam complete</div>
+              <div className="mub-display" style={{ fontSize: 44, fontWeight: 900, color: "var(--blue)", margin: "10px 0 2px" }}>
+                {mockResult.correct}/{mockResult.total}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>{pct}% correct</div>
+              <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 20, fontSize: 12.5, color: "var(--muted)" }}>
+                <span>⏱ Your time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.elapsedSec)}</strong></span>
+                <span>Guide time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.targetSec)}</strong></span>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                <button onClick={startMockExam} style={{ padding: "10px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Try another
+                </button>
+                <button onClick={() => { setMockResult(null); setScreen("dashboard"); }} style={{ padding: "10px 18px", background: "none", border: "1px solid var(--grid)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Back to topics
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* QUIZ */}
         {screen === "quiz" && question && (
           <div>
@@ -14119,6 +14276,20 @@ export default function MathsUnlockedBN() {
                     <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.correct || 0} right so far{rec && typeof rec.best === "number" ? ` · best ${rec.best}/${r.count}` : ""}</span>
                   </span>
                   <button onClick={quitHomework} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 6, padding: "2px 8px", cursor: "pointer", flexShrink: 0 }}>exit</button>
+                </div>
+              );
+            })()}
+
+            {mockProgress && (() => {
+              const elapsed = Math.round((Date.now() - (mockExamRef.current ? mockExamRef.current.startedAt : Date.now())) / 1000);
+              const mm = String(Math.floor(elapsed / 60)).padStart(2, "0"), ss = String(elapsed % 60).padStart(2, "0");
+              return (
+                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
+                  <span style={{ fontWeight: 700, color: "var(--amber)" }}>
+                    📝 Mock Exam · Q {mockProgress.idx + 1} of {mockProgress.total}
+                    <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {mockProgress.correctCount} right so far</span>
+                  </span>
+                  <span className="mub-mono" style={{ fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>⏱ {mm}:{ss}</span>
                 </div>
               );
             })()}
@@ -15771,6 +15942,7 @@ export default function MathsUnlockedBN() {
         const lvl = levelFromExp(totalExp(profile));
         const mixedOpen = lvl >= MIXED_UNLOCK_LEVEL;
         const blitzOpen = lvl >= BLITZ_UNLOCK_LEVEL;
+        const mockOpen = lvl >= MOCK_EXAM_UNLOCK_LEVEL;
         const go = (fn) => { setModesOpen(false); fn(); };
         const modeBtn = (open) => ({
           width: "100%", textAlign: "left", cursor: open ? "pointer" : "not-allowed",
@@ -15802,6 +15974,15 @@ export default function MathsUnlockedBN() {
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                       {mixedOpen ? "Random questions from every topic you've unlocked — answers still count toward each topic." : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
+                    </span>
+                  </span>
+                </button>
+                <button onClick={() => go(startMockExam)} disabled={!mockOpen} className={mockOpen ? "mub-card" : ""} style={modeBtn(mockOpen)}>
+                  <span style={{ fontSize: 28, filter: mockOpen ? "none" : "grayscale(1)" }}>📝</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Mock Exam {mockOpen ? "" : `🔒 Level ${MOCK_EXAM_UNLOCK_LEVEL}`}</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      {mockOpen ? `A ${MOCK_EXAM_COUNT}-question timed paper across the whole syllabus — see how you'd do on the real thing.` : `Unlocks at Level ${MOCK_EXAM_UNLOCK_LEVEL}.`}
                     </span>
                   </span>
                 </button>
