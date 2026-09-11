@@ -814,19 +814,44 @@ function ScatterGraph({ points, xLabel, yLabel }) {
   );
 }
 
-// Drag-to-construct bar chart: the student builds each bar's right-hand
-// boundary and height by dragging a handle at its top-right corner — same
-// pointer-capture / getBoundingClientRect-scale pattern as VennPlaceBoard.
-// `value` is [{to,h}, ...] (bar i's left edge is bar i-1's `to`, or 0 for
-// the first bar) — dragging bar i's handle sideways moves its OWN right
-// edge (and so also bar i+1's left edge, same as a real histogram). When
-// `lockWidth` is set the boundaries are fixed (drawn as guides) and only
-// height drags — used for the frequency-density version, so the only thing
-// being tested is the density calculation, not redrawing the table.
-function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, value, onChange, showAnswer, correct }) {
+// A small styled table for the class-boundary / frequency data behind a
+// "build the chart" question — same look as LadderDivision's table.
+function FreqTable({ rows, unitLabel }) {
+  const cell = { padding: "5px 10px", textAlign: "center" };
+  return (
+    <table className="mub-mono" style={{ borderCollapse: "collapse", fontSize: 12.5, margin: "0 auto 10px", width: "100%", maxWidth: 320 }}>
+      <thead>
+        <tr>
+          <th style={{ ...cell, color: "var(--muted)", fontWeight: 700, borderBottom: "2px solid var(--grid)" }}>{unitLabel}</th>
+          <th style={{ ...cell, color: "var(--muted)", fontWeight: 700, borderBottom: "2px solid var(--grid)" }}>Frequency</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i}>
+            <td style={{ ...cell, color: "var(--ink)", borderBottom: "1px solid var(--grid)" }}>{row.from}–{row.to}</td>
+            <td style={{ ...cell, color: "var(--ink)", borderBottom: "1px solid var(--grid)" }}>{row.freq}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Tap-to-construct bar chart. `value` is [{to,h} | null, ...] — tap
+// anywhere on the graph and that point becomes the top-right corner (class
+// boundary + height) of the next bar, which then stays in place; tap an
+// already-placed bar again to remove it. In the default (unlocked) mode
+// bars share edges and build strictly left-to-right — bar i's left edge is
+// bar i-1's `to` — so removing bar i also clears every bar after it, since
+// their edges depended on it. When `lockWidth` is set every bar's boundary
+// is fixed in advance (`fixedTo`, drawn as dashed guides) so bars are
+// independent and can be placed/removed in any order — used for the
+// frequency-density version, so the only thing being tested is the density
+// calculation, not redrawing the table.
+function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, fixedTo, value, onChange, showAnswer, correct }) {
   const wrapRef = useRef(null);
   const [w, setW] = useState(300);
-  const [dragIdx, setDragIdx] = useState(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -845,32 +870,47 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
   const X = (v) => ml + (v / xMax) * pw;
   const Y = (v) => mt + ph - (v / yMax) * ph;
   const snap = (v, step) => Math.round(v / step) * step;
-  const leftOf = (i) => (i === 0 ? 0 : value[i - 1].to);
+  const leftOf = (i) => (i === 0 ? 0 : lockWidth ? fixedTo[i - 1] : (value[i - 1] ? value[i - 1].to : 0));
+  const firstEmpty = value.findIndex((b) => b == null);
+  const filledCount = firstEmpty === -1 ? n : firstEmpty;
 
-  const moveDrag = (e) => {
-    if (dragIdx == null || !wrapRef.current) return;
+  const onTap = (e) => {
+    if (showAnswer || !wrapRef.current) return;
     const b = wrapRef.current.getBoundingClientRect();
     const px = (e.clientX - b.left) / scale, py = (e.clientY - b.top) / scale;
-    const newH = Math.max(0, Math.min(yMax, snap((mt + ph - py) / ph * yMax, yStep)));
-    let newTo = value[dragIdx].to;
-    if (!lockWidth) {
-      const lo = leftOf(dragIdx) + minWidth;
-      const hi = (dragIdx === n - 1 ? xMax : value[dragIdx + 1].to - minWidth);
-      newTo = Math.max(lo, Math.min(hi, snap((px - ml) / pw * xMax, xSnap)));
+    const vx = Math.max(0, Math.min(xMax, (px - ml) / pw * xMax));
+    const vy = Math.max(0, Math.min(yMax, (mt + ph - py) / ph * yMax));
+
+    if (lockWidth) {
+      // every column is already fixed — work out which one was tapped
+      const idx = fixedTo.findIndex((to, i) => vx >= leftOf(i) && vx <= to);
+      if (idx === -1) return;
+      if (value[idx] != null) { onChange(value.map((b2, j) => (j === idx ? null : b2))); return; }
+      const h = Math.max(0, Math.min(yMax, snap(vy, yStep)));
+      onChange(value.map((b2, j) => (j === idx ? { to: fixedTo[idx], h } : b2)));
+      return;
     }
-    onChange(value.map((bar, j) => (j === dragIdx ? { to: newTo, h: newH } : bar)));
+
+    // unlocked: tapping any already-placed bar removes it (and every bar
+    // after it, since their left edges depended on it)
+    for (let i = 0; i < filledCount; i++) {
+      if (vx >= leftOf(i) && vx <= value[i].to) {
+        onChange(value.map((b2, j) => (j >= i ? null : b2)));
+        return;
+      }
+    }
+    if (filledCount >= n) return; // every bar already placed
+    const left = leftOf(filledCount);
+    if (vx <= left) return; // tapped inside the already-built region
+    const to = Math.max(left + minWidth, Math.min(xMax, snap(vx, xSnap)));
+    const h = Math.max(0, Math.min(yMax, snap(vy, yStep)));
+    onChange(value.map((b2, j) => (j === filledCount ? { to, h } : b2)));
   };
-  const startDrag = (i) => (e) => {
-    if (showAnswer) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDragIdx(i);
-  };
-  const endDrag = () => setDragIdx(null);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", maxWidth: 340, margin: "0 auto 4px", height: svgH, touchAction: "none" }}
-      onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-      <svg viewBox={`0 0 ${VBW} ${VBH}`} width="100%" height={svgH} style={{ display: "block" }}>
+    <div ref={wrapRef} style={{ position: "relative", maxWidth: 340, margin: "0 auto 4px" }}>
+      <svg viewBox={`0 0 ${VBW} ${VBH}`} width="100%" height={svgH} style={{ display: "block", cursor: showAnswer ? "default" : "crosshair" }}
+        onClick={onTap}>
         <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
         {Array.from({ length: 5 }, (_, i) => (yMax / 4) * i).map((t) => (
           <g key={`y${t}`}>
@@ -878,10 +918,11 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
             <text x={ml - 5} y={Y(t) + 3} fontSize="7" textAnchor="end" fill="var(--muted)">{Math.round(t * 100) / 100}</text>
           </g>
         ))}
-        {lockWidth && value.map((bar, i) => (
-          <line key={`gx${i}`} x1={X(bar.to)} y1={mt} x2={X(bar.to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
+        {lockWidth && fixedTo.map((to, i) => (
+          <line key={`gx${i}`} x1={X(to)} y1={mt} x2={X(to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
         ))}
         {value.map((bar, i) => {
+          if (!bar) return null;
           const left = leftOf(i);
           const c = correct && correct[i];
           const ok = showAnswer && c && bar.to === c.to && Math.abs(bar.h - c.h) < 1e-9;
@@ -894,16 +935,12 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
               )}
               <rect x={X(left)} y={Y(bar.h)} width={Math.max(0, X(bar.to) - X(left))} height={Y(0) - Y(bar.h)}
                 fill={col} fillOpacity="0.45" stroke={col} strokeWidth="1.4" />
-              {!showAnswer && (
-                <circle cx={X(bar.to)} cy={Y(bar.h)} r="8" fill="var(--card)" stroke="var(--blue)" strokeWidth="2"
-                  onPointerDown={startDrag(i)} style={{ cursor: "grab", touchAction: "none" }} />
-              )}
-              <text x={X(bar.to) - (lockWidth ? 0 : 10)} y={Y(bar.h) - 10} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
+              <text x={X(bar.to) - (lockWidth ? 0 : 10)} y={Y(bar.h) - 5} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
               {!lockWidth && <text x={X(bar.to)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{bar.to}</text>}
             </g>
           );
         })}
-        {lockWidth && [0, ...value.map((b) => b.to)].map((t, i) => (
+        {lockWidth && [0, ...fixedTo].map((t, i) => (
           <text key={`xt${i}`} x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{t}</text>
         ))}
         <text x={ml + pw / 2} y={VBH - 4} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
@@ -5465,10 +5502,11 @@ const TOPICS = [
         };
       }
 
-      // ---------- drag to build: a frequency bar chart from a table ------
-      // (dragging a bar's handle sideways sets its class width, dragging it
-      // up/down sets its height = frequency — both boundaries and heights
-      // are for the student to construct, matching the table given.)
+      // ---------- tap to build: a frequency bar chart from a table -------
+      // (tapping the graph sets a bar's top-right corner — class boundary
+      // AND height — one bar at a time, left to right; tapping a placed
+      // bar removes it so it can be redone. The table above the graph is
+      // rendered as a real <table>, not baked into the prompt text.)
       if (r < 0.95) {
         const widthPool3 = [5, 10, 10, 15, 20];
         const chosenW3 = shuffle(widthPool3).slice(0, 4);
@@ -5478,31 +5516,31 @@ const TOPICS = [
         const xMax3 = bars3[bars3.length - 1].to;
         const yMax3 = Math.ceil((Math.max(...bars3.map((b) => b.freq)) + 2) / 4) * 4;
         const label3 = pick(["mark", "score", "time (min)", "mass (kg)"]);
-        const tableTxt3 = bars3.map((b) => `${b.from}–${b.to}: frequency ${b.freq}`).join("\n");
         const correct3 = bars3.map((b) => ({ to: b.to, h: b.freq }));
-        const initial3 = bars3.map((b, i) => ({ to: Math.max(5, Math.round((xMax3 * (i + 1) / bars3.length) / 5) * 5), h: 0 }));
         return {
           sub: "histogram",
-          prompt: `The frequency table shows the ${label3} of a group of students:\n${tableTxt3}\nDrag to build the bar graph — drag sideways to set each bar's width, and up or down to set its height.`,
+          prompt: `The frequency table shows the ${label3} of a group of students. Tap the graph to build the bar chart — tap where a bar's top-right corner should be; tap a bar again to remove it.`,
           buildHist: {
             n: bars3.length, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
             yStep: 1, xSnap: 5, minWidth: 5, lockWidth: false,
-            initial: initial3, correct: correct3,
-            checkBars: (val) => val.every((b, i) => b.to === correct3[i].to && Math.abs(b.h - correct3[i].h) < 1e-9),
+            rows: bars3.map((b) => ({ from: b.from, to: b.to, freq: b.freq })),
+            initial: Array(bars3.length).fill(null), correct: correct3,
+            checkBars: (val) => val.every((b, i) => b && b.to === correct3[i].to && Math.abs(b.h - correct3[i].h) < 1e-9),
           },
           answer: bars3.map((b) => `${b.from}–${b.to} → ${b.freq}`).join(",  "),
           hint: "each bar's right edge is a class boundary from the table; its height is that class's frequency",
           steps: [
             `Class boundaries (widths): ${bars3.map((b) => `${b.from}–${b.to}`).join(", ")}`,
             `Heights (frequencies): ${bars3.map((b) => b.freq).join(", ")}`,
-            `Drag each bar's handle to its class boundary and frequency.`,
+            `Tap where each bar's top-right corner should be.`,
           ],
         };
       }
 
-      // ---------- drag to build: a frequency density graph ---------------
-      // (class boundaries are fixed/shown — only the height is dragged, so
-      // this tests the density = frequency ÷ width calculation specifically.)
+      // ---------- tap to build: a frequency density graph -----------------
+      // (class boundaries are fixed/shown as guides — a tap only sets the
+      // height, so this tests the density = frequency ÷ width calculation
+      // specifically, not redrawing the table.)
       const widthPool4 = [5, 10, 10, 15, 20, 10];
       const chosenW4 = shuffle(widthPool4).slice(0, 4);
       let x4 = pick([0, 10]);
@@ -5512,23 +5550,23 @@ const TOPICS = [
       const xMax4 = bars4[bars4.length - 1].to;
       const yMax4 = Math.ceil((Math.max(...bars4.map((b) => b.density)) + yStep4) / (yStep4 * 4)) * (yStep4 * 4);
       const label4 = pick(["mark", "score", "time (min)", "mass (kg)"]);
-      const tableTxt4 = bars4.map((b) => `${b.from}–${b.to}: frequency ${b.freq}`).join("\n");
       const correct4 = bars4.map((b) => ({ to: b.to, h: b.density }));
-      const initial4 = bars4.map((b) => ({ to: b.to, h: 0 }));
+      const fixedTo4 = bars4.map((b) => b.to);
       return {
         sub: "histogram",
-        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal):\n${tableTxt4}\nDrag to build the frequency density graph — work out each bar's frequency density, then drag its height into place.`,
+        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then tap the graph to place it — tap a bar again to remove it.`,
         buildHist: {
           n: bars4.length, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
-          yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true,
-          initial: initial4, correct: correct4,
-          checkBars: (val) => val.every((b, i) => b.to === correct4[i].to && Math.abs(b.h - correct4[i].h) < 1e-9),
+          yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true, fixedTo: fixedTo4,
+          rows: bars4.map((b) => ({ from: b.from, to: b.to, freq: b.freq })),
+          initial: Array(bars4.length).fill(null), correct: correct4,
+          checkBars: (val) => val.every((b, i) => b && b.to === correct4[i].to && Math.abs(b.h - correct4[i].h) < 1e-9),
         },
         answer: bars4.map((b) => `${b.from}–${b.to} → ${b.density}`).join(",  "),
         hint: "frequency density = frequency ÷ class width",
         steps: [
           ...bars4.map((b) => `${b.from}–${b.to}:  ${b.freq} ÷ ${b.w} = ${b.density}`),
-          `Drag each bar's height to its frequency density.`,
+          `Tap each bar's height into place.`,
         ],
       };
     } },
@@ -10667,7 +10705,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
-    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11438,7 +11476,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
-    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11498,7 +11536,7 @@ export default function MathsUnlockedBN() {
     setVennPlace({});
     setMcPick(null);
     setDrawTri([]);
-    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => ({ ...b })) : null);
+    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false); // still a click away — autoHint only waives the coin cost
@@ -11528,7 +11566,7 @@ export default function MathsUnlockedBN() {
     setAnswerInput("");
     setMultiInput({});
     setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setVennPlace({}); setMcPick(null); setDrawTri([]);
-    setBarBuild(question.buildHist ? question.buildHist.initial.map((b) => ({ ...b })) : null);
+    setBarBuild(question.buildHist ? question.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     startTimeRef.current = Date.now();
     if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
@@ -11670,7 +11708,7 @@ export default function MathsUnlockedBN() {
         ? !!question.check(multiInput)
         : question.fields.every((f) => checkEquivalent(multiInput[f.key], question.answers[f.key]));
     } else if (question.buildHist) {
-      if (!barBuild) return;
+      if (!barBuild || barBuild.some((b) => b == null)) return; // every bar must be tapped in first
       correct = question.buildHist.checkBars(barBuild);
     } else {
       if (!typed.trim()) return;
@@ -14154,10 +14192,11 @@ export default function MathsUnlockedBN() {
 
               {question.buildHist && barBuild && (
                 <div style={{ marginBottom: 12 }}>
+                  {question.buildHist.rows && <FreqTable rows={question.buildHist.rows} unitLabel={question.buildHist.xLabel} />}
                   <HistBuildBoard {...question.buildHist} value={barBuild} onChange={setBarBuild} showAnswer={!!feedback} />
                   <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 4 }}>
                     {feedback ? (feedback.correct ? "Every bar is correct" : "Dashed outlines show the correct bars")
-                      : question.buildHist.lockWidth ? "Drag each handle up or down to set its frequency density" : "Drag each handle to set its class boundary and height"}
+                      : question.buildHist.lockWidth ? "Tap the graph to place each bar's frequency density — tap a bar to remove it" : "Tap the graph to build each bar — tap a bar to remove it"}
                   </div>
                 </div>
               )}
@@ -14338,7 +14377,8 @@ export default function MathsUnlockedBN() {
                   || (question.vector && (!(multiInput.vx || "").trim() || !(multiInput.vy || "").trim()))
                   || (question.drawTransform && drawTri.length !== 3)
                   || (question.tapPoint && drawPts.length !== 1)
-                  || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())));
+                  || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())))
+                  || (question.buildHist && (!barBuild || barBuild.some((b) => b == null)));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
                     Submit
