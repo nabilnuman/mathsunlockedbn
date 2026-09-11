@@ -7150,7 +7150,7 @@ const BLITZ_SECONDS = 30;
 // app's own topic generators — nothing here is drawn from, or written
 // to resemble, any specific real exam paper; only the paper SHAPE
 // (topic coverage, a stopwatch against a rough time guide) is modelled.
-const MOCK_EXAM_UNLOCK_LEVEL = MIXED_UNLOCK_LEVEL;
+// Admin-only while it's still a demo (see the Special Modes overlay).
 const MOCK_EXAM_COUNT = 15;
 const MOCK_EXAM_TARGET_MIN = 20; // a rough time guide, shown but never enforced
 const MOCK_EXAM_POOL = [
@@ -15942,7 +15942,6 @@ export default function MathsUnlockedBN() {
         const lvl = levelFromExp(totalExp(profile));
         const mixedOpen = lvl >= MIXED_UNLOCK_LEVEL;
         const blitzOpen = lvl >= BLITZ_UNLOCK_LEVEL;
-        const mockOpen = lvl >= MOCK_EXAM_UNLOCK_LEVEL;
         const go = (fn) => { setModesOpen(false); fn(); };
         const modeBtn = (open) => ({
           width: "100%", textAlign: "left", cursor: open ? "pointer" : "not-allowed",
@@ -15977,15 +15976,19 @@ export default function MathsUnlockedBN() {
                     </span>
                   </span>
                 </button>
-                <button onClick={() => go(startMockExam)} disabled={!mockOpen} className={mockOpen ? "mub-card" : ""} style={modeBtn(mockOpen)}>
-                  <span style={{ fontSize: 28, filter: mockOpen ? "none" : "grayscale(1)" }}>📝</span>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Mock Exam {mockOpen ? "" : `🔒 Level ${MOCK_EXAM_UNLOCK_LEVEL}`}</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {mockOpen ? `A ${MOCK_EXAM_COUNT}-question timed paper across the whole syllabus — see how you'd do on the real thing.` : `Unlocks at Level ${MOCK_EXAM_UNLOCK_LEVEL}.`}
+                {isAdmin && (
+                  <button onClick={() => go(startMockExam)} className="mub-card" style={modeBtn(true)}>
+                    <span style={{ fontSize: 28 }}>📝</span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                        Mock Exam <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
+                      </span>
+                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                        A {MOCK_EXAM_COUNT}-question timed paper across the whole syllabus — see how you'd do on the real thing.
+                      </span>
                     </span>
-                  </span>
-                </button>
+                  </button>
+                )}
                 <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
                   <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
