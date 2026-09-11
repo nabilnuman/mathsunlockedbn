@@ -5528,11 +5528,12 @@ const TOPICS = [
         const totalF = rows.reduce((s, row) => s + row.freq, 0);
         const sumFM = rows.reduce((s, row) => s + row.freq * row.mid, 0);
         const mean = Math.round((sumFM / totalF) * 10) / 10;
-        const tableTxt = rows.map((row) => `${row.from}–${row.to}: frequency ${row.freq}`).join("\n");
+        const label2 = pick(["mark", "score", "time (min)", "mass (kg)"]);
         return {
           sub: "histogram",
-          prompt: `The grouped frequency table shows some data:\n${tableTxt}\nEstimate the mean, using the midpoint of each class.`,
-          answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place",
+          prompt: `The grouped frequency table shows the ${label2} of a group of students. Estimate the mean.`,
+          table: { rows: rows.map((row) => ({ from: row.from, to: row.to, freq: row.freq })), unitLabel: label2 },
+          answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place — the midpoint of a class is halfway between its boundaries",
           steps: [
             `Midpoints: ${rows.map((row) => row.mid).join(", ")}`,
             `Σ(frequency × midpoint) = ${sumFM}`,
@@ -14161,6 +14162,7 @@ export default function MathsUnlockedBN() {
               {question.motion && <MotionGraph {...question.motion} />}
               {question.histogram && <HistogramGraph {...question.histogram} />}
               {question.scatter && <ScatterGraph {...question.scatter} />}
+              {question.table && <FreqTable rows={question.table.rows} unitLabel={question.table.unitLabel} />}
               {question.figure && (
                 <div>
                   <ShapeFigure shape={question.figure.shape} showSym={!!feedback && question.figure.showSymAfter} />
