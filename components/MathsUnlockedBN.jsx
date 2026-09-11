@@ -8597,7 +8597,7 @@ function calcFmt(x) {
 // display transform: sqrt(/cbrt( -> √(/∛( ; leave the rest linear
 const calcShow = (s) => s.replace(/sqrt\(/g, "√(").replace(/cbrt\(/g, "∛(");
 
-export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersist }) {
+export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersist, onUseAnswer }) {
   // `initial` — a snapshot handed back by the parent so the working stays
   // put if you close the calculator and reopen it on the same question.
   const [st, setSt] = useState(() => (initial && initial.st) || { s: "", c: 0 }); // expression + cursor
@@ -8691,6 +8691,14 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
     setHi(-1); setAns(r.value); setAsFrac(false); postEq.current = true;
     setRes({ val: r.value, frac: calcToFrac(r.value) });
   };
+  // Send the current result straight into the answer box it was opened
+  // from, then close. Plain text — never the stacked-fraction glyphs.
+  const useAnswer = () => {
+    if (!res || res.text != null) return; // no result yet, or it's an error
+    const text = asFrac && res.frac ? `${res.frac.n}/${res.frac.d}` : calcFmt(res.val);
+    onUseAnswer && onUseAnswer(text);
+    onClose && onClose();
+  };
 
   const P = (skin && skin.P) || CALC_SKINS.classic.P;
   const PXFONT = "'Silkscreen', 'Pixelify Sans', ui-monospace, monospace";
@@ -8749,7 +8757,13 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
               <MathText text={right || ""} />
             </>}
           </div>
-          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.3, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 30, display: "flex", alignItems: "flex-end", justifyContent: "flex-end" }}>
+          <div className="mub-display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.3, color: res && res.text ? P.errInk : P.ink, textAlign: "right", minHeight: 30, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", gap: 8 }}>
+            {res && !res.text && onUseAnswer && (
+              <button type="button" className="mub-px" onClick={useAnswer} title="Use this as your answer"
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "3px 7px", borderRadius: 4, border: `1.5px solid ${P.face}`, background: P.eq, color: P.opInk, cursor: "pointer", alignSelf: "center", fontFamily: PXFONT, lineHeight: 1, flexShrink: 0 }}>
+                USE
+              </button>
+            )}
             <MathText text={String(resStr)} />
           </div>
         </div>
@@ -15767,6 +15781,17 @@ export default function MathsUnlockedBN() {
           onError={noteCalcError}
           initial={calcSessionRef.current}
           onPersist={(snap) => { calcSessionRef.current = snap; }}
+          onUseAnswer={
+            screen === "daily" ? (text) => setDailyInput(text)
+            : screen === "lesson" ? (text) => setLessonInput(text)
+            // Quiz: only for the plain typed-answer box — not multi-field,
+            // vector, tap/draw, Venn or multiple-choice questions.
+            : (screen === "quiz" && question && !question.drawGraph && !question.region && !question.venn
+                && !question.placeVenn && !question.choices && !question.drawTransform && !question.drawMirror
+                && !question.tapPoint && !question.vector && !question.fields)
+              ? (text) => setAnswerInput(text)
+            : undefined
+          }
         />
       )}
 
