@@ -6788,6 +6788,14 @@ const RANK_COLOR = {
 const STREAK_FOR_S_PLUS = 20;
 // Ranks that trigger the "move on to a new topic?" prompt (once each, per topic).
 const RANK_JUMP_RANKS = new Set(["A", "S", "S+"]);
+// Daily login-streak milestones — a bigger celebration than the everyday reveal.
+const STREAK_MILESTONES = {
+  7: { icon: "🔥", label: "WEEK STREAK", color: "#E38F4A" },
+  30: { icon: "🔥", label: "MONTH STREAK", color: "#4FB0A3" },
+  100: { icon: "💯", label: "100 DAYS", color: "#C99A1E" },
+  365: { icon: "🏆", label: "ONE YEAR STREAK", color: "#7C5CFF" },
+  1000: { icon: "👑", label: "1000 DAYS", color: "#FF4DE1" },
+};
 function avgFromHistory(history) {
   // "Total of the last 10" is out of a FIXED pool of 10 slots — unanswered
   // slots simply aren't filled yet, they don't inflate the score. 3 correct
@@ -8858,7 +8866,8 @@ function CelebrationOverlay({ c, onDone }) {
   useEffect(() => {
     if (!c) return;
     setGi(0);
-    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200, konami: 3200 }[c.kind] || 2200;
+    const streakMs = c.kind === "streak" && STREAK_MILESTONES[(c.data && c.data.n) || 0];
+    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200, konami: 3200, streak: streakMs ? 3800 : 1700 }[c.kind] || 2200;
     if (c.kind === "groupsplus") {
       const groups = (c.data && c.data.groups) || [];
       let i = 0, t;
@@ -8932,6 +8941,29 @@ function CelebrationOverlay({ c, onDone }) {
         <div style={{ textAlign: "center", animation: "celFade 2.2s ease forwards" }}>
           <div style={{ fontSize: 78, animation: "celCrown 0.8s cubic-bezier(.2,.9,.3,1.2) forwards" }}>👑</div>
           <div className="mub-display" style={{ fontSize: 22, fontWeight: 900, color: "#C99A1E" }}>#1 TODAY</div>
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "streak") {
+    const n = (c.data && c.data.n) || 0;
+    const ms = STREAK_MILESTONES[n];
+    if (ms) {
+      return (
+        <div className="mub-cel" style={wrap}>
+          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${ms.color}, #0e1520)`, animation: "celFlash 1.1s ease-out forwards" }} />
+          <Confetti count={180} duration={3600} />
+          <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFadeLong 3.8s ease forwards" }}>
+            {stampBox(`${ms.icon} ${n}`, ms.label, ms.color)}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ textAlign: "center", animation: "celPop 0.45s cubic-bezier(.2,.9,.3,1.2) forwards, celFade 1.7s ease forwards" }}>
+          <div style={{ fontSize: 54 }}>🔥</div>
+          <div className="mub-display" style={{ fontSize: 25, fontWeight: 900, color: "#F2A93B", textShadow: "0 2px 12px rgba(0,0,0,0.5)" }}>{n}-DAY STREAK</div>
         </div>
       </div>
     );
@@ -9646,6 +9678,13 @@ export default function MathsUnlockedBN() {
         }
         n.bestPlayStreak = Math.max(n.bestPlayStreak || 0, n.playStreak || 0);
         n.daily = freshDay(n);
+        // First login of the day — a quick streak reveal (bigger at 7/30/
+        // 100/365/1000 days). Skipped on the very first-ever session.
+        if (last) {
+          const sN = n.playStreak || 0;
+          const milestone = !!STREAK_MILESTONES[sN];
+          setTimeout(() => { celebrate("streak", { n: sN }); playJingle(milestone); }, 500);
+        }
       }
       if (newWeek) bumpWeek(n, 0);
       saveProfile(n);
@@ -12414,25 +12453,10 @@ export default function MathsUnlockedBN() {
                   <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                     <PrestigeBadge prestige={profile.prestige} size={15} />
                     <span style={{ color: "var(--blue)", fontWeight: 600 }}>{titleFor(profile)}</span>
-                    <span>· Level {levelFromExp(totalExp(profile))}</span>
+                    <span>· Current streak: {profile.streak || 0} 🔥</span>
                   </div>
                 </button>
               </div>
-              {(() => {
-                const ds = profile.playStreak || 0;
-                const fz = profile.streakFreezes || 0;
-                return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, padding: "10px 14px", borderRadius: 12, border: "1px solid var(--amber)", background: "color-mix(in srgb, var(--amber) 8%, var(--card))" }}>
-                    <span className="mub-display" style={{ fontSize: 24, fontWeight: 800, color: "var(--amber)", flexShrink: 0 }}>{ds}&nbsp;🔥</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: "var(--muted)", lineHeight: 1.5 }}>
-                      <span style={{ display: "block", fontWeight: 700, color: "var(--ink)", fontSize: 12.5 }}>
-                        {ds === 0 ? "Start your daily streak" : ds === 1 ? "Day 1 — come back tomorrow" : `${ds}-day streak`}
-                      </span>
-                      {fz > 0 ? `❄️ ${fz} Streak Freeze${fz > 1 ? "s" : ""} — a missed day won't reset it` : "Open the app every day to keep it going"}
-                    </span>
-                  </div>
-                );
-              })()}
               {EMAIL_RECOVERY && (
                 <div style={{ marginTop: 8 }}>
                   <button onClick={() => { setRecMsg(null); setRecEmail(""); setRecoveryOpen(true); }} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
