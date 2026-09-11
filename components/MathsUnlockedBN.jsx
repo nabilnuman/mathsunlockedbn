@@ -7068,6 +7068,13 @@ function bestRankOf(profile, id) {
   const cur = ((profile && profile.topics) || {})[id];
   return Math.max(rec[id] ?? -1, (cur && cur.highestRank) ?? -1);
 }
+// Lifetime best correct-streak in one topic — kept across prestige (like
+// bestRankOf). Self-migrates from the current run's topics[id].bestStreak.
+function bestTopicStreakOf(profile, id) {
+  const rec = (profile && profile.bestTopicStreak) || {};
+  const cur = ((profile && profile.topics) || {})[id];
+  return Math.max(rec[id] || 0, (cur && cur.bestStreak) || 0);
+}
 // Same shape as statGroupValue but reads the lifetime best — used by the
 // profile-card radar so "Mastery" survives a prestige reset.
 function statGroupBest(profile, ids) {
@@ -8324,6 +8331,7 @@ const emptyProfile = () => ({
   dodgeTopic: null, dodgeCount: 0, dodgeCaught: false, dodgeLocked: false, dodgeStuck: {},
   bestTrigStreak: 0, writtenAnswers: 0, calcSkin: "classic", konami: false, bestDayAnswers: 0,
   bestRanks: {}, // lifetime best rank per topic — not reset by prestige (Mastery radar)
+  bestTopicStreak: {}, // lifetime best correct-streak per topic — survives prestige (Top Streaks board)
   calcErrored: false, usedWrite: false, usedSketch: false, usedCalc: false,
   perkProg: {}, // hidden per-perk progress toward the "+" upgrade
   lessons: {}, // guided-lesson progress: lessons[topicId] = { done, full, best, at }
@@ -10248,7 +10256,7 @@ export default function MathsUnlockedBN() {
     try {
       const all = await getLeaderboard(true);
       const rows = (all || [])
-        .map((m) => ({ uid: m.uid, name: m.name, best: ((m.topics || {})[topicId] || {}).bestStreak || 0, full: m }))
+        .map((m) => ({ uid: m.uid, name: m.name, best: bestTopicStreakOf(m, topicId), full: m }))
         .filter((r) => r.name && r.best > 0)
         .sort((a, b) => b.best - a.best || (a.name || "").localeCompare(b.name || ""))
         .slice(0, 100);
@@ -11119,7 +11127,9 @@ export default function MathsUnlockedBN() {
     if (!forgiven) {
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
       t.streak = correct ? (t.streak || 0) + 1 : 0;
-      t.bestStreak = Math.max(t.bestStreak || 0, t.streak); // per-topic best — feeds the Top Streaks board (kept across prestige? no — resets with topics)
+      t.bestStreak = Math.max(t.bestStreak || 0, t.streak); // this run's best
+      // Lifetime per-topic best — survives prestige (feeds the Top Streaks board).
+      next.bestTopicStreak = { ...(next.bestTopicStreak || {}), [scoredId]: Math.max((next.bestTopicStreak || {})[scoredId] || 0, t.streak) };
       t.wrongRun = correct ? 0 : (t.wrongRun || 0) + 1; // consecutive wrong in this topic — drives the "try Learn" nudge
       if (scoredId === "trigonometry") next.bestTrigStreak = Math.max(next.bestTrigStreak || 0, t.streak); // "Triple Threat"
     }
@@ -11316,7 +11326,11 @@ export default function MathsUnlockedBN() {
     // Fold this run's grades into the lifetime best before wiping, so the
     // Mastery radar keeps whatever peak was reached.
     cur.bestRanks = cur.bestRanks || {};
-    TOPICS.forEach((tp) => { cur.bestRanks[tp.id] = bestRankOf(cur, tp.id); });
+    cur.bestTopicStreak = cur.bestTopicStreak || {};
+    TOPICS.forEach((tp) => {
+      cur.bestRanks[tp.id] = bestRankOf(cur, tp.id);
+      cur.bestTopicStreak[tp.id] = bestTopicStreakOf(cur, tp.id);
+    });
     cur.topics = {};            // grades wiped
     cur.bonusExp = 0;           // level resets to 1 — the invisible XP pool goes too
     cur.streak = 0;
