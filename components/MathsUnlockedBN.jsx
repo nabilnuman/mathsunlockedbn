@@ -6786,6 +6786,8 @@ const RANK_COLOR = {
   B: "var(--blue)", A: "var(--green)", "A*": "#1F7A5C", S: "#8A4FBF", "S+": "#B98900",
 };
 const STREAK_FOR_S_PLUS = 20;
+// Ranks that trigger the "move on to a new topic?" prompt (once each, per topic).
+const RANK_JUMP_RANKS = new Set(["A", "S", "S+"]);
 function avgFromHistory(history) {
   // "Total of the last 10" is out of a FIXED pool of 10 slots — unanswered
   // slots simply aren't filled yet, they don't inflate the score. 3 correct
@@ -8208,6 +8210,19 @@ function dailyMathle(dayKey) {
 }
 const MATHLE_EMOJI = { correct: "🟩", present: "🟪", absent: "⬛" };
 
+/* ---- Weekly focus — one topic a week scores double XP. Deterministic
+   from the Monday week key, picked from broadly-accessible topics. --- */
+const FOCUS_POOL = [
+  "arithmetic", "hcflcm", "indices", "sigfig", "standardform", "proportionality",
+  "algebra", "factorization", "sequences", "coordgeo", "polygons", "mensuration",
+  "similarity", "probability", "statistics",
+];
+function weeklyFocusId(wk = weekKey()) {
+  const pool = FOCUS_POOL.filter((id) => TOPIC_BY_ID[id]);
+  return pool[_hashStr("mub-focus::" + wk) % pool.length];
+}
+const FOCUS_XP_MULT = 2;
+
 // Roll the weekly XP bucket over on a new week (stashing last week's total
 // for the "champions" banner), then add this session's gain.
 function bumpWeek(profile, gain) {
@@ -9233,6 +9248,7 @@ export default function MathsUnlockedBN() {
   const [dailyBoardRows, setDailyBoardRows] = useState(null);
   const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
   const [dailyPeople, setDailyPeople] = useState({}); // uid -> full profile, so board names open a profile
+  const [streakBoard, setStreakBoard] = useState(null); // { topicId, rows: null | [{uid,name,best,full}] }
   // Mathle (admin-only daily equation game)
   const [mathleAns, setMathleAns] = useState("");
   const [mathleGuesses, setMathleGuesses] = useState([]); // [{ eq, score }]
@@ -10196,6 +10212,20 @@ export default function MathsUnlockedBN() {
     setDailyBusy(false);
   }
 
+  // Per-topic "Top Streaks" board — longest correct run in one topic.
+  async function openStreakBoard(topicId) {
+    setStreakBoard({ topicId, rows: null });
+    try {
+      const all = await getLeaderboard(true);
+      const rows = (all || [])
+        .map((m) => ({ uid: m.uid, name: m.name, best: ((m.topics || {})[topicId] || {}).bestStreak || 0, full: m }))
+        .filter((r) => r.name && r.best > 0)
+        .sort((a, b) => b.best - a.best || (a.name || "").localeCompare(b.name || ""))
+        .slice(0, 100);
+      setStreakBoard({ topicId, rows });
+    } catch (e) { setStreakBoard({ topicId, rows: [] }); }
+  }
+
   // ---- Mathle (admin trial) ----
   function startMathle() {
     setModesOpen(false);
@@ -11059,6 +11089,7 @@ export default function MathsUnlockedBN() {
     if (!forgiven) {
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
       t.streak = correct ? (t.streak || 0) + 1 : 0;
+      t.bestStreak = Math.max(t.bestStreak || 0, t.streak); // per-topic best — feeds the Top Streaks board (kept across prestige? no — resets with topics)
       t.wrongRun = correct ? 0 : (t.wrongRun || 0) + 1; // consecutive wrong in this topic — drives the "try Learn" nudge
       if (scoredId === "trigonometry") next.bestTrigStreak = Math.max(next.bestTrigStreak || 0, t.streak); // "Triple Threat"
     }
@@ -11072,10 +11103,9 @@ export default function MathsUnlockedBN() {
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
 
-    // Reaching S — and again reaching S+ — in normal topic practice (not
-    // Mixed Review or a homework run): offer to move on to a new topic.
-    // Once per rank per topic (so at most twice: S, then S+).
-    const S_IDX = RANK_ORDER.indexOf("S");
+    // Reaching A, then S, then S+ in normal topic practice (not Mixed
+    // Review or a homework run): offer to move on to a new topic. Once
+    // per milestone rank per topic (A* is skipped — three prompts max).
     let rankJumpTopic = null, rankJumpRank = null;
     {
       let seen = next.sawRankJump;
@@ -11083,8 +11113,8 @@ export default function MathsUnlockedBN() {
       if (!seen || typeof seen !== "object") seen = {};
       next.sawRankJump = seen;
       const newRank = RANK_ORDER[t.highestRank];
-      const shownIdx = seen[scoredId] ? RANK_ORDER.indexOf(seen[scoredId]) : S_IDX - 1;
-      if (rankedUp && t.highestRank >= S_IDX && t.highestRank > shownIdx &&
+      const shownIdx = seen[scoredId] ? RANK_ORDER.indexOf(seen[scoredId]) : RANK_ORDER.indexOf("A") - 1;
+      if (rankedUp && RANK_JUMP_RANKS.has(newRank) && t.highestRank > shownIdx &&
           activeTopic && activeTopic.id === scoredId && activeTopic.id !== MIXED_TOPIC.id && !next.hwRun) {
         seen[scoredId] = newRank;
         rankJumpTopic = scoredId;
@@ -11142,6 +11172,9 @@ export default function MathsUnlockedBN() {
       // Specialist — bonus in a topic already at rank A (rank B once upgraded).
       const specMin = plus("specialist") ? RANK_ORDER.indexOf("B") : RANK_ORDER.indexOf("A");
       if (perks.includes("specialist") && rankBefore >= specMin) { gain += plus("specialist") ? 2 : 1; bumpPerk("specialist"); }
+      // Weekly focus — this week's spotlight topic scores double.
+      const focusHit = scoredId === weeklyFocusId();
+      if (focusHit) gain *= FOCUS_XP_MULT;
       next.bonusExp = (next.bonusExp || 0) + gain;
       // Second Wind re-arms once the streak is rebuilt to the threshold.
       if (perks.includes("secondwind") && (next.streak || 0) >= swMin) d.secondWindUsed = false;
@@ -11234,7 +11267,7 @@ export default function MathsUnlockedBN() {
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, focusHit: correct && scoredId === weeklyFocusId(), rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -12492,6 +12525,28 @@ export default function MathsUnlockedBN() {
               <span style={{ fontSize: 13, color: "var(--blue)", fontWeight: 700 }}>Open →</span>
             </button>
 
+            {/* This week's focus topic — double XP */}
+            {(() => {
+              const fid = weeklyFocusId();
+              const ft = TOPIC_BY_ID[fid];
+              if (!ft) return null;
+              const open = isUnlocked(ft, profile);
+              const grp = (STAT_GROUPS.find((g) => g.ids.includes(fid)) || {}).name || null;
+              return (
+                <button onClick={() => (open ? startTopic(ft) : (grp && setGroupOpen(grp)))} className="mub-card" style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 14,
+                  border: "1px solid var(--amber)", background: "color-mix(in srgb, var(--amber) 9%, var(--card))", cursor: "pointer", marginBottom: 16, textAlign: "left",
+                }}>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>{ft.icon}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.6 }}>This week&rsquo;s focus</span>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{ft.name}{open ? "" : " 🔒"}</span>
+                  </span>
+                  <span className="mub-display" style={{ fontSize: 17, fontWeight: 800, color: "var(--amber)", flexShrink: 0 }}>×2 XP</span>
+                </button>
+              );
+            })()}
+
             {/* The five topic groups (mirrors the profile mastery pentagon) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
               {STAT_GROUPS.map((g) => {
@@ -13303,9 +13358,16 @@ export default function MathsUnlockedBN() {
         {/* QUIZ */}
         {screen === "quiz" && question && (
           <div>
-            <button onClick={leaveQuizUnanswered} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
-              <ArrowLeft size={14} /> back to topics
-            </button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+              <button onClick={leaveQuizUnanswered} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer" }}>
+                <ArrowLeft size={14} /> back to topics
+              </button>
+              {activeTopic.id !== MIXED_TOPIC.id && (
+                <button onClick={() => openStreakBoard(question.topicId || activeTopic.id)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "1px solid var(--grid)", borderRadius: 999, color: "var(--muted)", fontSize: 11.5, fontWeight: 700, padding: "4px 11px", cursor: "pointer" }}>
+                  🔥 Top Streaks
+                </button>
+              )}
+            </div>
 
             {profile.hwRun && (question.topicId || activeTopic.id) === profile.hwRun.topicId && (() => {
               const r = profile.hwRun;
@@ -13332,6 +13394,9 @@ export default function MathsUnlockedBN() {
                   {activeTopic.icon} {activeTopic.name}
                   {activeTopic.id === MIXED_TOPIC.id && question.topicName ? (
                     <span style={{ fontWeight: 400 }}> · {question.topicIcon} {question.topicName}</span>
+                  ) : ""}
+                  {(question.topicId || activeTopic.id) === weeklyFocusId() ? (
+                    <span style={{ color: "var(--amber)", fontWeight: 700 }}> · ★ focus ×2 XP</span>
                   ) : ""}
                 </div>
                 {(() => {
@@ -13703,7 +13768,7 @@ export default function MathsUnlockedBN() {
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>
-                        +{feedback.expGain} XP{feedback.xpDoubled && feedback.correct ? <span style={{ color: "var(--green)", fontWeight: 700 }}> · ⚡×2</span> : ""}
+                        +{feedback.expGain} XP{feedback.xpDoubled && feedback.correct ? <span style={{ color: "var(--green)", fontWeight: 700 }}> · ⚡×2</span> : ""}{feedback.focusHit ? <span style={{ color: "var(--amber)", fontWeight: 700 }}> · ★ focus ×2</span> : ""}
                       </div>
                       <LevelBar profile={profile} />
                     </div>
@@ -15629,9 +15694,47 @@ export default function MathsUnlockedBN() {
         />
       )}
 
+      {streakBoard && (() => {
+        const t = TOPIC_BY_ID[streakBoard.topicId];
+        return (
+          <div onClick={() => setStreakBoard(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 80, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, fontFamily: "Inter, sans-serif", boxShadow: "0 14px 44px var(--shadow)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>🔥 Top Streaks</span>
+                <button onClick={() => setStreakBoard(null)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Longest run of correct answers in {t ? `${t.icon} ${t.name}` : "this topic"}.</div>
+              {streakBoard.rows == null ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+              ) : streakBoard.rows.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>No streaks here yet — set the first one.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {streakBoard.rows.map((r, i) => {
+                    const mine = r.uid === authUid;
+                    const clickable = !mine && r.full;
+                    const Tag = clickable ? "button" : "div";
+                    return (
+                      <Tag key={r.uid || i} onClick={clickable ? () => { setStreakBoard(null); setRosterProfile(r.full); markMilestone("friendview"); } : undefined}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, width: "100%", textAlign: "left", cursor: clickable ? "pointer" : "default", color: "var(--ink)",
+                          background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
+                        <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 22, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: clickable ? "underline" : "none", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{r.name}{mine ? " · you" : ""}</span>
+                        <span className="mub-mono" style={{ fontWeight: 800, color: "var(--amber)" }}>{r.best} 🔥</span>
+                      </Tag>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {rankJump && (() => {
         const jt = TOPIC_BY_ID[rankJump.topicId];
-        const nextTopic = TOPICS.find((tp) => tp.id !== rankJump.topicId && isUnlocked(tp, profile) && !topicRankAtLeast(profile, tp.id, "S"));
+        const nextTopic = TOPICS.find((tp) => tp.id !== rankJump.topicId && isUnlocked(tp, profile) && !topicRankAtLeast(profile, tp.id, rankJump.rank))
+          || TOPICS.find((tp) => tp.id !== rankJump.topicId && isUnlocked(tp, profile) && !topicRankAtLeast(profile, tp.id, "S"));
         const rc = RANK_COLOR[rankJump.rank] || "var(--amber)";
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -15641,7 +15744,7 @@ export default function MathsUnlockedBN() {
                 <span style={{ color: rc }}>{rankJump.rank}</span> in {jt ? jt.name : "this topic"}!
               </div>
               <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
-                {nextTopic ? "Move on to a new topic, or keep practising here?" : "You've reached S in every topic you've unlocked."}
+                {nextTopic ? "Move on to a new topic, or keep pushing this one higher?" : `You've reached ${rankJump.rank} in every topic you've unlocked.`}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
                 {nextTopic && (
