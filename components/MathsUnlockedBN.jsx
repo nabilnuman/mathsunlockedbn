@@ -5443,21 +5443,24 @@ const TOPICS = [
         };
       }
 
-      // ---------- which of two classes was more consistent (IQR) ----------
+      // ---------- which of two classes was more/less consistent (IQR) ----
       if (r < 0.65) {
         const mkSet = () => { const q1 = randInt(8, 25), iqr = randInt(6, 20); return { q1, q3: q1 + iqr, iqr }; };
         let A = mkSet(), B = mkSet();
         while (A.iqr === B.iqr) B = mkSet();
-        const winner = A.iqr < B.iqr ? "Class A" : "Class B";
+        const moreConsistent = A.iqr < B.iqr ? "Class A" : "Class B";
+        const lessConsistent = moreConsistent === "Class A" ? "Class B" : "Class A";
+        const askMore = Math.random() < 0.5;
+        const winner = askMore ? moreConsistent : lessConsistent;
         return {
           sub: "cumfreq",
-          prompt: `Class A has lower quartile ${A.q1} and upper quartile ${A.q3}.\nClass B has lower quartile ${B.q1} and upper quartile ${B.q3}.\nWhich class's results were more consistent?`,
+          prompt: `Class A has lower quartile ${A.q1} and upper quartile ${A.q3}.\nClass B has lower quartile ${B.q1} and upper quartile ${B.q3}.\nWhich class's results were ${askMore ? "more" : "less"} consistent?`,
           choices: ["Class A", "Class B"], answer: winner,
-          hint: "the smaller interquartile range is more consistent",
+          hint: `the ${askMore ? "smaller" : "larger"} interquartile range is ${askMore ? "more" : "less"} consistent`,
           steps: [
             `IQR(Class A) = ${A.q3} − ${A.q1} = ${A.iqr}`,
             `IQR(Class B) = ${B.q3} − ${B.q1} = ${B.iqr}`,
-            `A smaller IQR means less spread out, so more consistent → ${winner}.`,
+            `A smaller IQR means less spread out, so more consistent → ${moreConsistent}; a larger IQR means less consistent → ${lessConsistent}.`,
           ],
         };
       }
