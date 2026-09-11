@@ -7142,33 +7142,167 @@ const MIXED_UNLOCK_LEVEL = 3;
 const BLITZ_UNLOCK_LEVEL = 7;
 const BLITZ_SECONDS = 30;
 
-// Mock Exam — a fixed-length, cross-topic practice paper in the general
-// shape of a Cambridge-style O Level maths paper: a broad topic spread
-// roughly matching the real syllabus' content areas (Number, Algebra,
-// Coordinate geometry, Geometry, Mensuration, Trigonometry, Vectors,
-// Probability, Statistics). Every question is generated fresh by this
-// app's own topic generators — nothing here is drawn from, or written
-// to resemble, any specific real exam paper; only the paper SHAPE
-// (topic coverage, a stopwatch against a rough time guide) is modelled.
-// Admin-only while it's still a demo (see the Special Modes overlay).
-const MOCK_EXAM_COUNT = 15;
-const MOCK_EXAM_TARGET_MIN = 20; // a rough time guide, shown but never enforced
+// Mock Exam — a two-paper, timed practice exam in the general SHAPE of a
+// Cambridge-style O Level maths paper: topic coverage, per-question mark
+// values, and multi-part "structured" questions in the same command-word
+// style ("Calculate", "Hence find", "Show that"). Every question — single
+// or structured — is generated fresh with random values by this app's own
+// code; nothing here is drawn from, or written to closely resemble, any
+// specific real exam paper. Admin-only while it's still a demo (see the
+// Special Modes overlay).
 const MOCK_EXAM_POOL = [
-  "arithmetic", "hcflcm", "indices", "standardform", "sigfig",                // Number
-  "algebra", "factorization", "simultaneous", "sequences", "proportionality", // Algebra & graphs
-  "coordgeo", "graphicalsolutions",                                          // Coordinate geometry
-  "polygons", "transformations", "symmetry",                                 // Geometry
-  "mensuration", "similarity",                                               // Mensuration
-  "trigonometry", "circles",                                                 // Trigonometry
-  "vectors",                                                                 // Vectors
-  "probability", "statistics",                                              // Probability & Statistics
+  "arithmetic", "hcflcm", "indices", "standardform", "sigfig", "limits", "time", // Number
+  "algebra", "factorization", "simultaneous", "sequences", "proportionality",    // Algebra & graphs
+  "coordgeo", "graphicalsolutions", "inequalities",                            // Coordinate geometry
+  "polygons", "transformations", "symmetry",                                    // Geometry
+  "mensuration", "similarity",                                                  // Mensuration
+  "trigonometry", "circles",                                                    // Trigonometry
+  "vectors", "sets",                                                            // Vectors & Sets
+  "probability", "statistics",                                                 // Probability & Statistics
 ];
-function pickMockExamPool(n) {
-  const pool = MOCK_EXAM_POOL.filter((id) => TOPIC_BY_ID[id]);
-  const shuffled = [...pool];
+function pickMockExamPool(n, pool = MOCK_EXAM_POOL) {
+  const filtered = pool.filter((id) => TOPIC_BY_ID[id]);
+  const shuffled = [...filtered];
   for (let i = shuffled.length - 1; i > 0; i--) { const j = randInt(0, i); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
   return shuffled.slice(0, Math.min(n, shuffled.length));
 }
+
+// A rough per-question mark value, shown as "[n marks]" — heuristic (this
+// app's questions were never authored with a mark scheme), based only on
+// how much work the question type generally represents.
+function marksForQuestion(q) {
+  if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
+  if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
+  if (q.choices) return 1;
+  if (q.drawGraph || q.drawSolve || q.drawTransform || q.drawMirror || q.tapPoint || q.venn || q.placeVenn || q.region) return 3;
+  return 2;
+}
+
+// ---- Structured (multi-part) questions ----------------------------------
+// Each template computes every value up front in one go, so later parts can
+// reference earlier ones ("hence find...") — the given/shared numbers are
+// fixed once per question, and each part's own correct answer is derived
+// from them directly (not from what the student typed for an earlier part
+// — i.e. no partial "follow-through" credit yet, just independently-correct
+// parts that happen to chain together, same as the real exam's structure).
+function numCheck(val, tol) {
+  return (inp) => { try { const x = evalString(String(inp), 0); return Number.isFinite(x) && Math.abs(x - val) <= tol; } catch (e) { return false; } };
+}
+function tplTrigChain() {
+  const AB = randInt(8, 18), angle = randInt(28, 62), rad = angle * Math.PI / 180;
+  const BC = Math.round(AB * Math.tan(rad) * 10) / 10;
+  const AC = Math.round(AB / Math.cos(rad) * 10) / 10;
+  const area = Math.round(0.5 * AB * BC * 10) / 10;
+  return {
+    context: `In triangle ABC, angle ABC = 90° and angle BAC = ${angle}°. AB = ${AB} cm.`,
+    topicId: "trigonometry", topicName: "Trigonometry", topicIcon: "📐",
+    parts: [
+      { label: "(a)", prompt: "Calculate the length of BC.", marks: 2, answer: `${BC}`, check: numCheck(BC, 0.15), hint: "tan(angle) = opposite ÷ adjacent", steps: [`BC = AB × tan(${angle}°) = ${AB} × tan(${angle}°) = ${BC} cm`] },
+      { label: "(b)", prompt: "Hence calculate the length of AC.", marks: 2, answer: `${AC}`, check: numCheck(AC, 0.15), hint: "cos(angle) = adjacent ÷ hypotenuse", steps: [`AC = AB ÷ cos(${angle}°) = ${AB} ÷ cos(${angle}°) = ${AC} cm`] },
+      { label: "(c)", prompt: "Calculate the area of triangle ABC.", marks: 2, answer: `${area}`, check: numCheck(area, 0.5), hint: "Area = ½ × base × height", steps: [`Area = ½ × AB × BC = ½ × ${AB} × ${BC} = ${area} cm²`] },
+    ],
+  };
+}
+function tplAlgebraChain() {
+  const x = randInt(2, 9), a = randInt(2, 6), b = randInt(1, 20), c = a * x + b;
+  const p = randInt(2, 5), q = randInt(1, 10), y = p * x * x - q;
+  return {
+    context: `Use your answer to part (a) in part (b).`,
+    topicId: "algebra", topicName: "Algebra", topicIcon: "🧮",
+    parts: [
+      { label: "(a)", prompt: `Solve ${a}x + ${b} = ${c}.`, marks: 2, answer: `${x}`, check: numCheck(x, 0), hint: "isolate x", steps: [`${a}x = ${c} − ${b} = ${c - b}`, `x = ${c - b} ÷ ${a} = ${x}`] },
+      { label: "(b)", prompt: `Using your value of x, find the value of ${p}x² − ${q}.`, marks: 2, answer: `${y}`, check: numCheck(y, 0), hint: "substitute x, then follow the order of operations", steps: [`${p} × ${x}² − ${q} = ${p} × ${x * x} − ${q} = ${y}`] },
+    ],
+  };
+}
+function tplMensurationChain() {
+  const r = randInt(3, 8), h = randInt(6, 15), vol = Math.round(Math.PI * r * r * h * 10) / 10;
+  const rate = randInt(2, 6), litres = Math.round(vol / 1000 * 100) / 100, cost = Math.round(litres * rate * 100) / 100;
+  return {
+    context: `A cylindrical tank has radius ${r} cm and height ${h} cm.`,
+    topicId: "mensuration", topicName: "Mensuration", topicIcon: "▦",
+    parts: [
+      { label: "(a)", prompt: "Calculate the volume of the tank, in cm³.", marks: 2, answer: `${vol}`, check: numCheck(vol, Math.max(1, vol * 0.01)), hint: "Volume = πr²h", steps: [`Volume = π × ${r}² × ${h} = ${vol} cm³`] },
+      { label: "(b)", prompt: "Hence find the volume in litres (1 litre = 1000 cm³).", marks: 1, answer: `${litres}`, check: numCheck(litres, Math.max(0.05, litres * 0.01)), steps: [`${vol} ÷ 1000 = ${litres} litres`] },
+      { label: "(c)", prompt: `Water costs $${rate} per litre. Find the cost of filling the tank.`, marks: 2, answer: `${cost}`, check: numCheck(cost, Math.max(0.1, cost * 0.02)), steps: [`Cost = ${litres} × $${rate} = $${cost}`] },
+    ],
+  };
+}
+function tplSimilarityChain() {
+  const pick = (arr) => arr[randInt(0, arr.length - 1)];
+  const k = pick([2, 3]), lenA = randInt(4, 9), lenB = lenA * k;
+  const areaA = randInt(20, 60), areaRatio = k * k, areaB = areaA * areaRatio;
+  const volA = randInt(80, 200), volRatio = k * k * k, volB = volA * volRatio;
+  return {
+    context: `Two similar solids, A and B, have corresponding lengths ${lenA} cm and ${lenB} cm.`,
+    topicId: "similarity", topicName: "Similarity", topicIcon: "🔺",
+    parts: [
+      { label: "(a)", prompt: "Find the length ratio A : B, in its simplest form.", marks: 1, answer: `1 : ${k}`, check: (inp) => String(inp).replace(/\s/g, "") === `1:${k}`, steps: [`${lenA} : ${lenB} = 1 : ${k}`] },
+      { label: "(b)", prompt: `The surface area of A is ${areaA} cm². Find the surface area of B.`, marks: 2, answer: `${areaB}`, check: numCheck(areaB, 0), hint: "area ratio = (length ratio)²", steps: [`Area ratio = 1 : ${areaRatio}`, `Area of B = ${areaA} × ${areaRatio} = ${areaB} cm²`] },
+      { label: "(c)", prompt: `The volume of A is ${volA} cm³. Find the volume of B.`, marks: 2, answer: `${volB}`, check: numCheck(volB, 0), hint: "volume ratio = (length ratio)³", steps: [`Volume ratio = 1 : ${volRatio}`, `Volume of B = ${volA} × ${volRatio} = ${volB} cm³`] },
+    ],
+  };
+}
+function tplStatsChain() {
+  const n = randInt(5, 7), nums = Array.from({ length: n }, () => randInt(2, 20));
+  const sum = nums.reduce((a, b) => a + b, 0), mean = Math.round((sum / n) * 10) / 10;
+  const targetMean = mean + randInt(1, 3), neededSum = targetMean * (n + 1), extra = Math.round((neededSum - sum) * 10) / 10;
+  return {
+    context: `A list of ${n} numbers is: ${nums.join(", ")}.`,
+    topicId: "statistics", topicName: "Statistics", topicIcon: "📊",
+    parts: [
+      { label: "(a)", prompt: "Calculate the mean of these numbers.", marks: 2, answer: `${mean}`, check: numCheck(mean, 0.05), steps: [`Mean = (${nums.join(" + ")}) ÷ ${n} = ${sum} ÷ ${n} = ${mean}`] },
+      { label: "(b)", prompt: `A new number is added to the list so that the mean of all ${n + 1} numbers becomes ${targetMean}. Find the value of the new number.`, marks: 3, answer: `${extra}`, check: numCheck(extra, 0.05), hint: "new total = new mean × new count", steps: [`New total needed = ${targetMean} × ${n + 1} = ${neededSum}`, `New number = ${neededSum} − ${sum} = ${extra}`] },
+    ],
+  };
+}
+function tplSimultChain() {
+  let a1, b1, a2, b2;
+  do { a1 = randInt(2, 4); b1 = randInt(1, 4); a2 = randInt(1, 3); b2 = randInt(2, 5); } while (a1 * b2 === a2 * b1);
+  const priceA = randInt(2, 6), priceB = randInt(1, 4);
+  const c1 = a1 * priceA + b1 * priceB, c2 = a2 * priceA + b2 * priceB;
+  const a3 = randInt(2, 5), b3 = randInt(1, 4), total = a3 * priceA + b3 * priceB;
+  return {
+    context: `${a1} apples and ${b1} bananas cost $${c1}. ${a2} apples and ${b2} bananas cost $${c2}.`,
+    topicId: "simultaneous", topicName: "Simultaneous Equations", topicIcon: "🔗",
+    parts: [
+      { label: "(a)", prompt: "Form and solve simultaneous equations to find the cost of one apple.", marks: 3, answer: `${priceA}`, check: numCheck(priceA, 0), steps: [`${a1}a + ${b1}b = ${c1}`, `${a2}a + ${b2}b = ${c2}`, `Solving gives a = $${priceA}`] },
+      { label: "(b)", prompt: "Find the cost of one banana.", marks: 1, answer: `${priceB}`, check: numCheck(priceB, 0), steps: [`b = $${priceB}`] },
+      { label: "(c)", prompt: `Hence find the cost of ${a3} apples and ${b3} bananas.`, marks: 2, answer: `${total}`, check: numCheck(total, 0), steps: [`${a3} × $${priceA} + ${b3} × $${priceB} = $${total}`] },
+    ],
+  };
+}
+const STRUCTURED_TEMPLATES = [tplTrigChain, tplAlgebraChain, tplMensurationChain, tplSimilarityChain, tplStatsChain, tplSimultChain];
+function generateStructuredQuestion() {
+  const tpl = STRUCTURED_TEMPLATES[randInt(0, STRUCTURED_TEMPLATES.length - 1)];
+  const q = tpl();
+  const totalMarks = q.parts.reduce((s, p) => s + p.marks, 0);
+  return {
+    structured: true, totalMarks, steps: [],
+    prompt: q.context, // so the normal quiz-card prompt rendering just works
+    answer: q.parts.map((p) => `${p.label} ${p.answer}`).join("  "), // generic-fallback text only
+    ...q,
+  };
+}
+
+// Two papers, matching the real syllabus' own published shape (2 papers,
+// 100 marks each) — Paper 1 is all short single-part questions; Paper 2
+// mixes in structured multi-part ones, same as the real exam's balance.
+const MOCK_PAPERS = {
+  p1: { key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 20, structuredCount: 0 },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 120, singleCount: 6, structuredCount: 5 },
+};
+function buildMockQueue(paper) {
+  const topics = pickMockExamPool(paper.singleCount, MOCK_EXAM_POOL);
+  const items = topics.map((id) => ({ type: "single", topicId: id }));
+  for (let i = 0; i < paper.structuredCount; i++) items.push({ type: "structured" });
+  for (let i = items.length - 1; i > 0; i--) { const j = randInt(0, i); [items[i], items[j]] = [items[j], items[i]]; }
+  return items;
+}
+// genMockItem(item) — turns a queue item into an actual question object.
+// Defined inline at each call site (startMockExam / nextQuestion) since it
+// needs the component's pickQuestion/freshQuestion (they read customQuestions
+// state and recentQRef), not just module-level data.
 function blitzQuestion() {
   const pick = (a) => a[randInt(0, a.length - 1)];
   const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = randInt(0, i); [r[i], r[j]] = [r[j], r[i]]; } return r; };
@@ -9826,7 +9960,8 @@ export default function MathsUnlockedBN() {
   const mockExamRef = useRef(null);
   const [mockProgress, setMockProgress] = useState(null); // { idx, total, correctCount }
   const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec }
-  const [mockTick, setMockTick] = useState(0); // ticks every second while a Mock Exam is running, just to redraw its elapsed-time banner
+  const [mockTick, setMockTick] = useState(0); // ticks every second while a Mock Exam is running, just to redraw its countdown banner
+  const [structParts, setStructParts] = useState({}); // { [partLabel]: typedAnswer } for a structured (multi-part) question
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -10582,6 +10717,15 @@ export default function MathsUnlockedBN() {
     return { ...q, topicId: topic.id, topicName: topic.name, topicIcon: topic.icon };
   }
 
+  // Mock Exam: turn one queue item (see buildMockQueue) into an actual
+  // question — a single-part question from its topic, or a fresh
+  // structured multi-part one.
+  function genMockItem(item) {
+    if (item.type === "structured") return generateStructuredQuestion();
+    const topic = TOPIC_BY_ID[item.topicId];
+    return freshQuestion(() => pickQuestion(topic));
+  }
+
   // Mixed Review: a random question from any topic the student has unlocked.
   function pickMixed() {
     const pool = TOPICS.filter((t) => isUnlocked(t, profile));
@@ -11199,10 +11343,15 @@ export default function MathsUnlockedBN() {
     return () => clearInterval(iv);
   }, [profile.boostUntil]);
 
-  // Keep the Mock Exam banner's elapsed-time readout live while a run is on.
+  // Keep the Mock Exam banner's countdown live while a run is on, and end
+  // the paper the moment its real time limit is up (whatever's answered
+  // stands — matches "pencils down" at the real exam's time limit).
   useEffect(() => {
     if (!mockProgress) return;
-    const iv = setInterval(() => setMockTick((t) => t + 1), 1000);
+    const iv = setInterval(() => {
+      if (mockExamRef.current && Date.now() >= mockExamRef.current.deadline) { finishMockExam(); return; }
+      setMockTick((t) => t + 1);
+    }, 1000);
     return () => clearInterval(iv);
   }, [mockProgress]);
 
@@ -11631,18 +11780,19 @@ export default function MathsUnlockedBN() {
     setScreen("dashboard");
   }
 
-  // Start a Mock Exam: a fixed-length run across a shuffled slice of
-  // MOCK_EXAM_POOL, tracked by mockExamRef (see nextQuestion for how it
-  // advances/finishes). Reuses the same per-question reset block as
-  // startTopic/nextQuestion so every quiz-card interaction works exactly
+  // Start a Mock Exam: a fixed-length, timed run across a shuffled queue
+  // (see buildMockQueue) for the given paper ("p1"/"p2"), tracked by
+  // mockExamRef (see nextQuestion for how it advances, and the countdown
+  // effect for how it times out). Reuses the same per-question reset block
+  // as startTopic/nextQuestion so every quiz-card interaction works exactly
   // as normal — Mock Exam is just a driver deciding what comes next.
-  function startMockExam() {
+  function startMockExam(paperKey) {
+    const paper = MOCK_PAPERS[paperKey] || MOCK_PAPERS.p1;
     if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
     recentQRef.current = [];
-    const queue = pickMockExamPool(MOCK_EXAM_COUNT);
-    const topic = TOPIC_BY_ID[queue[0]];
-    setActiveTopic(topic);
-    const q = freshQuestion(() => pickQuestion(topic));
+    const queue = buildMockQueue(paper);
+    const q = genMockItem(queue[0]);
+    setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[queue[0].topicId]);
     setQuestion(q);
     const autoHint = autoHintDue(profile, q.topicId);
     setHintFree(autoHint);
@@ -11656,6 +11806,7 @@ export default function MathsUnlockedBN() {
     setMcPick(null);
     setDrawTri([]);
     setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
+    setStructParts({});
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
@@ -11663,10 +11814,40 @@ export default function MathsUnlockedBN() {
     setShieldDeclined(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
-    mockExamRef.current = { queue, idx: 0, correctCount: 0, startedAt: Date.now(), total: queue.length, targetSec: MOCK_EXAM_TARGET_MIN * 60 };
-    setMockProgress({ idx: 0, total: queue.length, correctCount: 0 });
+    const deadline = Date.now() + paper.minutes * 60 * 1000;
+    mockExamRef.current = { paper, queue, idx: 0, correctCount: 0, marksEarned: 0, totalMarks: 0, startedAt: Date.now(), deadline, total: queue.length, committed: false };
+    setMockProgress({ paper, idx: 0, total: queue.length, correctCount: 0, deadline });
     setMockResult(null);
     setScreen("quiz");
+  }
+
+  // Fold the currently-shown question's feedback into the running mock-exam
+  // totals — idempotent (guarded by mx.committed, reset to false whenever a
+  // new question loads) since both nextQuestion (advancing normally) and
+  // finishMockExam (the countdown hitting zero, possibly moments after a
+  // Submit but before "Next question" was tapped) call it without risking
+  // a double-count.
+  function commitMockAnswer() {
+    const mx = mockExamRef.current;
+    if (!mx || !feedback || mx.committed) return;
+    if (feedback.correct) mx.correctCount += 1;
+    mx.marksEarned += feedback.marksEarned ?? (feedback.correct ? (question.structured ? question.totalMarks : marksForQuestion(question)) : 0);
+    mx.totalMarks += question.structured ? question.totalMarks : marksForQuestion(question);
+    mx.committed = true;
+  }
+
+  // Shared by "ran out of questions" (nextQuestion) and "ran out of time"
+  // (the countdown effect below) — both just finalise whatever's been
+  // scored so far.
+  function finishMockExam() {
+    const mx = mockExamRef.current;
+    if (!mx) return;
+    commitMockAnswer();
+    const elapsedSec = Math.round((Date.now() - mx.startedAt) / 1000);
+    setMockResult({ paper: mx.paper, correct: mx.correctCount, total: mx.total, marksEarned: mx.marksEarned, totalMarks: mx.totalMarks, elapsedSec, targetSec: mx.paper.minutes * 60 });
+    mockExamRef.current = null;
+    setMockProgress(null);
+    setScreen("mockresult");
   }
 
   function nextQuestion() {
@@ -11676,19 +11857,12 @@ export default function MathsUnlockedBN() {
     // just works) — this only tracks the run's own correct count/progress.
     if (mockExamRef.current) {
       const mx = mockExamRef.current;
-      if (feedback && feedback.correct) mx.correctCount += 1;
+      commitMockAnswer();
       mx.idx += 1;
-      if (mx.idx >= mx.total) {
-        const elapsedSec = Math.round((Date.now() - mx.startedAt) / 1000);
-        setMockResult({ correct: mx.correctCount, total: mx.total, elapsedSec, targetSec: mx.targetSec });
-        mockExamRef.current = null;
-        setMockProgress(null);
-        setScreen("mockresult");
-        return;
-      }
-      const topic = TOPIC_BY_ID[mx.queue[mx.idx]];
-      const q = freshQuestion(() => pickQuestion(topic));
-      setActiveTopic(topic);
+      if (mx.idx >= mx.total) { finishMockExam(); return; }
+      mx.committed = false; // ready for this new question's own future commit
+      const q = genMockItem(mx.queue[mx.idx]);
+      setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[mx.queue[mx.idx].topicId]);
       setQuestion(q);
       const autoHint = autoHintDue(profile, q.topicId);
       setHintFree(autoHint);
@@ -11702,6 +11876,7 @@ export default function MathsUnlockedBN() {
       setMcPick(null);
       setDrawTri([]);
       setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
+      setStructParts({});
       setSketchStrokes([]);
       setSketchOn(false);
       setHintShown(false);
@@ -11709,7 +11884,7 @@ export default function MathsUnlockedBN() {
       setShieldDeclined(false);
       setFeedback(null);
       startTimeRef.current = Date.now();
-      setMockProgress({ idx: mx.idx, total: mx.total, correctCount: mx.correctCount });
+      setMockProgress({ paper: mx.paper, idx: mx.idx, total: mx.total, correctCount: mx.correctCount, deadline: mx.deadline });
       return;
     }
     const run = profileRef.current.hwRun;
@@ -11758,6 +11933,7 @@ export default function MathsUnlockedBN() {
     setMultiInput({});
     setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setVennPlace({}); setMcPick(null); setDrawTri([]);
     setBarBuild(question.buildHist ? question.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
+    setStructParts({});
     startTimeRef.current = Date.now();
     if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
@@ -11853,7 +12029,16 @@ export default function MathsUnlockedBN() {
     wroteAnswerRef.current = false;
     const typed = typeof override === "string" ? override : answerInput;
     let correct;
-    if (question.venn) {
+    let structResults = null, structMarksEarned = 0; // set only for question.structured
+    if (question.structured) {
+      if (question.parts.some((p) => !(structParts[p.label] || "").trim())) return; // every part required
+      structResults = question.parts.map((p) => {
+        const ok = p.check ? !!p.check(structParts[p.label]) : checkEquivalent(structParts[p.label], p.answer);
+        if (ok) structMarksEarned += p.marks;
+        return { label: p.label, correct: ok, marks: p.marks };
+      });
+      correct = structResults.every((r) => r.correct); // full marks = "correct" for the usual streak/rank pipeline
+    } else if (question.venn) {
       if (vennPressed.length === 0) return;
       const t = question.venn.target;
       correct = vennPressed.length === t.length && vennPressed.every((k) => t.includes(k));
@@ -11927,7 +12112,7 @@ export default function MathsUnlockedBN() {
     // already cover it — pause and offer to spend the shield before the
     // streak breaks. Nothing is committed yet; they retry the same question.
     const forgiveCovers = perks.includes("forgive") && forgivenHere < ecMax;
-    if (!correct && !forgiveCovers && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
+    if (!correct && !question.structured && !forgiveCovers && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
       setShieldOffer(true);
       return;
     }
@@ -12129,7 +12314,7 @@ export default function MathsUnlockedBN() {
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, focusHit: correct && scoredId === weeklyFocusId(), rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, focusHit: correct && scoredId === weeklyFocusId(), rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept, structResults, marksEarned: question.structured ? structMarksEarned : undefined });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -14224,24 +14409,32 @@ export default function MathsUnlockedBN() {
         {/* MOCK EXAM RESULTS */}
         {screen === "mockresult" && mockResult && (() => {
           const pct = Math.round((mockResult.correct / mockResult.total) * 100);
+          const markPct = mockResult.totalMarks ? Math.round((mockResult.marksEarned / mockResult.totalMarks) * 100) : null;
           const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+          const timedOut = mockResult.elapsedSec >= mockResult.targetSec - 1;
           return (
             <div style={{
               maxWidth: 480, margin: "40px auto 0", background: "var(--card)", border: "1px solid var(--grid)",
               borderRadius: 14, padding: "26px 22px", textAlign: "center", boxShadow: "0 6px 24px var(--shadow-soft)",
             }}>
               <div style={{ fontSize: 34, marginBottom: 4 }}>📝</div>
-              <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginBottom: 6 }}>Mock Exam complete</div>
+              <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginBottom: 2 }}>Mock Exam complete</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>{mockResult.paper.name}{timedOut ? " · time's up" : ""}</div>
               <div className="mub-display" style={{ fontSize: 44, fontWeight: 900, color: "var(--blue)", margin: "10px 0 2px" }}>
                 {mockResult.correct}/{mockResult.total}
               </div>
-              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>{pct}% correct</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>{pct}% of questions fully correct</div>
+              {markPct != null && (
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
+                  <strong style={{ color: "var(--ink)" }}>{mockResult.marksEarned}/{mockResult.totalMarks}</strong> marks ({markPct}%)
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 20, fontSize: 12.5, color: "var(--muted)" }}>
                 <span>⏱ Your time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.elapsedSec)}</strong></span>
-                <span>Guide time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.targetSec)}</strong></span>
+                <span>Time limit: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.targetSec)}</strong></span>
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-                <button onClick={startMockExam} style={{ padding: "10px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                <button onClick={() => startMockExam(mockResult.paper.key)} style={{ padding: "10px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                   Try another
                 </button>
                 <button onClick={() => { setMockResult(null); setScreen("dashboard"); }} style={{ padding: "10px 18px", background: "none", border: "1px solid var(--grid)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
@@ -14281,15 +14474,17 @@ export default function MathsUnlockedBN() {
             })()}
 
             {mockProgress && (() => {
-              const elapsed = Math.round((Date.now() - (mockExamRef.current ? mockExamRef.current.startedAt : Date.now())) / 1000);
-              const mm = String(Math.floor(elapsed / 60)).padStart(2, "0"), ss = String(elapsed % 60).padStart(2, "0");
+              const remaining = Math.max(0, Math.round((mockProgress.deadline - Date.now()) / 1000));
+              const mm = String(Math.floor(remaining / 60)).padStart(2, "0"), ss = String(remaining % 60).padStart(2, "0");
+              const urgent = remaining <= 300; // last 5 minutes
+              const col = urgent ? "var(--red)" : "var(--amber)";
               return (
-                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: "1px solid var(--amber)", borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
-                  <span style={{ fontWeight: 700, color: "var(--amber)" }}>
-                    📝 Mock Exam · Q {mockProgress.idx + 1} of {mockProgress.total}
+                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: `1px solid ${col}`, borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
+                  <span style={{ fontWeight: 700, color: col }}>
+                    📝 Mock Exam · {mockProgress.paper.name} · Q {mockProgress.idx + 1} of {mockProgress.total}
                     <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {mockProgress.correctCount} right so far</span>
                   </span>
-                  <span className="mub-mono" style={{ fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>⏱ {mm}:{ss}</span>
+                  <span className="mub-mono" style={{ fontWeight: 700, color: col, flexShrink: 0 }}>⏱ {mm}:{ss}</span>
                 </div>
               );
             })()}
@@ -14438,6 +14633,57 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
+              {mockProgress && !question.structured && !feedback && (
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: -10, marginBottom: 12 }}>
+                  [{marksForQuestion(question)} mark{marksForQuestion(question) === 1 ? "" : "s"}]
+                </div>
+              )}
+
+              {question.structured && (
+                <div style={{ marginBottom: 12 }}>
+                  {question.parts.map((p, i) => {
+                    const res = feedback && feedback.structResults && feedback.structResults[i];
+                    return (
+                      <div key={p.label} style={{
+                        marginBottom: 12, paddingBottom: 12,
+                        borderBottom: i < question.parts.length - 1 ? "1px solid var(--grid)" : "none",
+                      }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                          <span className="mub-mono" style={{ fontWeight: 800, fontSize: 14, color: "var(--ink)" }}>{p.label}</span>
+                          <span className="mub-mono" style={{ fontSize: 13.5, color: "var(--ink)", flex: 1 }}><MathText text={p.prompt} /></span>
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>[{p.marks} mark{p.marks === 1 ? "" : "s"}]</span>
+                        </div>
+                        <input
+                          className="mub-mono"
+                          autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                          value={structParts[p.label] || ""}
+                          onChange={(e) => setStructParts((s) => ({ ...s, [p.label]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
+                          placeholder="?"
+                          disabled={!!feedback || shieldOffer}
+                          style={{
+                            width: "100%", maxWidth: 220, padding: "8px 10px", fontSize: 14, boxSizing: "border-box",
+                            border: `1px solid ${res ? (res.correct ? "var(--green)" : "var(--red)") : "var(--grid)"}`,
+                            borderRadius: 8, background: res ? (res.correct ? "var(--green-wash, var(--paper))" : "var(--red-wash, var(--paper))") : "var(--paper)",
+                          }}
+                        />
+                        {res && !res.correct && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+                            <div>Correct answer: <strong className="mub-mono" style={{ color: "var(--ink)" }}>{p.answer}</strong></div>
+                            {p.steps.map((s, k) => <div key={k} className="mub-mono" style={{ marginTop: 2 }}><MathText text={s} /></div>)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {feedback && (
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--blue)", textAlign: "right" }}>
+                      {feedback.marksEarned}/{question.totalMarks} marks
+                    </div>
+                  )}
+                </div>
+              )}
+
               {question.transform && (
                 <div style={{ marginBottom: 12 }}>
                   <TransformFigure
@@ -14487,7 +14733,7 @@ export default function MathsUnlockedBN() {
                 )
               )}
 
-              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror || question.tapPoint || question.buildHist) ? null : question.vector ? (
+              {(question.drawGraph || question.region || question.venn || question.placeVenn || question.choices || question.drawTransform || question.drawMirror || question.tapPoint || question.buildHist || question.structured) ? null : question.vector ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                   <span style={{ fontSize: 52, fontWeight: 200, lineHeight: 0.7, color: "var(--muted)" }}>(</span>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -14615,7 +14861,8 @@ export default function MathsUnlockedBN() {
                   || (question.drawTransform && drawTri.length !== 3)
                   || (question.tapPoint && drawPts.length !== 1)
                   || (question.drawSolve && (drawPts.length < 2 || (question.fields || []).some((f) => !(multiInput[f.key] || "").trim())))
-                  || (question.buildHist && (!barBuild || barBuild.some((b) => b == null)));
+                  || (question.buildHist && (!barBuild || barBuild.some((b) => b == null)))
+                  || (question.structured && question.parts.some((p) => !(structParts[p.label] || "").trim()));
                 return (
                   <button onClick={submitAnswer} disabled={notReady} style={{ padding: "9px 18px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: notReady ? "default" : "pointer", opacity: notReady ? 0.5 : 1 }}>
                     Submit
@@ -14655,7 +14902,7 @@ export default function MathsUnlockedBN() {
                       );
                     })()}
                   </div>
-                  {!feedback.correct && (
+                  {!feedback.correct && !question.structured && (
                     <div style={{ fontSize: 12.5, color: "var(--ink)", marginBottom: 12, background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "10px 12px" }}>
                       <div style={{ fontWeight: 700, marginBottom: 6, color: "var(--muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4 }}>How to solve it</div>
                       <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -15976,19 +16223,20 @@ export default function MathsUnlockedBN() {
                     </span>
                   </span>
                 </button>
-                {isAdmin && (
-                  <button onClick={() => go(startMockExam)} className="mub-card" style={modeBtn(true)}>
+                {isAdmin && [MOCK_PAPERS.p1, MOCK_PAPERS.p2].map((paper) => (
+                  <button key={paper.key} onClick={() => go(() => startMockExam(paper.key))} className="mub-card" style={modeBtn(true)}>
                     <span style={{ fontSize: 28 }}>📝</span>
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                        Mock Exam <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
+                        Mock Exam — {paper.name} <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
                       </span>
                       <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        A {MOCK_EXAM_COUNT}-question timed paper across the whole syllabus — see how you'd do on the real thing.
+                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes / 60}h · {paper.singleCount + paper.structuredCount} questions
+                        {paper.structuredCount ? `, ${paper.structuredCount} multi-part` : ""}.
                       </span>
                     </span>
                   </button>
-                )}
+                ))}
                 <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
                   <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
@@ -16630,7 +16878,7 @@ export default function MathsUnlockedBN() {
             // vector, tap/draw, Venn or multiple-choice questions.
             : (screen === "quiz" && question && !question.drawGraph && !question.region && !question.venn
                 && !question.placeVenn && !question.choices && !question.drawTransform && !question.drawMirror
-                && !question.tapPoint && !question.vector && !question.fields && !question.buildHist)
+                && !question.tapPoint && !question.vector && !question.fields && !question.buildHist && !question.structured)
               ? (text) => setAnswerInput(text)
             : undefined
           }
