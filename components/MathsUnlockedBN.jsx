@@ -838,20 +838,24 @@ function FreqTable({ rows, unitLabel }) {
   );
 }
 
-// Tap-to-construct bar chart. `value` is [{to,h} | null, ...] — tap
-// anywhere on the graph and that point becomes the top-right corner (class
-// boundary + height) of the next bar, which then stays in place; tap an
-// already-placed bar again to remove it. In the default (unlocked) mode
-// bars share edges and build strictly left-to-right — bar i's left edge is
-// bar i-1's `to` — so removing bar i also clears every bar after it, since
-// their edges depended on it. When `lockWidth` is set every bar's boundary
-// is fixed in advance (`fixedTo`, drawn as dashed guides) so bars are
-// independent and can be placed/removed in any order — used for the
-// frequency-density version, so the only thing being tested is the density
-// calculation, not redrawing the table.
+// Drag-to-construct bar chart. `value` is [{to,h} | null, ...] — press
+// anywhere in the open (not-yet-built) part of the graph and drag; the bar
+// being built follows the pointer live (its top-right corner = class
+// boundary + height) and settles wherever you let go — no separate handle
+// to grab, you can press down anywhere. Pressing on an already-placed bar
+// removes it instead (a plain tap, not a drag). In the default (unlocked)
+// mode bars share edges and build strictly left-to-right — bar i's left
+// edge is bar i-1's `to` — so removing bar i also clears every bar after
+// it, since their edges depended on it. When `lockWidth` is set every
+// bar's boundary is fixed in advance (`fixedTo`, drawn as dashed guides)
+// so each column is independent — dragging up/down inside it sets that
+// bar's height (only), and pressing an already-placed one removes just
+// that one — used for the frequency-density version, so the only thing
+// being tested is the density calculation, not redrawing the table.
 function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth, lockWidth, fixedTo, value, onChange, showAnswer, correct }) {
   const wrapRef = useRef(null);
   const [w, setW] = useState(300);
+  const [dragIdx, setDragIdx] = useState(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -863,7 +867,7 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
     return () => ro.disconnect();
   }, []);
 
-  const VBW = 300, VBH = 220, ml = 38, mr = 12, mt = 10, mb = 28;
+  const VBW = 300, VBH = 226, ml = 38, mr = 12, mt = 10, mb = 34;
   const pw = VBW - ml - mr, ph = VBH - mt - mb;
   const svgH = w * (VBH / VBW);
   const scale = w / VBW;
@@ -874,25 +878,30 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
   const firstEmpty = value.findIndex((b) => b == null);
   const filledCount = firstEmpty === -1 ? n : firstEmpty;
 
-  const onTap = (e) => {
-    if (showAnswer || !wrapRef.current) return;
+  const posOf = (e) => {
     const b = wrapRef.current.getBoundingClientRect();
     const px = (e.clientX - b.left) / scale, py = (e.clientY - b.top) / scale;
-    const vx = Math.max(0, Math.min(xMax, (px - ml) / pw * xMax));
-    const vy = Math.max(0, Math.min(yMax, (mt + ph - py) / ph * yMax));
+    return {
+      vx: Math.max(0, Math.min(xMax, (px - ml) / pw * xMax)),
+      vy: Math.max(0, Math.min(yMax, (mt + ph - py) / ph * yMax)),
+    };
+  };
+
+  const startDrag = (e) => {
+    if (showAnswer || !wrapRef.current) return;
+    const { vx, vy } = posOf(e);
 
     if (lockWidth) {
-      // every column is already fixed — work out which one was tapped
       const idx = fixedTo.findIndex((to, i) => vx >= leftOf(i) && vx <= to);
       if (idx === -1) return;
-      if (value[idx] != null) { onChange(value.map((b2, j) => (j === idx ? null : b2))); return; }
-      const h = Math.max(0, Math.min(yMax, snap(vy, yStep)));
-      onChange(value.map((b2, j) => (j === idx ? { to: fixedTo[idx], h } : b2)));
+      if (value[idx] != null) { onChange(value.map((b2, j) => (j === idx ? null : b2))); return; } // plain tap: remove
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDragIdx(idx);
+      onChange(value.map((b2, j) => (j === idx ? { to: fixedTo[idx], h: Math.max(0, Math.min(yMax, snap(vy, yStep))) } : b2)));
       return;
     }
 
-    // unlocked: tapping any already-placed bar removes it (and every bar
-    // after it, since their left edges depended on it)
+    // unlocked: pressing an already-placed bar removes it and everything after it
     for (let i = 0; i < filledCount; i++) {
       if (vx >= leftOf(i) && vx <= value[i].to) {
         onChange(value.map((b2, j) => (j >= i ? null : b2)));
@@ -901,16 +910,31 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
     }
     if (filledCount >= n) return; // every bar already placed
     const left = leftOf(filledCount);
-    if (vx <= left) return; // tapped inside the already-built region
+    if (vx <= left) return; // pressed inside the already-built region
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragIdx(filledCount);
     const to = Math.max(left + minWidth, Math.min(xMax, snap(vx, xSnap)));
     const h = Math.max(0, Math.min(yMax, snap(vy, yStep)));
     onChange(value.map((b2, j) => (j === filledCount ? { to, h } : b2)));
   };
 
+  const moveDrag = (e) => {
+    if (dragIdx == null || !wrapRef.current) return;
+    const { vx, vy } = posOf(e);
+    const h = Math.max(0, Math.min(yMax, snap(vy, yStep)));
+    let to = value[dragIdx] ? value[dragIdx].to : leftOf(dragIdx) + minWidth;
+    if (!lockWidth) {
+      const left = leftOf(dragIdx) + minWidth;
+      to = Math.max(left, Math.min(xMax, snap(vx, xSnap)));
+    }
+    onChange(value.map((b2, j) => (j === dragIdx ? { to, h } : b2)));
+  };
+  const endDrag = () => setDragIdx(null);
+
   return (
-    <div ref={wrapRef} style={{ position: "relative", maxWidth: 340, margin: "0 auto 4px" }}>
+    <div ref={wrapRef} style={{ position: "relative", maxWidth: 340, margin: "0 auto 4px", touchAction: "none" }}>
       <svg viewBox={`0 0 ${VBW} ${VBH}`} width="100%" height={svgH} style={{ display: "block", cursor: showAnswer ? "default" : "crosshair" }}
-        onClick={onTap}>
+        onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
         <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
         {Array.from({ length: 5 }, (_, i) => (yMax / 4) * i).map((t) => (
           <g key={`y${t}`}>
@@ -918,8 +942,20 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
             <text x={ml - 5} y={Y(t) + 3} fontSize="7" textAnchor="end" fill="var(--muted)">{Math.round(t * 100) / 100}</text>
           </g>
         ))}
+        {/* generic x-axis scale — always shown, so there's a frame of reference to drag against
+            even before anything is built (kept scale-only in unlocked mode so it doesn't give
+            away the table's actual class boundaries) */}
+        {Array.from({ length: 5 }, (_, i) => (xMax / 4) * i).map((t) => (
+          <g key={`xg${t}`}>
+            <line x1={X(t)} y1={mt} x2={X(t)} y2={mt + ph} stroke="var(--grid)" strokeWidth="0.5" />
+            <text x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{Math.round(t * 10) / 10}</text>
+          </g>
+        ))}
         {lockWidth && fixedTo.map((to, i) => (
-          <line key={`gx${i}`} x1={X(to)} y1={mt} x2={X(to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
+          <g key={`gx${i}`}>
+            <line x1={X(to)} y1={mt} x2={X(to)} y2={mt + ph} stroke="var(--muted)" strokeWidth="0.5" strokeDasharray="2,2" />
+            <text x={X(to)} y={mt + ph + 21} fontSize="7" fontWeight="700" textAnchor="middle" fill="var(--ink)">{to}</text>
+          </g>
         ))}
         {value.map((bar, i) => {
           if (!bar) return null;
@@ -934,15 +970,12 @@ function HistBuildBoard({ n, xMax, xLabel, yMax, yLabel, yStep, xSnap, minWidth,
                   fill="none" stroke="var(--green)" strokeWidth="1.4" strokeDasharray="3,2" />
               )}
               <rect x={X(left)} y={Y(bar.h)} width={Math.max(0, X(bar.to) - X(left))} height={Y(0) - Y(bar.h)}
-                fill={col} fillOpacity="0.45" stroke={col} strokeWidth="1.4" />
+                fill={col} fillOpacity={dragIdx === i ? 0.65 : 0.45} stroke={col} strokeWidth="1.4" />
               <text x={X(bar.to) - (lockWidth ? 0 : 10)} y={Y(bar.h) - 5} fontSize="8" fontWeight="700" textAnchor="middle" fill="var(--ink)">{bar.h}</text>
-              {!lockWidth && <text x={X(bar.to)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{bar.to}</text>}
+              {!lockWidth && <text x={X(bar.to)} y={mt + ph + 12} fontSize="7" fontWeight="700" textAnchor="middle" fill="var(--blue)">{bar.to}</text>}
             </g>
           );
         })}
-        {lockWidth && [0, ...fixedTo].map((t, i) => (
-          <text key={`xt${i}`} x={X(t)} y={mt + ph + 12} fontSize="7" textAnchor="middle" fill="var(--muted)">{t}</text>
-        ))}
         <text x={ml + pw / 2} y={VBH - 4} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
         <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>{yLabel}</text>
       </svg>
@@ -5519,7 +5552,7 @@ const TOPICS = [
         const correct3 = bars3.map((b) => ({ to: b.to, h: b.freq }));
         return {
           sub: "histogram",
-          prompt: `The frequency table shows the ${label3} of a group of students. Tap the graph to build the bar chart — tap where a bar's top-right corner should be; tap a bar again to remove it.`,
+          prompt: `The frequency table shows the ${label3} of a group of students. Drag on the graph to build the bar chart — drag out each bar's top-right corner; tap a bar to remove it.`,
           buildHist: {
             n: bars3.length, xMax: xMax3, xLabel: label3, yMax: yMax3, yLabel: "frequency",
             yStep: 1, xSnap: 5, minWidth: 5, lockWidth: false,
@@ -5532,7 +5565,7 @@ const TOPICS = [
           steps: [
             `Class boundaries (widths): ${bars3.map((b) => `${b.from}–${b.to}`).join(", ")}`,
             `Heights (frequencies): ${bars3.map((b) => b.freq).join(", ")}`,
-            `Tap where each bar's top-right corner should be.`,
+            `Drag out where each bar's top-right corner should be.`,
           ],
         };
       }
@@ -5554,7 +5587,7 @@ const TOPICS = [
       const fixedTo4 = bars4.map((b) => b.to);
       return {
         sub: "histogram",
-        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then tap the graph to place it — tap a bar again to remove it.`,
+        prompt: `The frequency table shows the ${label4} of a group of students (the class widths are not all equal). Work out each bar's frequency density, then drag its height into place — tap a bar to remove it.`,
         buildHist: {
           n: bars4.length, xMax: xMax4, xLabel: label4, yMax: yMax4, yLabel: "frequency density",
           yStep: yStep4, xSnap: 5, minWidth: 5, lockWidth: true, fixedTo: fixedTo4,
@@ -5566,7 +5599,7 @@ const TOPICS = [
         hint: "frequency density = frequency ÷ class width",
         steps: [
           ...bars4.map((b) => `${b.from}–${b.to}:  ${b.freq} ÷ ${b.w} = ${b.density}`),
-          `Tap each bar's height into place.`,
+          `Drag each bar's height into place.`,
         ],
       };
     } },
@@ -14196,7 +14229,7 @@ export default function MathsUnlockedBN() {
                   <HistBuildBoard {...question.buildHist} value={barBuild} onChange={setBarBuild} showAnswer={!!feedback} />
                   <div style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 4 }}>
                     {feedback ? (feedback.correct ? "Every bar is correct" : "Dashed outlines show the correct bars")
-                      : question.buildHist.lockWidth ? "Tap the graph to place each bar's frequency density — tap a bar to remove it" : "Tap the graph to build each bar — tap a bar to remove it"}
+                      : question.buildHist.lockWidth ? "Drag up or down to set each bar's frequency density — tap a bar to remove it" : "Drag on the graph to build each bar — tap a bar to remove it"}
                   </div>
                 </div>
               )}
