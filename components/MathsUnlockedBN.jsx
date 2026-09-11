@@ -11500,7 +11500,19 @@ export default function MathsUnlockedBN() {
     setActiveTopic(topic);
     // Caught dodging before ("Nice Try") — a topic left unanswered follows
     // you back in instead of re-rolling, so ducking out no longer works.
-    const stuck = profile.dodgeLocked && profile.dodgeStuck && profile.dodgeStuck[topic.id];
+    const stuckRaw = profile.dodgeLocked && profile.dodgeStuck && profile.dodgeStuck[topic.id];
+    // `stuckRaw` survives only by being saved into profile JSON — which
+    // silently drops any function-valued field. A buildHist question needs
+    // its checkBars to grade at all, so a round-tripped one can never be
+    // submitted; discard it and clear the stale entry rather than trap the
+    // student on a permanently un-submittable question.
+    const stuckBroken = stuckRaw && stuckRaw.buildHist && typeof stuckRaw.buildHist.checkBars !== "function";
+    const stuck = stuckBroken ? null : stuckRaw;
+    if (stuckBroken) patchProfile((prev) => {
+      const rest = { ...(prev.dodgeStuck || {}) };
+      delete rest[topic.id];
+      return { dodgeStuck: rest };
+    });
     const hwRun = profileRef.current.hwRun;
     const subs = fromHomework && hwRun && hwRun.topicId === topic.id ? hwRun.subs : undefined;
     const q = stuck || freshQuestion(() => pickQuestion(topic, subs));
