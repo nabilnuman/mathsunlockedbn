@@ -754,6 +754,43 @@ function MotionGraph({ pts, yLabel, xUnit, yUnit, highlight, shadeFrom, shadeTo,
   );
 }
 
+// A frequency-density histogram — bars of varying width (class width) and
+// height (frequency density), with a labelled y-axis so the height can be
+// read precisely (bar heights are chosen as clean multiples of `yStep`).
+function HistogramGraph({ bars, xLabel, yStep = 0.2 }) {
+  const W = 300, Hh = 210, ml = 42, mr = 14, mt = 10, mb = 32;
+  const pw = W - ml - mr, ph = Hh - mt - mb;
+  const xMin = Math.min(...bars.map((b) => b.from)), xMax = Math.max(...bars.map((b) => b.to));
+  const dMax = Math.max(...bars.map((b) => b.density));
+  const yMax = Math.ceil((dMax + yStep * 0.5) / yStep) * yStep;
+  const X = (x) => ml + ((x - xMin) / (xMax - xMin)) * pw;
+  const Y = (y) => mt + ph - (y / yMax) * ph;
+  const yTicks = []; for (let v = yStep; v <= yMax + 1e-9; v += yStep) yTicks.push(Math.round(v * 100) / 100);
+  const xTicks = [...new Set(bars.flatMap((b) => [b.from, b.to]))].sort((a, b) => a - b);
+  const yLabelEvery = yTicks.length > 10 ? 2 : 1;
+  return (
+    <svg viewBox={`0 0 ${W} ${Hh}`} width="100%" role="img" aria-label="frequency density histogram"
+      style={{ maxWidth: 320, display: "block", margin: "0 auto 10px" }}>
+      <rect x={ml} y={mt} width={pw} height={ph} fill="var(--card)" stroke="var(--grid)" />
+      {yTicks.map((t, i) => (
+        <g key={`y${t}`}>
+          <line x1={ml} y1={Y(t)} x2={ml + pw} y2={Y(t)} stroke="var(--grid)" strokeWidth="0.5" />
+          {(i + 1) % yLabelEvery === 0 && <text x={ml - 5} y={Y(t) + 3} fontSize="7.5" textAnchor="end" fill="var(--muted)">{t}</text>}
+        </g>
+      ))}
+      {bars.map((b, i) => (
+        <rect key={i} x={X(b.from)} y={Y(b.density)} width={Math.max(0, X(b.to) - X(b.from))} height={Y(0) - Y(b.density)}
+          fill="var(--blue)" fillOpacity="0.5" stroke="var(--blue)" strokeWidth="1.2" />
+      ))}
+      {xTicks.map((t) => (
+        <text key={t} x={X(t)} y={mt + ph + 12} fontSize="7.5" textAnchor="middle" fill="var(--muted)">{t}</text>
+      ))}
+      <text x={ml + pw / 2} y={Hh - 2} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
+      <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>frequency density</text>
+    </svg>
+  );
+}
+
 // Monotone cubic (Fritsch–Carlson) interpolation through the class-boundary
 // points, sampled densely so the ogive draws as a smooth curve that never
 // dips (a cumulative total can only rise). Returns a fine [x, y] array.
@@ -2105,10 +2142,77 @@ function WritePad({ onInsert, onConfirm, onClose, mode }) {
 const TOPICS = [
   { id: "arithmetic", name: "Arithmetic", icon: "➕", prereqs: [],
     generate() {
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      // ---- pure-operation subtopic forms (addsub_pos/neg, muldiv_pos/neg) —
+      // tagged with `sub` so homework can target just one of the four. ----
+      const subForms = [
+        { sub: "addsub_pos", make: () => {
+            const n = randInt(2, 3);
+            let total = randInt(15, 60);
+            const parts = [total], ops = [];
+            for (let i = 0; i < n; i++) {
+              const op = pick(["+", "-"]);
+              const v = op === "+" ? randInt(2, 40) : randInt(2, Math.min(40, total));
+              total = op === "+" ? total + v : total - v;
+              parts.push(v); ops.push(op);
+            }
+            const expr = parts.map((v, i) => (i === 0 ? `${v}` : ` ${ops[i - 1]} ${v}`)).join("");
+            return { expr, answer: `${total}`, hint: "Enter a number.", steps: [`Work left to right: ${expr} = ${total}`] };
+          } },
+        { sub: "addsub_neg", make: () => {
+            const first = Math.random() < 0.4 ? -randInt(2, 15) : randInt(2, 15);
+            let total = first;
+            const n = randInt(2, 3);
+            const ops = [], vals = [];
+            for (let i = 0; i < n; i++) {
+              const op = pick(["+", "-"]);
+              const v = randInt(2, 20);
+              total = op === "+" ? total + v : total - v;
+              ops.push(op); vals.push(v);
+            }
+            const expr = (first < 0 ? `(−${-first})` : `${first}`) + vals.map((v, i) => ` ${ops[i]} ${v}`).join("");
+            return { expr, answer: `${total}`, hint: "Enter a number. It can be negative.", steps: [`Work left to right: ${expr} = ${total}`] };
+          } },
+        { sub: "muldiv_pos", make: () => {
+            const n = randInt(2, 3);
+            let total = randInt(2, 6);
+            const parts = [total], ops = [];
+            for (let i = 0; i < n; i++) {
+              const op = pick(["×", "÷"]);
+              if (op === "×") { const v = randInt(2, 9); total *= v; parts.push(v); ops.push("×"); }
+              else {
+                const divisors = [2, 3, 4, 5, 6, 7, 8, 9].filter((d) => total % d === 0);
+                if (!divisors.length) { const v = randInt(2, 9); total *= v; parts.push(v); ops.push("×"); }
+                else { const v = pick(divisors); total /= v; parts.push(v); ops.push("÷"); }
+              }
+            }
+            const expr = parts.map((v, i) => (i === 0 ? `${v}` : ` ${ops[i - 1]} ${v}`)).join("");
+            return { expr, answer: `${total}`, hint: "Enter a number.", steps: [`Work left to right: ${expr} = ${total}`] };
+          } },
+        { sub: "muldiv_neg", make: () => {
+            const op = pick(["×", "÷"]);
+            const aNeg = Math.random() < 0.5, bNeg = Math.random() < 0.5;
+            let a, b, ans;
+            if (op === "×") { a = randInt(2, 12); b = randInt(2, 9); ans = a * b * (aNeg ? -1 : 1) * (bNeg ? -1 : 1); }
+            else { b = randInt(2, 9); const q = randInt(2, 9); a = b * q; ans = q * (aNeg ? -1 : 1) * (bNeg ? -1 : 1); }
+            const at = aNeg ? `(−${a})` : `${a}`, bt = bNeg ? `(−${b})` : `${b}`;
+            const sameSign = aNeg === bNeg;
+            const expr = `${at} ${op} ${bt}`;
+            return { expr, answer: `${ans}`, hint: "Enter a number. It can be negative.",
+              steps: [sameSign ? "Same signs → a positive answer" : "Different signs → a negative answer", `${expr} = ${ans}`] };
+          } },
+      ];
+      if (Math.random() < 0.55) {
+        const f = pick(subForms);
+        const q2 = f.make();
+        return { sub: f.sub, prompt: `Work out:   ${q2.expr}`, answer: q2.answer, hint: q2.hint, steps: q2.steps };
+      }
       // A mix of BODMAS shapes — brackets, orders (powers & roots),
       // division, multiplication, add/subtract. Answers are whole
       // numbers; roughly 1 in 4 questions involves negatives (results
-      // going below zero, or negative operands including −×−).
+      // going below zero, or negative operands including −×−). Untagged
+      // (no `sub`) — only reachable via "General" homework, not the four
+      // subtopics above.
       const forms = [
         () => { // multiply, then add/subtract
           const a = randInt(4, 20), b = randInt(2, 9), c = randInt(2, 9);
@@ -2404,10 +2508,21 @@ const TOPICS = [
             check: (inp) => isStdForm(inp, value),
             steps: [matchStep, `= ${value}`, `In standard form: ${sfPretty(mant, ex)}`] };
         },
+        () => { // divide two standard-form numbers (front numbers chosen so it's exact)
+          const pairs = [[2, 2], [2, 3], [2, 4], [3, 2], [3, 3], [4, 2]];
+          const [m2, qf] = pairs[randInt(0, pairs.length - 1)];
+          const m1 = m2 * qf;
+          const e1 = [-2, 2, 3, 4, 5][randInt(0, 4)], e2 = [-3, -2, 2, 3][randInt(0, 3)];
+          const value = qf * Math.pow(10, e1 - e2);
+          const { mant, exp } = norm(value);
+          return { prompt: `Work out, in standard form:   (${m1} × ${pow10(e1)}) ÷ (${m2} × ${pow10(e2)})`, answer: sfString(mant, exp), answerDisplay: sfPretty(mant, exp), hint: sfHint,
+            check: (inp) => isStdForm(inp, value),
+            steps: [`Divide the numbers: ${m1} ÷ ${m2} = ${qf}`, `Subtract the powers: ${pow10(e1)} ÷ ${pow10(e2)} = ${pow10(e1 - e2)}`, `Answer: ${sfPretty(mant, exp)}`] };
+        },
       ];
       const fi = randInt(0, forms.length - 1);
       const q = forms[fi]();
-      q.sub = fi === 0 ? "toSF" : fi === 1 ? "fromSF" : "calc";
+      q.sub = fi === 0 ? "toSF" : fi === 1 ? "fromSF" : fi === 3 ? "addsub" : "muldiv"; // fi 2 (×) and 4 (÷) → muldiv
       return q;
     } },
   { id: "sigfig", name: "Rounding", icon: "🎯", prereqs: [],
@@ -2557,7 +2672,7 @@ const TOPICS = [
 
       if (mode === 0) {
         const h = randInt(1, 4), m = randInt(1, 59);
-        return { prompt: `A journey takes ${h} hour${h > 1 ? "s" : ""} and ${m} minutes. How many minutes is that in total?`, answer: `${h * 60 + m}`, hint: "Enter a number.",
+        return { sub: "convert", prompt: `A journey takes ${h} hour${h > 1 ? "s" : ""} and ${m} minutes. How many minutes is that in total?`, answer: `${h * 60 + m}`, hint: "Enter a number.",
           steps: [`Convert hours to minutes: ${h} × 60 = ${h * 60}`, `Add the extra minutes: ${h * 60} + ${m} = ${h * 60 + m}`] };
       }
 
@@ -2566,18 +2681,18 @@ const TOPICS = [
       const end = start + dur;
 
       if (mode === 1) {
-        return { prompt: `${who} left at ${fmt(start)} and the journey took ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} arrive?`,
+        return { sub: "finish", prompt: `${who} left at ${fmt(start)} and the journey took ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} arrive?`,
           answer: fmt(end), hint: "e.g. 14:35", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (end % 1440) % 720,
           steps: [`Start ${fmt(start)}, add ${Math.floor(dur / 60)} h → ${fmt(start + Math.floor(dur / 60) * 60)}`, `Then add ${dur % 60} min → ${fmt(end)}`, `Arrived at ${fmt(end)}`] };
       }
       if (mode === 2) {
-        return { prompt: `${who} arrived at ${fmt(end)} after a journey of ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} leave?`,
+        return { sub: "start", prompt: `${who} arrived at ${fmt(end)} after a journey of ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} leave?`,
           answer: fmt(start), hint: "e.g. 09:20", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (start % 1440) % 720,
           steps: [`Arrival ${fmt(end)}, subtract ${Math.floor(dur / 60)} h → ${fmt(end - Math.floor(dur / 60) * 60)}`, `Then subtract ${dur % 60} min → ${fmt(start)}`, `Left at ${fmt(start)}`] };
       }
       const dh = Math.floor(dur / 60), dm = dur % 60;
       const askHM = Math.random() < 0.75;
-      return { prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
+      return { sub: "duration", prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
         answer: askHM ? `${dh} h ${dm} min` : `${dur}`,
         hint: askHM ? "e.g. 2 h 15 min" : "Enter a number.",
         check: (inp) => parseDuration(inp) === dur,
@@ -2864,20 +2979,34 @@ const TOPICS = [
     } },
   { id: "simultaneous", name: "Simultaneous Equations", icon: "🔗", prereqs: ["algebra"],
     generate() {
-      const xSol = randInt(-6, 6), ySol = randInt(-6, 6);
-      let a = randInt(1, 5), b = randInt(1, 5), c = randInt(1, 5), d = randInt(1, 5);
-      while (a * d - b * c === 0) { c = randInt(1, 5); d = randInt(1, 5); }
+      // Easy: one equation already has a lone x or y (coefficient 1), and
+      // every solution/coefficient/constant stays positive, so there's no
+      // negative-times-negative bookkeeping in the working. Hard: general
+      // 1-5 coefficients on both variables and solutions that can be
+      // negative — needs real elimination (scale, then subtract).
+      const easy = Math.random() < 0.5;
+      let xSol, ySol, a, b, c, d;
+      if (easy) {
+        xSol = randInt(1, 6); ySol = randInt(1, 6);
+        a = 1; b = randInt(1, 3); c = randInt(1, 4); d = randInt(1, 4);
+        while (a * d - b * c === 0) { c = randInt(1, 4); d = randInt(1, 4); }
+      } else {
+        xSol = randInt(-6, 6); ySol = randInt(-6, 6);
+        a = randInt(1, 5); b = randInt(1, 5); c = randInt(1, 5); d = randInt(1, 5);
+        while (a * d - b * c === 0) { c = randInt(1, 5); d = randInt(1, 5); }
+      }
       const e = a * xSol + b * ySol, f = c * xSol + d * ySol;
       const co = (n) => (n === 1 ? "" : `${n}`);
       const eq1 = `${co(a)}x + ${co(b)}y = ${e}`, eq2 = `${co(c)}x + ${co(d)}y = ${f}`;
       return {
+        sub: easy ? "easy" : "hard",
         prompt: `Solve this pair:   ${eq1}\n${eq2}`,
         fields: [{ key: "x", label: "x =" }, { key: "y", label: "y =" }],
         answers: { x: `${xSol}`, y: `${ySol}` },
         answer: `x = ${xSol},  y = ${ySol}`,
         hint: "whole numbers",
         steps: [
-          `Scale the equations so one variable's coefficients match, then subtract to eliminate it`,
+          easy ? `One equation already has a lone x or y — substitute it straight into the other` : `Scale the equations so one variable's coefficients match, then subtract to eliminate it`,
           `Solve for the other variable, then substitute back`,
           `x = ${xSol},  y = ${ySol}`,
         ],
@@ -2929,8 +3058,32 @@ const TOPICS = [
           };
         }
 
-        // 15% — composite function, one of f/g a simple quadratic (x² + e)
+        // 15% — composite function, general expression (not a number)
         if (r < 0.50) {
+          const a = randInt(2, 6), b = nz(-9, 9), c = randInt(2, 6), d = nz(-9, 9);
+          const outer = Math.random() < 0.5 ? "f" : "g";
+          const innerName = outer === "f" ? "g" : "f";
+          const [ic, id] = innerName === "f" ? [a, b] : [c, d];
+          const [oc, od] = outer === "f" ? [a, b] : [c, d];
+          const A = oc * ic, B = oc * id + od;
+          if (A === 0) return null;
+          const xt = (n) => (n === 1 ? "x" : n === -1 ? "-x" : `${n}x`);
+          const ansExpr = B === 0 ? xt(A) : `${xt(A)} ${spaced(B)}`;
+          return {
+            prompt: `f(x) = ${a}x ${spaced(b)}\ng(x) = ${c}x ${spaced(d)}\nFind ${outer}${innerName}(x)`,
+            answer: ansExpr, answerPrefix: `${outer}${innerName}(x) =`,
+            hint: "leave your answer in terms of x, e.g. 5x - 2",
+            steps: [
+              `${outer}${innerName}(x) means: substitute ${innerName}(x) into ${outer}.`,
+              `${outer}(${innerName}(x)) = ${oc}(${ic}x ${spaced(id)}) ${spaced(od)}`,
+              `= ${xt(oc * ic)} ${spaced(oc * id)} ${spaced(od)}`,
+              `= ${ansExpr}`,
+            ],
+          };
+        }
+
+        // 15% — composite function, one of f/g a simple quadratic (x² + e)
+        if (r < 0.65) {
           const a = randInt(2, 6), b = nz(-9, 9), e = nz(-6, 6), k = nz(-5, 5);
           const quad = { desc: `x² ${spaced(e)}`, evalFn: (x) => x * x + e, step: (x, y) => `(${x})² ${spaced(e)} = ${y}` };
           const lin = { desc: `${a}x ${spaced(b)}`, evalFn: (x) => a * x + b, step: (x, y) => `${a}×${x} ${spaced(b)} = ${y}` };
@@ -2985,7 +3138,7 @@ const TOPICS = [
         };
         })();
         if (!qq) return null;
-        qq.sub = r < 0.20 ? "inverse" : r < 0.50 ? "composite" : "sub";
+        qq.sub = r < 0.20 ? "inverse" : r < 0.35 ? "composite" : r < 0.50 ? "compositegen" : r < 0.65 ? "composite" : "sub";
         return qq;
       };
       let q;
@@ -3037,7 +3190,11 @@ const TOPICS = [
       const shown = [1, 2, 3, 4, 5].map(seq.term);
       const seqStr = `${shown.join(", ")}, ...`;
       const mode = Math.random() < 0.4 ? "next" : Math.random() < 0.5 ? "rule" : "kth";
-      const _subSeq = mode === "rule" ? "nth" : "term";
+      // "Find the next term" is its own subtopic only for the classic case
+      // (a basic arithmetic sequence); every other question is grouped by
+      // sequence kind instead, regardless of mode.
+      const _subSeq = (mode === "next" && seq.kind === "arith") ? "nextterm"
+        : seq.kind === "sqShift" ? "sqshift" : seq.kind;
 
       if (mode === "next") {
         return { sub: _subSeq, prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
@@ -3135,7 +3292,7 @@ const TOPICS = [
         : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
 
       return {
-        sub: "variation",
+        sub: inverse ? "inverse" : "direct",
         prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
         answer: `${ay}`, hint: "Enter a number.",
         steps: [
@@ -3981,7 +4138,7 @@ const TOPICS = [
         ],
       };
       })();
-      q.sub = r < 0.30 ? "speed" : r < 0.55 ? "accel" : "graph";
+      q.sub = r < 0.30 ? "speed" : r < 0.55 ? "accel" : r < 0.78 ? "disttime" : "speedtime";
       return q;
     } },
   { id: "dailymaths", name: "Daily Maths", icon: "🛒", prereqs: ["algebra"],
@@ -4190,9 +4347,39 @@ const TOPICS = [
     } },
   { id: "similarity", name: "Similarity", icon: "🔺", prereqs: ["mensuration"],
     generate() {
-      const a = randInt(2, 6), k = randInt(2, 4), area = randInt(4, 20);
-      return { prompt: `Two similar triangles have corresponding sides ${a} cm and ${a * k} cm. The smaller triangle has area ${area} cm². Find the area of the larger triangle`, answer: `${area * k * k}`, hint: "Enter a number (cm²).",
-        steps: [`Scale factor (length) = ${a * k} ÷ ${a} = ${k}`, `Scale factor (area) = ${k}² = ${k * k}`, `Larger area = ${area} × ${k * k} = ${area * k * k} cm²`] };
+      const pick = (a) => a[randInt(0, a.length - 1)];
+      // The ratio used to STATE how similar the two shapes are (givenAs)
+      // and the property being SOLVED FOR (askFor) are picked independently
+      // — 3×3 = 9 combinations, grouped into 3 subtopics by askFor.
+      const askFor = pick(["length", "area", "volume"]);
+      const givenAs = pick(["length", "area", "volume"]);
+      const NOUNS = [["triangles", "triangle"], ["cylinders", "cylinder"], ["boxes", "box"], ["models", "model"], ["photo frames", "photo frame"], ["solids", "solid"]];
+      const [noun, nounSing] = pick(NOUNS);
+      const k = randInt(2, 3);
+      const pow = { length: 1, area: 2, volume: 3 };
+      const unit = { length: "cm", area: "cm²", volume: "cm³" };
+      const word = { length: "length", area: "area", volume: "volume" };
+
+      const smallGiven = randInt(2, 9), bigGiven = smallGiven * (k ** pow[givenAs]);
+      const smallAsk = randInt(2, 20), bigAsk = smallAsk * (k ** pow[askFor]);
+
+      const scaleStep = givenAs === "length"
+        ? `Length scale factor = ${bigGiven} ÷ ${smallGiven} = ${k}`
+        : givenAs === "area"
+        ? `Area scale factor = ${bigGiven} ÷ ${smallGiven} = ${k * k},  so length scale factor = ${k}`
+        : `Volume scale factor = ${bigGiven} ÷ ${smallGiven} = ${k * k * k},  so length scale factor = ${k}`;
+      const applyStep = askFor === "length"
+        ? `Larger ${word[askFor]} = ${smallAsk} × ${k} = ${bigAsk} ${unit[askFor]}`
+        : askFor === "area"
+        ? `Area scale factor = ${k}² = ${k * k}.  Larger ${word[askFor]} = ${smallAsk} × ${k * k} = ${bigAsk} ${unit[askFor]}`
+        : `Volume scale factor = ${k}³ = ${k * k * k}.  Larger ${word[askFor]} = ${smallAsk} × ${k * k * k} = ${bigAsk} ${unit[askFor]}`;
+
+      return {
+        sub: askFor,
+        prompt: `Two similar ${noun} have corresponding ${word[givenAs]}s ${smallGiven} ${unit[givenAs]} and ${bigGiven} ${unit[givenAs]}.\nThe smaller ${nounSing} has ${word[askFor]} ${smallAsk} ${unit[askFor]}. Find the ${word[askFor]} of the larger one`,
+        answer: `${bigAsk}`, hint: `Enter a number (${unit[askFor]}).`,
+        steps: [scaleStep, applyStep],
+      };
     } },
   { id: "symmetry", name: "Symmetry", icon: "🦋", prereqs: [],
     generate() {
@@ -4223,31 +4410,31 @@ const TOPICS = [
 
       if (r < 0.22) {
         const n = pick([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), sum = (n - 2) * 180;
-        return { prompt: `Find the sum of the interior angles of ${A(n)}, in degrees`, answer: `${sum}`, hint: "Enter a number.",
+        return { sub: "interior", prompt: `Find the sum of the interior angles of ${A(n)}, in degrees`, answer: `${sum}`, hint: "Enter a number.",
           steps: [`Sum of interior angles = (n − 2) × 180°`, `= (${n} − 2) × 180 = ${sum}°`] };
       }
       if (r < 0.44) {
         const n = pick(div360), each = ((n - 2) * 180) / n;
-        return { prompt: `Find the size of each interior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
+        return { sub: "interior", prompt: `Find the size of each interior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
           steps: [`Sum of interior angles = (${n} − 2) × 180 = ${(n - 2) * 180}°`, `Each = ${(n - 2) * 180} ÷ ${n} = ${each}°`] };
       }
       if (r < 0.56) {
         const n = pick(div360), each = 360 / n;
-        return { prompt: `Find the size of each exterior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
+        return { sub: "exterior", prompt: `Find the size of each exterior angle of a regular ${named(n)}, in degrees`, answer: `${each}`, hint: "Enter a number.",
           steps: [`The exterior angles of any polygon add up to 360°`, `Each = 360 ÷ ${n} = ${each}°`] };
       }
       if (r < 0.78) {
         const n = randInt(3, 14), sum = (n - 2) * 180;
-        return { prompt: `The interior angles of a polygon add up to ${sum}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+        return { sub: "sides", prompt: `The interior angles of a polygon add up to ${sum}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
           steps: [`(n − 2) × 180 = ${sum}`, `n − 2 = ${sum} ÷ 180 = ${sum / 180}`, `n = ${n}`] };
       }
       if (r < 0.88) {
         const n = pick([3, 4, 5, 6, 8, 9, 10, 12, 15, 18, 20, 24]), ext = 360 / n;
-        return { prompt: `Each exterior angle of a regular polygon is ${ext}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+        return { sub: "sides", prompt: `Each exterior angle of a regular polygon is ${ext}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
           steps: [`Number of sides = 360 ÷ (each exterior angle)`, `= 360 ÷ ${ext} = ${n}`] };
       }
       const n = pick([3, 4, 5, 6, 8, 9, 10, 12, 15, 18, 20]), interior = ((n - 2) * 180) / n, ext = 180 - interior;
-      return { prompt: `Each interior angle of a regular polygon is ${interior}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+      return { sub: "sides", prompt: `Each interior angle of a regular polygon is ${interior}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
         steps: [`Each exterior angle = 180 − ${interior} = ${ext}°`, `Number of sides = 360 ÷ ${ext} = ${n}`] };
     } },
   { id: "trigonometry", name: "Trigonometry", icon: "📐", prereqs: ["polygons"],
@@ -4930,7 +5117,7 @@ const TOPICS = [
       const r = Math.random();
 
       // ---------- list of numbers: mean / median / mode / range ----------
-      if (r < 0.60) {
+      if (r < 0.35) {
         const kind = pick(["mean", "mean", "median", "median", "mode", "range", "range"]);
 
         if (kind === "mean") {
@@ -4945,6 +5132,7 @@ const TOPICS = [
           if (!nums) nums = Array(n).fill(mean);
           nums = shuffle(nums);
           return {
+            sub: "averages",
             prompt: `Find the mean of:   ${nums.join(", ")}`,
             answer: `${mean}`, hint: "Enter a number.",
             steps: [`Mean = sum of the values ÷ how many there are`, `= (${nums.join(" + ")}) ÷ ${n} = ${mean * n} ÷ ${n} = ${mean}`],
@@ -4962,6 +5150,7 @@ const TOPICS = [
             if (counts[v] < times) nums.push(v);
           }
           return {
+            sub: "averages",
             prompt: `Find the mode of:   ${shuffle(nums).join(", ")}`,
             answer: `${modeVal}`, hint: "Enter a number.",
             steps: [`The mode is the value that occurs most often.`, `${modeVal} occurs ${times} times — more than any other value.`],
@@ -4973,6 +5162,7 @@ const TOPICS = [
         const sorted = [...nums].sort((a, b) => a - b);
         if (kind === "range") {
           return {
+            sub: "averages",
             prompt: `Find the range of:   ${nums.join(", ")}`,
             answer: `${sorted[n - 1] - sorted[0]}`, hint: "Enter a number.",
             steps: [`Range = largest value − smallest value`, `= ${sorted[n - 1]} − ${sorted[0]} = ${sorted[n - 1] - sorted[0]}`],
@@ -4980,6 +5170,7 @@ const TOPICS = [
         }
         const med = sorted[(n - 1) / 2];
         return {
+          sub: "averages",
           prompt: `Find the median of:   ${nums.join(", ")}`,
           answer: `${med}`, hint: "Enter a number.",
           steps: [`Put the values in order:  ${sorted.join(", ")}`, `The middle value is ${med}.`],
@@ -4987,55 +5178,124 @@ const TOPICS = [
       }
 
       // ---------- cumulative frequency graph ----------
-      const n = pick([40, 50, 60, 80]);
-      const bounds = pick([[0, 10, 20, 30, 40, 50, 60], [0, 10, 20, 30, 40, 50], [10, 20, 30, 40, 50, 60, 70], [0, 20, 40, 60, 80, 100]]);
-      const k = bounds.length;
-      const mids = [];
-      while (mids.length < k - 2) { const v = randInt(3, n - 3); if (!mids.includes(v)) mids.push(v); }
-      mids.sort((a, b) => a - b);
-      const cf = [0, ...mids, n];
-      const pts = bounds.map((b, i) => [b, cf[i]]);
-      // read the estimates off the SAME smooth curve the student sees
-      const dense = densifyOgive(pts);
-      const f = (x) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0 || 1); } return x < bounds[0] ? 0 : n; };
-      const invF = (y) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0); } return bounds[0]; };
-      const xStep = bounds[1] - bounds[0];
-      const cfg = { points: pts, xLabel: pick(["mark", "score", "time (s)", "mass (kg)"]), n };
-      const r2 = Math.random();
+      if (r < 0.55) {
+        const n = pick([40, 50, 60, 80]);
+        const bounds = pick([[0, 10, 20, 30, 40, 50, 60], [0, 10, 20, 30, 40, 50], [10, 20, 30, 40, 50, 60, 70], [0, 20, 40, 60, 80, 100]]);
+        const kk = bounds.length;
+        const mids = [];
+        while (mids.length < kk - 2) { const v = randInt(3, n - 3); if (!mids.includes(v)) mids.push(v); }
+        mids.sort((a, b) => a - b);
+        const cf = [0, ...mids, n];
+        const pts = bounds.map((b, i) => [b, cf[i]]);
+        // read the estimates off the SAME smooth curve the student sees
+        const dense = densifyOgive(pts);
+        const f = (x) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (x >= x0 && x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0 || 1); } return x < bounds[0] ? 0 : n; };
+        const invF = (y) => { for (let i = 0; i < dense.length - 1; i++) { const [x0, y0] = dense[i], [x1, y1] = dense[i + 1]; if (y >= y0 && y <= y1 && y1 > y0) return x0 + (x1 - x0) * (y - y0) / (y1 - y0); } return bounds[0]; };
+        const xStep = bounds[1] - bounds[0];
+        const cfg = { points: pts, xLabel: pick(["mark", "score", "time (s)", "mass (kg)"]), n };
+        const r2 = Math.random();
 
-      if (r2 < 0.34) {
-        const medX = invF(n / 2);
+        if (r2 < 0.34) {
+          const medX = invF(n / 2);
+          return {
+            sub: "cumfreq",
+            prompt: `The cumulative frequency graph shows the results of ${n} people. Use it to estimate the median.`,
+            cumfreq: cfg, answer: `${Math.round(medX)}`, hint: "read it off the graph (within a small margin is fine)",
+            check: num(medX, Math.max(3, xStep / 3)),
+            steps: [`Half of ${n} is ${n / 2}.`, `Read across from ${n / 2} on the cumulative frequency axis to the curve, then down to the ${cfg.xLabel} axis.`, `Median ≈ ${Math.round(medX)}.`],
+          };
+        }
+        if (r2 < 0.6) {
+          const q1 = invF(n / 4), q3 = invF(3 * n / 4), iqr = q3 - q1;
+          return {
+            sub: "cumfreq",
+            prompt: `The cumulative frequency graph shows the results of ${n} people. Estimate the interquartile range.`,
+            cumfreq: cfg, answer: `${Math.round(iqr)}`, hint: "IQR = upper quartile − lower quartile",
+            check: num(iqr, Math.max(4, xStep / 2)),
+            steps: [
+              `Lower quartile: read across from ${n / 4}  →  Q₁ ≈ ${Math.round(q1)}.`,
+              `Upper quartile: read across from ${3 * n / 4}  →  Q₃ ≈ ${Math.round(q3)}.`,
+              `IQR = Q₃ − Q₁ ≈ ${Math.round(q3)} − ${Math.round(q1)} = ${Math.round(iqr)}.`,
+            ],
+          };
+        }
+        // less than / more than a boundary value
+        const xv = pick(bounds.slice(1, -1));
+        const below = Math.round(f(xv));
+        const less = Math.random() < 0.55;
         return {
-          prompt: `The cumulative frequency graph shows the results of ${n} people. Use it to estimate the median.`,
-          cumfreq: cfg, answer: `${Math.round(medX)}`, hint: "read it off the graph (within a small margin is fine)",
-          check: num(medX, Math.max(3, xStep / 3)),
-          steps: [`Half of ${n} is ${n / 2}.`, `Read across from ${n / 2} on the cumulative frequency axis to the curve, then down to the ${cfg.xLabel} axis.`, `Median ≈ ${Math.round(medX)}.`],
-        };
-      }
-      if (r2 < 0.6) {
-        const q1 = invF(n / 4), q3 = invF(3 * n / 4), iqr = q3 - q1;
-        return {
-          prompt: `The cumulative frequency graph shows the results of ${n} people. Estimate the interquartile range.`,
-          cumfreq: cfg, answer: `${Math.round(iqr)}`, hint: "IQR = upper quartile − lower quartile",
-          check: num(iqr, Math.max(4, xStep / 2)),
+          sub: "cumfreq",
+          prompt: `The cumulative frequency graph shows the results of ${n} people. How many scored ${less ? "less" : "more"} than ${xv}?`,
+          cumfreq: cfg, answer: `${less ? below : n - below}`, hint: "read the curve at that value",
+          check: num(less ? below : n - below, 1.5),
           steps: [
-            `Lower quartile: read across from ${n / 4}  →  Q₁ ≈ ${Math.round(q1)}.`,
-            `Upper quartile: read across from ${3 * n / 4}  →  Q₃ ≈ ${Math.round(q3)}.`,
-            `IQR = Q₃ − Q₁ ≈ ${Math.round(q3)} − ${Math.round(q1)} = ${Math.round(iqr)}.`,
+            `Go up from ${xv} on the ${cfg.xLabel} axis to the curve, then across:  ${below} people scored less than ${xv}.`,
+            less ? `Answer: ${below}.` : `More than ${xv}:  ${n} − ${below} = ${n - below}.`,
           ],
         };
       }
-      // less than / more than a boundary value
-      const xv = pick(bounds.slice(1, -1));
-      const below = Math.round(f(xv));
-      const less = Math.random() < 0.55;
+
+      // ---------- which of two classes was more consistent (IQR) ----------
+      if (r < 0.65) {
+        const mkSet = () => { const q1 = randInt(8, 25), iqr = randInt(6, 20); return { q1, q3: q1 + iqr, iqr }; };
+        let A = mkSet(), B = mkSet();
+        while (A.iqr === B.iqr) B = mkSet();
+        const winner = A.iqr < B.iqr ? "Class A" : "Class B";
+        return {
+          sub: "cumfreq",
+          prompt: `Class A has lower quartile ${A.q1} and upper quartile ${A.q3}.\nClass B has lower quartile ${B.q1} and upper quartile ${B.q3}.\nWhich class's results were more consistent?`,
+          choices: ["Class A", "Class B"], answer: winner,
+          hint: "the smaller interquartile range is more consistent",
+          steps: [
+            `IQR(Class A) = ${A.q3} − ${A.q1} = ${A.iqr}`,
+            `IQR(Class B) = ${B.q3} − ${B.q1} = ${B.iqr}`,
+            `A smaller IQR means less spread out, so more consistent → ${winner}.`,
+          ],
+        };
+      }
+
+      // ---------- frequency-density histogram: read a frequency, or find
+      //            the mean from a grouped frequency table -------------
+      if (r < 0.85) {
+        const widthPool = [5, 10, 10, 15, 20, 10];
+        const chosenW = shuffle(widthPool).slice(0, 4);
+        let x = pick([0, 10]);
+        const bars = chosenW.map((w) => { const from = x, to = x + w; x += w; return { from, to, w }; });
+        const yStep = 0.2;
+        bars.forEach((b) => { b.density = yStep * randInt(2, 10); b.freq = Math.round(b.density * b.w); });
+        const target = pick(bars);
+        const label = pick(["mark", "score", "time (min)", "mass (kg)"]);
+        return {
+          sub: "histogram",
+          prompt: `The frequency density histogram shows the ${label} of a group of students.\nFind the frequency of the class ${target.from}–${target.to}.`,
+          histogram: { bars: bars.map(({ from, to, density }) => ({ from, to, density })), xLabel: label, yStep },
+          answer: `${target.freq}`, hint: "frequency = frequency density × class width",
+          steps: [
+            `Class width = ${target.to} − ${target.from} = ${target.w}`,
+            `Frequency density (height) = ${target.density}`,
+            `Frequency = ${target.density} × ${target.w} = ${target.freq}`,
+          ],
+        };
+      }
+
+      // ---------- estimate the mean from a grouped frequency table -------
+      const widthPool2 = [5, 10, 10, 15, 20];
+      const chosenW2 = shuffle(widthPool2).slice(0, 4);
+      let x2 = pick([0, 10]);
+      const rows = chosenW2.map((w) => { const from = x2, to = x2 + w; x2 += w; return { from, to, mid: from + w / 2, freq: randInt(2, 12) }; });
+      const totalF = rows.reduce((s, row) => s + row.freq, 0);
+      const sumFM = rows.reduce((s, row) => s + row.freq * row.mid, 0);
+      const mean = Math.round((sumFM / totalF) * 10) / 10;
+      const tableTxt = rows.map((row) => `${row.from}–${row.to}: frequency ${row.freq}`).join("\n");
       return {
-        prompt: `The cumulative frequency graph shows the results of ${n} people. How many scored ${less ? "less" : "more"} than ${xv}?`,
-        cumfreq: cfg, answer: `${less ? below : n - below}`, hint: "read the curve at that value",
-        check: num(less ? below : n - below, 1.5),
+        sub: "histogram",
+        prompt: `The grouped frequency table shows some data:\n${tableTxt}\nEstimate the mean, using the midpoint of each class.`,
+        answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place",
         steps: [
-          `Go up from ${xv} on the ${cfg.xLabel} axis to the curve, then across:  ${below} people scored less than ${xv}.`,
-          less ? `Answer: ${below}.` : `More than ${xv}:  ${n} − ${below} = ${n - below}.`,
+          `Midpoints: ${rows.map((row) => row.mid).join(", ")}`,
+          `Σ(frequency × midpoint) = ${sumFM}`,
+          `Σfrequency = ${totalF}`,
+          `Mean ≈ ${sumFM} ÷ ${totalF} = ${mean}`,
         ],
       };
     } },
@@ -6449,6 +6709,12 @@ function lessonGuideSteps(q) {
    homework generator then only keeps questions whose `sub` is in the
    chosen set. Topics not listed here are whole-topic only ("General"). */
 const SUBTOPICS = {
+  arithmetic: [
+    { key: "addsub_pos", name: "Addition & subtraction (positive numbers)" },
+    { key: "addsub_neg", name: "Addition & subtraction (with negative numbers)" },
+    { key: "muldiv_pos", name: "Multiplication & division (positive numbers)" },
+    { key: "muldiv_neg", name: "Multiplication & division (with negative numbers)" },
+  ],
   trigonometry: [
     { key: "anglefacts", name: "Angle facts (parallel lines, triangles, bearings)" },
     { key: "pythagoras", name: "Pythagoras" },
@@ -6475,29 +6741,56 @@ const SUBTOPICS = {
   standardform: [
     { key: "toSF", name: "Write in standard form" },
     { key: "fromSF", name: "Ordinary number from standard form" },
-    { key: "calc", name: "Calculate with standard form" },
+    { key: "addsub", name: "Add or subtract in standard form" },
+    { key: "muldiv", name: "Multiply or divide in standard form" },
   ],
   limits: [
     { key: "single", name: "Bounds of one measurement" },
     { key: "combine", name: "Bounds of a calculation (÷ and ×)" },
   ],
+  time: [
+    { key: "convert", name: "Convert hours & minutes" },
+    { key: "start", name: "Find the start time" },
+    { key: "finish", name: "Find the finish time" },
+    { key: "duration", name: "Find the duration of a journey" },
+  ],
+  simultaneous: [
+    { key: "easy", name: "Easy (one variable has coefficient 1)" },
+    { key: "hard", name: "Harder (elimination with scaling)" },
+  ],
   functions: [
     { key: "sub", name: "Substitute a value (f(x))" },
-    { key: "composite", name: "Composite functions (fg(x))" },
+    { key: "composite", name: "Composite functions — find a value (fg(k))" },
+    { key: "compositegen", name: "Composite functions — general expression (fg(x))" },
     { key: "inverse", name: "Inverse functions" },
+  ],
+  sequences: [
+    { key: "nextterm", name: "Find the next term" },
+    { key: "arith", name: "Arithmetic sequences" },
+    { key: "geo", name: "Geometric sequences" },
+    { key: "quad", name: "Quadratic sequences" },
+    { key: "sqshift", name: "(n + x)² sequences" },
   ],
   proportionality: [
     { key: "ratio", name: "Sharing in a ratio" },
-    { key: "variation", name: "Direct & inverse variation" },
+    { key: "direct", name: "Direct variation" },
+    { key: "inverse", name: "Inverse variation" },
   ],
   kinematics: [
     { key: "speed", name: "Speed = distance ÷ time" },
     { key: "accel", name: "Acceleration (a = (v−u) ÷ t)" },
-    { key: "graph", name: "Distance–time / speed–time graphs" },
+    { key: "disttime", name: "Distance–time graphs" },
+    { key: "speedtime", name: "Speed–time graphs" },
   ],
-  sequences: [
-    { key: "nth", name: "Write the nth-term rule" },
-    { key: "term", name: "Find a term / next term" },
+  similarity: [
+    { key: "length", name: "Find a length" },
+    { key: "area", name: "Find an area" },
+    { key: "volume", name: "Find a volume" },
+  ],
+  polygons: [
+    { key: "interior", name: "Interior angles (total or each)" },
+    { key: "exterior", name: "Exterior angles (each)" },
+    { key: "sides", name: "Number of sides from an angle" },
   ],
   circles: [
     { key: "circumference", name: "Circumference" },
@@ -6505,6 +6798,11 @@ const SUBTOPICS = {
     { key: "arc", name: "Arc length" },
     { key: "sector", name: "Sector area" },
     { key: "theorems", name: "Circle theorems (angles)" },
+  ],
+  statistics: [
+    { key: "averages", name: "Averages & range (mean, median, mode, range)" },
+    { key: "cumfreq", name: "Cumulative frequency graphs" },
+    { key: "histogram", name: "Frequency density histograms & tables" },
   ],
 };
 
@@ -13529,6 +13827,7 @@ export default function MathsUnlockedBN() {
 
               {question.graph && <LineGraph data={question.graph} />}
               {question.motion && <MotionGraph {...question.motion} />}
+              {question.histogram && <HistogramGraph {...question.histogram} />}
               {question.figure && (
                 <div>
                   <ShapeFigure shape={question.figure.shape} showSym={!!feedback && question.figure.showSymAfter} />
