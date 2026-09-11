@@ -5391,12 +5391,16 @@ const TOPICS = [
         const [xLabel, yLabel] = pick(PAIRS);
         const n = randInt(9, 12);
         const positive = Math.random() < 0.5;
-        const slope = (positive ? 1 : -1) * (2.2 + Math.random() * 1.2);
-        const base = randInt(15, 30);
+        const slopeMag = 2.2 + Math.random() * 1.2;
         const jitterAmp = 3.5; // small relative to the trend, so the direction stays unambiguous
+        // `low` is the smallest trend value (before jitter) either end reaches — keeping it
+        // comfortably above jitterAmp means y never needs clamping, so a run of points can't
+        // pile up flat along a floor the way a hard Math.max(1, ...) clamp used to cause.
+        const low = randInt(10, 20);
         const points = Array.from({ length: n }, (_, i) => {
           const x = i + 1;
-          const y = Math.max(1, base + slope * x + (Math.random() * 2 - 1) * jitterAmp);
+          const trend = positive ? low + slopeMag * (x - 1) : low + slopeMag * (n - x);
+          const y = trend + (Math.random() * 2 - 1) * jitterAmp;
           return [x, Math.round(y * 10) / 10];
         });
         const answer = positive ? "Positive correlation" : "Negative correlation";
