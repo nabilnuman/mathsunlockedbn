@@ -14541,11 +14541,6 @@ export default function MathsUnlockedBN() {
                           <span>{attempted.length}/{TOPICS.length} topics</span>
                           <span>·</span>
                           <span>🏆 {achPct}%</span>
-                          <span style={{ flex: 1 }} />
-                          <span onClick={(e) => { e.stopPropagation(); viewParentLinkFor(s.uid, s.name); }}
-                            style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid var(--grid)", borderRadius: 7, padding: "2px 8px" }}>👪 Parent link</span>
-                          <span onClick={(e) => { e.stopPropagation(); setPinResetFor(pinResetFor === s.uid ? null : s.uid); setPinResetVal(""); setPinResetMsg(null); if (!open) setAdminExpanded(s.uid); }}
-                            style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid var(--grid)", borderRadius: 7, padding: "2px 8px" }}>🔑 Reset PIN</span>
                         </div>
                       </button>
                       {open && (
@@ -14555,6 +14550,12 @@ export default function MathsUnlockedBN() {
                             <PrestigeBadge prestige={s.prestige} size={13} /> Prestige {s.prestige || 0} · 🔥 best streak {s.bestStreak || 0} · ✓ {(s.totalCorrect || 0).toLocaleString()} correct<br />
                             Last active: {s.last_active ? new Date(s.last_active).toLocaleString() : "unknown"}<br />
                             🏆 {achCount}/{ACHIEVEMENTS.length} achievements
+                          </div>
+                          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                            <button onClick={() => viewParentLinkFor(s.uid, s.name)}
+                              style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 7, padding: "4px 9px", cursor: "pointer" }}>👪 Parent link</button>
+                            <button onClick={() => { setPinResetFor(pinResetFor === s.uid ? null : s.uid); setPinResetVal(""); setPinResetMsg(null); }}
+                              style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", background: "none", border: "1px solid var(--grid)", borderRadius: 7, padding: "4px 9px", cursor: "pointer" }}>🔑 Reset PIN</button>
                           </div>
                           {attempted.length === 0 ? (
                             <div style={{ fontSize: 11.5, color: "var(--muted)" }}>No questions attempted yet.</div>
