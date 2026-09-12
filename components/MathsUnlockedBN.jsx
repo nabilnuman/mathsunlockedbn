@@ -8773,13 +8773,21 @@ function ParentProgressView({ profile }) {
   const [range, setRange] = useState("week"); // week | month | year — the trend chart's zoom
 
   const topics = profile.topics || {};
-  const started = TOPICS.map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 })).filter((x) => x.r >= 0);
+  // Lifetime-best rank throughout this view (not the current run's own
+  // highestRank) — so the page reads consistently with the overall grade
+  // below (also lifetime-based) and doesn't regress after a prestige.
+  const started = TOPICS.map((t) => ({ t, r: bestRankOf(profile, t.id) })).filter((x) => x.r >= 0);
   const avgIdx = avgRankIdxOf(profile);
   const overall = rankDisplay(avgIdx >= 0 ? Math.round(avgIdx) : -1);
   const level = levelFromExp(totalExp(profile));
   const weak = [...started].sort((a, b) => a.r - b.r).filter((x) => x.r < RANK_ORDER.indexOf("A")).slice(0, 3);
   const strong = [...started].sort((a, b) => b.r - a.r).filter((x) => x.r >= RANK_ORDER.indexOf("A")).slice(0, 3);
-  const notStarted = TOPICS.filter((t) => isUnlocked(t, profile) && (topics[t.id] || {}).highestRank === undefined).length;
+  const notStarted = TOPICS.filter((t) => isUnlocked(t, profile) && bestRankOf(profile, t.id) < 0).length;
+  // A grade from a handful of topics can look great (or bad) purely by
+  // chance of what's been tried — flag it plainly rather than let a
+  // single-topic S+ read as "acing the whole syllabus".
+  const LOW_COVERAGE = 6;
+  const lowCoverage = started.length > 0 && started.length < LOW_COVERAGE;
   const recentAch = Object.entries(profile.achievedAt || {})
     .map(([id, ts]) => ({ a: ACHIEVEMENTS.find((x) => x.id === id), ts }))
     .filter((x) => x.a).sort((a, b) => b.ts - a.ts).slice(0, 3);
@@ -8879,7 +8887,14 @@ function ParentProgressView({ profile }) {
             </span>
           )}
         </button>
-        <div style={{ fontSize: 11, color: "var(--blue)", marginTop: 2 }}>across {started.length} topic{started.length === 1 ? "" : "s"} · tap for the full breakdown</div>
+        {lowCoverage && (
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--amber)", marginTop: 6, background: "var(--amber-wash, var(--paper))", border: "1px solid var(--amber)", borderRadius: 8, padding: "5px 9px", display: "inline-block" }}>
+            ⚠ Early days — based on only {started.length} of {TOPICS.length} topics, not the full picture yet
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: "var(--blue)", marginTop: lowCoverage ? 4 : 2 }}>
+          {lowCoverage ? "tap for the full breakdown" : `across ${started.length} topic${started.length === 1 ? "" : "s"} · tap for the full breakdown`}
+        </div>
 
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -8974,7 +8989,7 @@ function ParentProgressView({ profile }) {
             <button onClick={() => setShowAllTopics(false)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>hide ▴</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8, marginBottom: 14 }}>
-            {[...TOPICS].map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 }))
+            {[...TOPICS].map((t) => ({ t, r: bestRankOf(profile, t.id) }))
               .sort((a, b) => (a.r < 0 ? 99 : a.r) - (b.r < 0 ? 99 : b.r))
               .map(({ t, r }) => (
                 <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
@@ -9233,12 +9248,15 @@ function weeklyFocusId(wk = weekKey()) {
 }
 const FOCUS_XP_MULT = 2;
 
-// Average highestRank index across every topic the student has started —
-// the one number a "Grade X" summary (and the weekly trend below) are
-// both built from. -1 if nothing has been started yet.
+// Average LIFETIME-BEST rank index across every topic the student has
+// ever started — the one number a "Grade X" summary (and the weekly
+// trend below) are both built from. -1 if nothing has been started yet.
+// Deliberately reads bestRankOf (survives prestige, self-migrating from
+// the current run) rather than the current run's own highestRank, so
+// prestiging doesn't make the overall grade regress even though the
+// current run's topics are wiped.
 function avgRankIdxOf(profile) {
-  const topics = profile.topics || {};
-  const started = TOPICS.map((t) => (topics[t.id] || {}).highestRank ?? -1).filter((r) => r >= 0);
+  const started = TOPICS.map((t) => bestRankOf(profile, t.id)).filter((r) => r >= 0);
   return started.length ? started.reduce((s, r) => s + r, 0) / started.length : -1;
 }
 
