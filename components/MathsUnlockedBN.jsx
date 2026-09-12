@@ -9412,6 +9412,91 @@ function wrapLabel(str, max, maxLines = 2) {
   }
   return lines;
 }
+// Given a logo data-URL (usually opaque — a badge on a solid, but not
+// always exactly white, square — off-white, pale blue, faint gradients
+// from compression all show up in practice), returns a version with the
+// background made transparent, for use as a faint watermark rather than a
+// visible box. Samples the actual background colour from the image's own
+// border ring (an average, not a hardcoded "white") and flood-fills
+// inward from the four edges only wherever a pixel is close to THAT
+// colour — so it adapts to whatever shade a given logo's canvas actually
+// is, and a patch of similar colour INSIDE the artwork (not touching the
+// border) is left alone. Client-side and generic — works for any future
+// school's logo with no per-image manual step, at the cost of a slightly
+// soft/jagged edge that a low-opacity use (like this watermark) easily
+// hides. Falls back to the original data-URL if anything goes wrong.
+function makeSilhouetteDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const ctx = c.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, c.width, c.height);
+          const { data, width, height } = imgData;
+          let sr = 0, sg = 0, sb = 0, sn = 0;
+          for (let x = 0; x < width; x++) { for (const y of [0, height - 1]) { const i = (y * width + x) * 4; sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; sn++; } }
+          for (let y = 0; y < height; y++) { for (const x of [0, width - 1]) { const i = (y * width + x) * 4; sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; sn++; } }
+          const bg = sn ? [sr / sn, sg / sn, sb / sn] : [255, 255, 255];
+          const TOL = 45;
+          const closeToBg = (p) => { const i = p * 4; const dr = data[i] - bg[0], dg = data[i + 1] - bg[1], db = data[i + 2] - bg[2]; return Math.sqrt(dr * dr + dg * dg + db * db) < TOL; };
+          const visited = new Uint8Array(width * height);
+          const stack = [];
+          const seed = (x, y) => { const p = y * width + x; if (!visited[p]) { visited[p] = 1; if (closeToBg(p)) stack.push(p); } };
+          for (let x = 0; x < width; x++) { seed(x, 0); seed(x, height - 1); }
+          for (let y = 0; y < height; y++) { seed(0, y); seed(width - 1, y); }
+          const tryPush = (p) => { if (!visited[p]) { visited[p] = 1; if (closeToBg(p)) stack.push(p); } };
+          while (stack.length) {
+            const p = stack.pop();
+            data[p * 4 + 3] = 0;
+            const x = p % width, y = (p / width) | 0;
+            if (x > 0) tryPush(p - 1);
+            if (x < width - 1) tryPush(p + 1);
+            if (y > 0) tryPush(p - width);
+            if (y < height - 1) tryPush(p + width);
+          }
+          // Crest badges often ring a plain white canvas with a colored border/outline,
+          // which isolates that white canvas from the edge-connected flood fill above.
+          // Strip any remaining near-pure-white pixels outright, connected or not.
+          for (let p = 0; p < width * height; p++) {
+            const i = p * 4;
+            if (data[i + 3] > 0 && data[i] > 225 && data[i + 1] > 225 && data[i + 2] > 225) data[i + 3] = 0;
+          }
+          // The two passes above leave a thin anti-aliased halo where a cut edge
+          // blended between a removed color and a kept one. Erode it: a light,
+          // still-opaque pixel touching a now-transparent neighbor is part of
+          // that halo, not real artwork — a couple of passes eats it away.
+          for (let pass = 0; pass < 2; pass++) {
+            const toClear = [];
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const p = y * width + x, i = p * 4;
+                if (data[i + 3] === 0) continue;
+                if ((data[i] + data[i + 1] + data[i + 2]) / 3 <= 190) continue;
+                const neighbors = [
+                  x > 0 ? (p - 1) * 4 + 3 : -1,
+                  x < width - 1 ? (p + 1) * 4 + 3 : -1,
+                  y > 0 ? (p - width) * 4 + 3 : -1,
+                  y < height - 1 ? (p + width) * 4 + 3 : -1,
+                ];
+                if (neighbors.some((ai) => ai >= 0 && data[ai] === 0)) toClear.push(i + 3);
+              }
+            }
+            for (const ai of toClear) data[ai] = 0;
+          }
+          ctx.putImageData(imgData, 0, 0);
+          resolve(c.toDataURL("image/png"));
+        } catch (e) { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch (e) { resolve(dataUrl); }
+  });
+}
+
 // [{ rank, name, active, pct, gain, delta }] ordered by this week's XP.
 function weeklySchoolStats(profiles) {
   const wk = weekKey();
@@ -9443,10 +9528,29 @@ function WeeklySchoolsSVG({ rows, weekLabel, totalStudents }) {
   const W = 1080, HEAD = 196, ROW = 108, FOOT = 80;
   const H = HEAD + rows.length * ROW + FOOT;
   const C = { navy: "#0E1520", card: "#18212C", teal: "#4FB0A3", ink: "#EAF0F4", mut: "#8FA0AE", green: "#4CAF6A", red: "#D2603F", amber: "#D9A441" };
+  const MEDAL = { 1: "#D4A017", 2: "#9AA3AE", 3: "#B07437" }; // gold / silver / bronze — matches the app's own leaderboard convention
   const F = "Inter, Arial, sans-serif";
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
+      <defs>
+        {/* grayscale, used to render each row's logo as a faint background
+            watermark ("silhouette-ish" — these logos are opaque, not
+            alpha-masked, so a true cutout silhouette isn't possible from
+            the source art; low-opacity grayscale is the closest honest
+            approximation). */}
+        <filter id="silhouette" colorInterpolationFilters="sRGB">
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+        {/* matches the app's own dashboard background — a faint grid,
+            visible only in the gaps around the row cards (the cards
+            themselves are opaque on top) so the plain navy gets some
+            texture without competing with the content. */}
+        <pattern id="bgGrid" width="36" height="36" patternUnits="userSpaceOnUse">
+          <path d="M 36 0 L 0 0 0 36" fill="none" stroke={C.ink} strokeWidth="1.5" strokeOpacity="0.16" />
+        </pattern>
+      </defs>
       <rect width={W} height={H} fill={C.navy} />
+      <rect width={W} height={H} fill="url(#bgGrid)" />
       <rect x="0" y="0" width={W} height={HEAD} fill={C.teal} />
       <text x="48" y="64" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="25" letterSpacing="3">MATHS UNLOCKED · BN</text>
       <text x="48" y="128" fill="#FFFFFF" fontFamily={F} fontWeight="900" fontSize="54">TOP SCHOOLS THIS WEEK</text>
@@ -9460,10 +9564,19 @@ function WeeklySchoolsSVG({ rows, weekLabel, totalStudents }) {
         const initials = r.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
         const nameLines = wrapLabel(r.name, 42, 2);
         const one = nameLines.length === 1;
+        const badgeColor = MEDAL[r.rank] || C.teal;
         return (
           <g key={r.name}>
             <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill={C.card} />
-            <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={C.teal} />
+            {r.logo && (
+              <>
+                <clipPath id={`sil${i}`}><rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" /></clipPath>
+                {/* right side of the bar, well clear of the RANK·SHARE·GAIN column's text */}
+                <image href={r.logoSilhouette || r.logo} x="700" y={y + 6 - 20} width={ROW - 12 + 40} height={ROW - 12 + 40}
+                  clipPath={`url(#sil${i})`} filter="url(#silhouette)" opacity="0.16" preserveAspectRatio="xMidYMid slice" />
+              </>
+            )}
+            <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={badgeColor} />
             <text x="62" y={cy + 17} textAnchor="middle" fill={C.navy} fontFamily={F} fontWeight="900" fontSize="46">{r.rank}</text>
             <clipPath id={`lg${i}`}><circle cx="174" cy={cy} r="36" /></clipPath>
             {r.logo
@@ -9520,7 +9633,13 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
   const F = "Inter, Arial, sans-serif";
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
+      <defs>
+        <pattern id="bgGrid2" width="36" height="36" patternUnits="userSpaceOnUse">
+          <path d="M 36 0 L 0 0 0 36" fill="none" stroke={C.ink} strokeWidth="1.5" strokeOpacity="0.16" />
+        </pattern>
+      </defs>
       <rect width={W} height={H} fill={C.navy} />
+      <rect width={W} height={H} fill="url(#bgGrid2)" />
       <rect x="0" y="0" width={W} height={HEAD} fill={C.teal} />
       <text x="48" y="64" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="25" letterSpacing="3">MATHS UNLOCKED · BN</text>
       <text x="48" y="128" fill="#FFFFFF" fontFamily={F} fontWeight="900" fontSize="50">TOP STUDENTS THIS WEEK</text>
@@ -11377,7 +11496,8 @@ export default function MathsUnlockedBN() {
         if (!res.ok) return r;
         const blob = await res.blob();
         const logo = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
-        return { ...r, logo };
+        const logoSilhouette = await makeSilhouetteDataUrl(logo);
+        return { ...r, logo, logoSilhouette };
       } catch (e) { return r; }
     }));
     setGfx({ kind, rows: withLogos, activeTotal, totalStudents: all.length, weekLabel });
