@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users, Calculator } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
@@ -7036,6 +7036,45 @@ function lessonGuideSteps(q) {
   return Array.isArray(q && q.steps) ? q.steps.map(String).filter(Boolean) : [];
 }
 
+// Turns one "How to solve it" step line into a multiple-choice checkpoint
+// for Step-by-step practice: find the last number in the line (almost
+// always that step's own result, e.g. "...= 14") and offer it alongside a
+// few plausible slip-ups (sign flip, off-by-a-bit) with everything else in
+// the sentence left untouched. Generic across every topic's step wording —
+// a line with no number at all (a pure rule statement) returns null, and
+// that step is shown as a plain reveal instead of a quiz.
+function stepChoiceOptions(text) {
+  const re = /(-|−)?\d+(\.\d+)?/g;
+  let m, last = null;
+  while ((m = re.exec(text))) last = m;
+  if (!last) return null;
+  const raw = last[0];
+  const negative = raw.startsWith("-") || raw.startsWith("−");
+  const digits = raw.replace(/^[-−]/, "");
+  const decimals = digits.includes(".") ? digits.split(".")[1].length : 0;
+  const value = (negative ? -1 : 1) * parseFloat(digits);
+  const before = text.slice(0, last.index), after = text.slice(last.index + raw.length);
+  const fmt = (v) => (decimals ? v.toFixed(decimals) : String(Math.round(v)));
+  const render = (v) => before + (v < 0 ? "-" : "") + fmt(Math.abs(v)).replace(/^-/, "") + after;
+  const correctKey = fmt(value);
+  const seen = new Set([correctKey]);
+  const distractors = [];
+  for (const v of [value + 1, value - 1, -value, value + 2, value - 2, value + 10, value - 10]) {
+    if (distractors.length >= 3) break;
+    const key = fmt(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    distractors.push({ key, text: render(v) });
+  }
+  if (!distractors.length) return null;
+  const options = [{ key: correctKey, text }, ...distractors];
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  return { correctKey, options };
+}
+
 /* Subtopics a teacher can pick when setting homework. A topic listed here
    tags every generated question with `q.sub` (one of these keys); the
    homework generator then only keeps questions whose `sub` is in the
@@ -8533,6 +8572,90 @@ function EditSheet({ title, onClose, children }) {
         {children}
       </div>
     </div>
+  );
+}
+
+// Walks a wrong answer's `steps` one at a time: each step with a number in
+// it becomes a small multiple-choice pick (see stepChoiceOptions); a pure
+// rule-statement step with no number is just revealed with a continue
+// button, same as the Learn lesson's own wrong-answer walk-through.
+function StepPracticeModal({ question, onClose, playCorrect, playWrong }) {
+  const steps = useMemo(
+    () => (Array.isArray(question && question.steps) ? question.steps.map(String).filter(Boolean) : []),
+    [question]
+  );
+  const [stepIdx, setStepIdx] = useState(0);
+  const [pickedKey, setPickedKey] = useState(null);
+  const total = steps.length;
+  const stepText = steps[stepIdx] || "";
+  const choice = useMemo(() => stepChoiceOptions(stepText), [stepIdx, stepText]);
+  const correct = choice ? pickedKey === choice.correctKey : null;
+  if (!total) { onClose(); return null; }
+  const isLast = stepIdx >= total - 1;
+  function pick(opt) {
+    if (correct) return;
+    setPickedKey(opt.key);
+    if (opt.key === choice.correctKey) playCorrect(); else playWrong();
+  }
+  function advance() {
+    setPickedKey(null);
+    if (isLast) onClose(); else setStepIdx((i) => i + 1);
+  }
+  const canAdvance = !choice || correct;
+  return (
+    <EditSheet title="🪜 Step-by-step practice" onClose={onClose}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+        Step {stepIdx + 1} of {total}
+      </div>
+      {stepIdx > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+          {steps.slice(0, stepIdx).map((ln, i) => (
+            <div key={i} className="mub-mono" style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13, lineHeight: 1.5, padding: "6px 10px", borderRadius: 8, borderLeft: "2px solid var(--green)", color: "var(--muted)" }}>
+              <Check size={12} style={{ marginTop: 4, flexShrink: 0, color: "var(--green)" }} />
+              <MathText text={ln} />
+            </div>
+          ))}
+        </div>
+      )}
+      {choice ? (
+        <>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)", marginBottom: 10 }}>Which one&rsquo;s right?</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+            {choice.options.map((opt) => {
+              const isPicked = pickedKey === opt.key;
+              const isRight = opt.key === choice.correctKey;
+              const state = isPicked ? (isRight ? "right" : "wrong") : "idle";
+              return (
+                <button key={opt.key} onClick={() => pick(opt)} disabled={!!correct}
+                  style={{
+                    textAlign: "left", padding: "10px 12px", borderRadius: 10, cursor: correct ? "default" : "pointer",
+                    border: `2px solid ${state === "right" ? "var(--green)" : state === "wrong" ? "var(--red)" : "var(--grid)"}`,
+                    background: "var(--paper)", color: "var(--ink)", fontSize: 14,
+                    opacity: correct && !isRight ? 0.5 : 1,
+                  }}
+                >
+                  <span className="mub-mono"><MathText text={opt.text} /></span>
+                </button>
+              );
+            })}
+          </div>
+          {pickedKey && !correct && (
+            <div style={{ fontSize: 12.5, color: "var(--red)", fontWeight: 600, marginBottom: 10 }}>Not quite — try another one.</div>
+          )}
+        </>
+      ) : (
+        <div className="mub-mono" style={{ fontSize: 14.5, lineHeight: 1.5, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--grid)", background: "var(--paper)", color: "var(--ink)", marginBottom: 14 }}>
+          <MathText text={stepText} />
+        </div>
+      )}
+      <button onClick={advance} disabled={!canAdvance} style={{
+        width: "100%", padding: "10px 16px", background: canAdvance ? "var(--blue)" : "var(--locked)",
+        color: canAdvance ? "var(--on-accent)" : "var(--muted)", border: "none", borderRadius: 10,
+        fontWeight: 700, fontSize: 13.5, cursor: canAdvance ? "pointer" : "default",
+      }}>
+        {isLast ? "Got it — done ✓" : "Next step →"}
+      </button>
+    </EditSheet>
   );
 }
 
@@ -10522,6 +10645,7 @@ export default function MathsUnlockedBN() {
   const [question, setQuestion] = useState(null);
   const [answerInput, setAnswerInput] = useState("");
   const [writePad, setWritePad] = useState(false);   // handwriting pad for the answer box
+  const [stepPracticeOpen, setStepPracticeOpen] = useState(false); // walking a wrong answer's steps one at a time
   const [calcOpen, setCalcOpen] = useState(false);   // "Classic" pop-up calculator
   const [calcPick, setCalcPick] = useState(false);   // long-press skin quick-picker
   const calcHoldRef = useRef(null);
@@ -12532,6 +12656,7 @@ export default function MathsUnlockedBN() {
   }
 
   function nextQuestion() {
+    setStepPracticeOpen(false);
     // Mock Exam in progress: advance through its fixed queue instead of
     // re-rolling the current topic. submitAnswer already scored the last
     // answer normally (it reads question.topicId, so cross-topic scoring
@@ -15728,6 +15853,11 @@ export default function MathsUnlockedBN() {
                         Next question →
                       </button>
                     )}
+                    {!feedback.correct && !feedback.hwComplete && !question.structured && question.steps && question.steps.length > 0 && (
+                      <button onClick={() => setStepPracticeOpen(true)} style={{ marginLeft: "auto", padding: "9px 16px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                        🪜 Practice step by step
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -16681,6 +16811,7 @@ export default function MathsUnlockedBN() {
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
       {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} theme={theme} onSetTheme={setAppearance} />}
+      {stepPracticeOpen && question && <StepPracticeModal question={question} onClose={() => setStepPracticeOpen(false)} playCorrect={playCorrect} playWrong={playWrong} />}
       {writePad && screen === "daily" && dailyQ && (
         <WritePad
           mode="number"
