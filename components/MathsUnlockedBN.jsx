@@ -15853,11 +15853,6 @@ export default function MathsUnlockedBN() {
                         Next question →
                       </button>
                     )}
-                    {!feedback.correct && !feedback.hwComplete && !question.structured && question.steps && question.steps.length > 0 && (
-                      <button onClick={() => setStepPracticeOpen(true)} style={{ marginLeft: "auto", padding: "9px 16px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                        🪜 Practice step by step
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -15894,6 +15889,20 @@ export default function MathsUnlockedBN() {
                   {!profile.usedSketch && <NewDot />}🗒
                 </button>
               </>)}
+              {feedback && !feedback.correct && !feedback.hwComplete && !question.structured && question.steps && question.steps.length > 0 && (
+                <button
+                  onClick={() => setStepPracticeOpen(true)}
+                  title="Practice step by step" aria-label="Practice step by step"
+                  style={{
+                    position: "absolute", bottom: 8, right: hasTool(SKETCH_LV) ? 48 : 8, zIndex: 6,
+                    width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                    border: "1px solid var(--blue)", background: "var(--card)", color: "var(--blue)",
+                    cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 16, lineHeight: 1,
+                  }}
+                >
+                  🪜
+                </button>
+              )}
             </div>
           </div>
         )}
