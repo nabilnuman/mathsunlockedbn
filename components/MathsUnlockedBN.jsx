@@ -8770,6 +8770,7 @@ function ParentProgressView({ profile }) {
   const [showAllTopics, setShowAllTopics] = useState(false);
   const [openTopicId, setOpenTopicId] = useState(null);
   const [showStreakDetail, setShowStreakDetail] = useState(false);
+  const [range, setRange] = useState("week"); // week | month | year — the trend chart's zoom
 
   const topics = profile.topics || {};
   const started = TOPICS.map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 })).filter((x) => x.r >= 0);
@@ -8786,14 +8787,26 @@ function ParentProgressView({ profile }) {
   const lastWeekXp = profile.lastWeek && typeof profile.lastWeek.xp === "number" ? profile.lastWeek.xp : null;
   const xpTrend = weekXp != null && lastWeekXp != null ? weekXp - lastWeekXp : null;
 
-  // Grade trend: up to 8 past weekly snapshots (see bumpWeek) plus this
-  // week's live value, oldest→newest. Only starts existing from whenever
-  // this shipped — nothing is backfilled — so it may read as "not enough
-  // history yet" for a while on an existing account.
+  // Grade trend (the hero's ↑/↓ arrow) — always week-over-week, regardless
+  // of which range the chart below is showing. Up to 52 past weekly
+  // snapshots (see bumpWeek) plus this week's live value, oldest→newest.
+  // Only starts existing from whenever this shipped — nothing is
+  // backfilled — so it may read as "not enough history yet" for a while.
   const weekHistory = Array.isArray(profile.weekHistory) ? profile.weekHistory : [];
   const trendPts = [...weekHistory.filter((h) => h.avgRankIdx >= 0)];
   if (avgIdx >= 0) trendPts.push({ of: "now", avgRankIdx: avgIdx });
   const gradeTrend = trendPts.length >= 2 ? trendPts[trendPts.length - 1].avgRankIdx - trendPts[trendPts.length - 2].avgRankIdx : null;
+
+  // Chart ranges: Week/Month read the DAILY history (finer-grained, so it
+  // fills in within days rather than weeks); Year reads the weekly one.
+  const dayHistory = Array.isArray(profile.dayHistory) ? profile.dayHistory : [];
+  const dayPts = [...dayHistory.filter((h) => h.avgRankIdx >= 0)];
+  if (avgIdx >= 0) dayPts.push({ of: "now", avgRankIdx: avgIdx });
+  const RANGES = {
+    week: { label: "7 days", unit: "days", pts: dayPts.slice(-7) },
+    month: { label: "30 days", unit: "days", pts: dayPts.slice(-30) },
+    year: { label: `${trendPts.slice(-52).length} weeks`, unit: "weeks", pts: trendPts.slice(-52) },
+  };
 
   const stat = (label, value) => (
     <div style={{ textAlign: "center", flex: 1 }}>
@@ -8869,13 +8882,26 @@ function ParentProgressView({ profile }) {
         <div style={{ fontSize: 11, color: "var(--blue)", marginTop: 2 }}>across {started.length} topic{started.length === 1 ? "" : "s"} · tap for the full breakdown</div>
 
         <div style={{ marginTop: 14 }}>
-          {trendPts.length >= 2 ? (
-            <>
-              <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Grade over the last {trendPts.length} weeks</div>
-              <TrendSparkline points={trendPts} />
-            </>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Grade over the last {RANGES[range].label}
+            </div>
+            <div style={{ display: "flex", gap: 2, background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: 2 }}>
+              {[["week", "1W"], ["month", "1M"], ["year", "1Y"]].map(([k, label]) => (
+                <button key={k} onClick={() => setRange(k)} style={{
+                  fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 6, cursor: "pointer", border: "none",
+                  color: range === k ? "var(--on-accent)" : "var(--muted)",
+                  background: range === k ? "var(--blue)" : "transparent",
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+          {RANGES[range].pts.length >= 2 ? (
+            <TrendSparkline points={RANGES[range].pts} />
           ) : (
-            <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>A grade-over-time chart appears here after a couple more weeks of practice.</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+              Not enough history yet for this range — {range === "year" ? "check back in a few weeks" : "check back in a few days"}.
+            </div>
           )}
         </div>
 
@@ -9218,19 +9244,33 @@ function avgRankIdxOf(profile) {
 
 // Roll the weekly XP bucket over on a new week (stashing last week's total
 // for the "champions" banner), then add this session's gain. Also keeps a
-// rolling 8-week history of {xp, avgRankIdx} — the parent-link page's
-// trend line — entirely inside the existing profile JSON (no new table);
-// it only starts accumulating from whenever this shipped, not backfilled.
+// rolling ~52-week history of {xp, avgRankIdx} (the parent-link page's
+// Year view) AND, in the same call, a parallel rolling ~35-DAY history
+// (its Week/Month views' daily granularity) — both entirely inside the
+// existing profile JSON (no new table). This is the one call site every
+// XP-earning path already runs through, so folding day-tracking in here
+// (rather than a separate bumpDay threaded through 7 call sites) can't
+// miss one. Both histories only start accumulating from whenever this
+// shipped — nothing is backfilled.
 function bumpWeek(profile, gain) {
   const wk = weekKey();
   if (!profile.week || profile.week.of !== wk) {
     if (profile.week && profile.week.xp > 0) {
       profile.lastWeek = { of: profile.week.of, xp: profile.week.xp };
-      profile.weekHistory = [...(profile.weekHistory || []), { of: profile.week.of, xp: profile.week.xp, avgRankIdx: avgRankIdxOf(profile) }].slice(-8);
+      profile.weekHistory = [...(profile.weekHistory || []), { of: profile.week.of, xp: profile.week.xp, avgRankIdx: avgRankIdxOf(profile) }].slice(-52);
     }
     profile.week = { of: wk, xp: 0 };
   }
   if (gain > 0) profile.week.xp += gain;
+
+  const tk = todayKey();
+  if (!profile.day || profile.day.of !== tk) {
+    if (profile.day && profile.day.of) {
+      profile.dayHistory = [...(profile.dayHistory || []), { of: profile.day.of, xp: profile.day.xp || 0, avgRankIdx: avgRankIdxOf(profile) }].slice(-35);
+    }
+    profile.day = { of: tk, xp: 0 };
+  }
+  if (gain > 0) profile.day.xp += gain;
 }
 function weakestTopicId(profile) {
   const topics = profile.topics || {};
@@ -9311,7 +9351,8 @@ const emptyProfile = () => ({
   streak: 0, bestStreak: 0, fastCorrect: 0, minuteCorrect: 0, totalCorrect: 0,
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
-  bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null,
+  bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null, weekHistory: [],
+  day: null, dayHistory: [],
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
