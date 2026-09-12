@@ -8665,7 +8665,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 }
 
 /* Sound pack / title / name style / card background picker. */
-function StyleModal({ profile, onChange, onClose, previewPack }) {
+function StyleModal({ profile, onChange, onClose, previewPack, theme, onSetTheme }) {
   const prestige = profile.prestige || 0;
   const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
@@ -8742,6 +8742,28 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
                 filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
               }} />
               <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (b.ach ? "🔒" : `P${i}`) : b.name}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <Head>Appearance</Head>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {APPEARANCE_IDS.map((id) => {
+          const t = THEMES[id];
+          const locked = appearanceLocked(id, profile);
+          const on = (theme || "light") === id;
+          const idx = CARD_BG_IDS.indexOf(id);
+          const lockTag = (CARD_BGS[id] && CARD_BGS[id].ach) ? "🔒" : `P${idx}`;
+          return (
+            <div key={id} style={{ width: 66 }}>
+              <button type="button" disabled={locked} onClick={() => !locked && onSetTheme(id)} style={{
+                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 0,
+                border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+                background: `linear-gradient(135deg, ${t["--page-bg"]} 55%, ${t["--blue"]} 55%)`,
+                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
+              }} />
+              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? lockTag : appearanceName(id)}</div>
             </div>
           );
         })}
@@ -10324,10 +10346,15 @@ function toBoardEntry(m) {
   };
 }
 
-/* Two palettes keyed to the same CSS-variable names. The root <div> gets
+/* Palettes keyed to the same CSS-variable names. The root <div> gets
    whichever set the current theme selects, so every `var(--x)` downstream
-   flips automatically. Rank/tier badge colours are left as fixed hues —
-   they read acceptably on both grounds. */
+   flips automatically. Green/red/amber (correct/wrong/streak-warning) and
+   --on-accent/--shadow keep their light-or-dark-family meaning across every
+   appearance below — only ink/paper/grid/card/locked/blue/muted/page-bg
+   change, tinted to that appearance's own hue, so "wrong answer" always
+   reads the same regardless of which one is picked.
+   Ten of these (every key besides light/dark) are unlocked exactly when the
+   matching CARD_BGS entry is — see appearanceLocked(). */
 const THEMES = {
   light: {
     "--ink": "#1F2937", "--paper": "#F7F9FB", "--grid": "#DCE8F1",
@@ -10345,7 +10372,101 @@ const THEMES = {
     "--shadow": "rgba(0,0,0,0.5)", "--shadow-soft": "rgba(0,0,0,0.35)",
     "--page-bg": "#0E1319",
   },
+  mint: {
+    "--ink": "#17332A", "--paper": "#F1FAF5", "--grid": "#D3ECDF",
+    "--card": "#FFFFFF", "--locked": "#E6F3EC", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#2F8F63", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#7C9C8C", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(23,51,42,0.10)", "--shadow-soft": "rgba(23,51,42,0.06)",
+    "--page-bg": "#F1FAF5",
+  },
+  sky: {
+    "--ink": "#16324A", "--paper": "#F1F7FD", "--grid": "#D3E6F5",
+    "--card": "#FFFFFF", "--locked": "#E6F0F9", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#2E86C1", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#7E96AD", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(22,50,74,0.10)", "--shadow-soft": "rgba(22,50,74,0.06)",
+    "--page-bg": "#F1F7FD",
+  },
+  dots: {
+    "--ink": "#212B3B", "--paper": "#EFF3F7", "--grid": "#D7DEE8",
+    "--card": "#FFFFFF", "--locked": "#E4E9F0", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#5C7FA6", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#8894A5", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(33,43,59,0.10)", "--shadow-soft": "rgba(33,43,59,0.06)",
+    "--page-bg": "#EFF3F7",
+  },
+  blueprint: {
+    "--ink": "#DCEBF7", "--paper": "#0E2038", "--grid": "#1F4468",
+    "--card": "#163A5E", "--locked": "#122E4C", "--amber-wash": "#2E2617",
+    "--green": "#5EBE94", "--blue": "#63B4E8", "--amber": "#E0A94E",
+    "--red": "#E38066", "--muted": "#7FA3C4", "--on-accent": "#0E1319",
+    "--shadow": "rgba(0,0,0,0.5)", "--shadow-soft": "rgba(0,0,0,0.35)",
+    "--page-bg": "#0E2038",
+  },
+  sunset: {
+    "--ink": "#402420", "--paper": "#FDF3EC", "--grid": "#F3DAC9",
+    "--card": "#FFFFFF", "--locked": "#F7E7DB", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#D97757", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#B08A79", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(64,36,32,0.10)", "--shadow-soft": "rgba(64,36,32,0.06)",
+    "--page-bg": "#FDF3EC",
+  },
+  slate: {
+    "--ink": "#E4E9EF", "--paper": "#232C38", "--grid": "#3A4756",
+    "--card": "#2E3946", "--locked": "#26303C", "--amber-wash": "#2E2617",
+    "--green": "#5EBE94", "--blue": "#8FA8C2", "--amber": "#E0A94E",
+    "--red": "#E38066", "--muted": "#8996A4", "--on-accent": "#0E1319",
+    "--shadow": "rgba(0,0,0,0.5)", "--shadow-soft": "rgba(0,0,0,0.35)",
+    "--page-bg": "#232C38",
+  },
+  stripes: {
+    "--ink": "#26313D", "--paper": "#EFF3F7", "--grid": "#D9E0E7",
+    "--card": "#FFFFFF", "--locked": "#E5EAEF", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#51697F", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#8794A1", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(38,49,61,0.10)", "--shadow-soft": "rgba(38,49,61,0.06)",
+    "--page-bg": "#EFF3F7",
+  },
+  aurora: {
+    "--ink": "#262347", "--paper": "#F5F5FC", "--grid": "#DEDFF5",
+    "--card": "#FFFFFF", "--locked": "#EAEAF9", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#6E7FE0", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#9497C4", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(38,35,71,0.10)", "--shadow-soft": "rgba(38,35,71,0.06)",
+    "--page-bg": "#F5F5FC",
+  },
+  gold: {
+    "--ink": "#3B2E13", "--paper": "#FBF3E2", "--grid": "#EEDCB2",
+    "--card": "#FFFDF7", "--locked": "#F5E9CC", "--amber-wash": "#FBF3E6",
+    "--green": "#2F6B4F", "--blue": "#B4872A", "--amber": "#C97F1E",
+    "--red": "#B14A36", "--muted": "#A98F5E", "--on-accent": "#FFFFFF",
+    "--shadow": "rgba(59,46,19,0.10)", "--shadow-soft": "rgba(59,46,19,0.06)",
+    "--page-bg": "#FBF3E2",
+  },
+  arcade: {
+    "--ink": "#F3E9FF", "--paper": "#170B2E", "--grid": "#3A2361",
+    "--card": "#22103F", "--locked": "#1B0E33", "--amber-wash": "#2E2617",
+    "--green": "#5EBE94", "--blue": "#C86BFF", "--amber": "#E0A94E",
+    "--red": "#E38066", "--muted": "#9E8AC4", "--on-accent": "#0E1319",
+    "--shadow": "rgba(0,0,0,0.55)", "--shadow-soft": "rgba(0,0,0,0.4)",
+    "--page-bg": "#170B2E",
+  },
 };
+// True while the given appearance is still locked for this profile. Light
+// and dark are always free; every other id mirrors its CARD_BGS twin's own
+// unlock rule exactly (same prestige tier, or the same secret achievement
+// for Arcade) so the two unlock in the same breath.
+function appearanceLocked(id, profile) {
+  if (id === "light" || id === "dark") return false;
+  const b = CARD_BGS[id];
+  if (!b) return false;
+  if (b.ach) return !((profile && profile.achievements) || []).includes(b.ach);
+  return (profile && profile.prestige || 0) < CARD_BG_IDS.indexOf(id);
+}
+// Light/dark plus one appearance per non-default card background.
+const APPEARANCE_IDS = ["light", "dark", ...CARD_BG_IDS.filter((id) => id !== "graph" && id !== "plain")];
+const appearanceName = (id) => (id === "light" ? "Light" : id === "dark" ? "Dark" : (CARD_BGS[id] || {}).name || id);
 
 export default function MathsUnlockedBN() {
   const [ready, setReady] = useState(false);
@@ -10821,7 +10942,7 @@ export default function MathsUnlockedBN() {
     (async () => {
       try {
         const saved = window.localStorage.getItem("mub_theme");
-        if (saved === "light" || saved === "dark") setTheme(saved);
+        if (saved && THEMES[saved]) setTheme(saved);
         else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) setTheme("dark");
         if (window.localStorage.getItem("mub_sound") === "0") setSoundOn(false);
         const params = new URLSearchParams(window.location.search);
@@ -10901,7 +11022,10 @@ export default function MathsUnlockedBN() {
     const bg = THEMES[theme]["--page-bg"];
     document.documentElement.style.background = bg;
     document.body.style.background = bg;
-    document.documentElement.style.colorScheme = theme;
+    // color-scheme only understands "light"/"dark" — a custom appearance
+    // still needs to declare which family it belongs to (native scrollbars,
+    // form controls, etc. render for that family).
+    document.documentElement.style.colorScheme = (theme === "dark" || (CARD_BGS[theme] && CARD_BGS[theme].dark)) ? "dark" : "light";
   }, [theme]);
 
 
@@ -11074,12 +11198,21 @@ export default function MathsUnlockedBN() {
     flash(`+${MILESTONE_XP} XP${lv ? ` · Level ${lv}!` : ""}`);
   }
 
+  // Quick sun/moon toggle: always flips to the plain light/dark pair,
+  // regardless of which custom appearance (if any) is currently active.
   function toggleTheme() {
     setTheme((prev) => {
-      const nextT = prev === "dark" ? "light" : "dark";
+      const prevDark = prev === "dark" || (CARD_BGS[prev] && CARD_BGS[prev].dark);
+      const nextT = prevDark ? "light" : "dark";
       try { window.localStorage.setItem("mub_theme", nextT); } catch (e) { /* ignore */ }
       return nextT;
     });
+  }
+  // Pick any unlocked appearance by id (from the Style sheet's Appearance grid).
+  function setAppearance(id) {
+    if (!THEMES[id]) return;
+    setTheme(id);
+    try { window.localStorage.setItem("mub_theme", id); } catch (e) { /* ignore */ }
   }
 
   function toggleSound() {
@@ -16545,7 +16678,7 @@ export default function MathsUnlockedBN() {
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
-      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} />}
+      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} theme={theme} onSetTheme={setAppearance} />}
       {writePad && screen === "daily" && dailyQ && (
         <WritePad
           mode="number"
@@ -17129,7 +17262,11 @@ export default function MathsUnlockedBN() {
             {[
               { icon: "🪪", label: "Profile", dot: newIconCount > 0, chevron: true, onClick: () => { setSettingsOpen(false); setShowCard(true); } },
               { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
-              { icon: theme === "dark" ? "🌙" : "☀️", label: "Appearance", value: theme === "dark" ? "Dark" : "Light", onClick: toggleTheme },
+              {
+                icon: (theme === "dark" || (CARD_BGS[theme] && CARD_BGS[theme].dark)) ? "🌙" : "☀️",
+                label: "Appearance", value: appearanceName(theme), chevron: true,
+                onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); },
+              },
               { icon: "🏫", label: "School", value: profile.school && profile.school !== SOLO_SCHOOL ? "Set" : "None", chevron: true, onClick: () => { setSettingsOpen(false); setSchoolEditQuery(""); setShowSchool(true); } },
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
               { icon: "🔒", label: "Change PIN", chevron: true, onClick: () => { setSettingsOpen(false); setChangePinMsg(null); setPin1(""); setPin2(""); setChangePinOpen(true); } },

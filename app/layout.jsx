@@ -18,17 +18,25 @@ export const viewport = {
 
 // Paint the correct theme background on <html> before React hydrates, so
 // there's no white flash and no bare-html strip peeking below the app.
+// Mirrors THEMES' --page-bg / dark-family flag in MathsUnlockedBN.jsx — if
+// a new appearance is added there, add its page-bg + dark-ness here too.
 const themeBootstrap = `
 (function () {
   try {
+    var PAGE_BG = {
+      light: '#F7F9FB', dark: '#0E1319', mint: '#F1FAF5', sky: '#F1F7FD',
+      dots: '#EFF3F7', blueprint: '#0E2038', sunset: '#FDF3EC', slate: '#232C38',
+      stripes: '#EFF3F7', aurora: '#F5F5FC', gold: '#FBF3E2', arcade: '#170B2E'
+    };
+    var DARK_FAMILY = { dark: 1, blueprint: 1, slate: 1, arcade: 1 };
     var t = localStorage.getItem('mub_theme');
-    if (t !== 'light' && t !== 'dark') {
+    if (!PAGE_BG.hasOwnProperty(t)) {
       t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     }
-    var bg = t === 'dark' ? '#0E1319' : '#F7F9FB';
+    var bg = PAGE_BG[t];
     var d = document.documentElement;
     d.style.background = bg;
-    d.style.colorScheme = t;
+    d.style.colorScheme = DARK_FAMILY[t] ? 'dark' : 'light';
     if (document.body) document.body.style.background = bg;
   } catch (e) {}
 })();
