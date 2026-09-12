@@ -8788,7 +8788,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 }
 
 /* Sound pack / title / name style / card background picker. */
-function StyleModal({ profile, onChange, onClose, previewPack, theme, onSetTheme }) {
+function StyleModal({ profile, onChange, onClose, previewPack }) {
   const prestige = profile.prestige || 0;
   const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
@@ -8865,28 +8865,6 @@ function StyleModal({ profile, onChange, onClose, previewPack, theme, onSetTheme
                 filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
               }} />
               <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (b.ach ? "🔒" : `P${i}`) : b.name}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      <Head>Appearance</Head>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {APPEARANCE_IDS.map((id) => {
-          const t = THEMES[id];
-          const locked = appearanceLocked(id, profile);
-          const on = (theme || "light") === id;
-          const idx = CARD_BG_IDS.indexOf(id);
-          const lockTag = (CARD_BGS[id] && CARD_BGS[id].ach) ? "🔒" : `P${idx}`;
-          return (
-            <div key={id} style={{ width: 66 }}>
-              <button type="button" disabled={locked} onClick={() => !locked && onSetTheme(id)} style={{
-                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 0,
-                border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
-                background: `linear-gradient(135deg, ${t["--page-bg"]} 55%, ${t["--blue"]} 55%)`,
-                filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
-              }} />
-              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? lockTag : appearanceName(id)}</div>
             </div>
           );
         })}
@@ -11334,11 +11312,21 @@ export default function MathsUnlockedBN() {
       return nextT;
     });
   }
-  // Pick any unlocked appearance by id (from the Style sheet's Appearance grid).
-  function setAppearance(id) {
-    if (!THEMES[id]) return;
-    setTheme(id);
-    try { window.localStorage.setItem("mub_theme", id); } catch (e) { /* ignore */ }
+  // Settings' own Appearance row: cycles through every UNLOCKED appearance
+  // in turn (light, dark, then each card-background-matched one the player
+  // has reached), wrapping around, skipping any still-locked ones.
+  function cycleAppearance() {
+    setTheme((prev) => {
+      const idx = APPEARANCE_IDS.indexOf(prev);
+      const n = APPEARANCE_IDS.length;
+      let next = prev;
+      for (let i = 1; i <= n; i++) {
+        const cand = APPEARANCE_IDS[(idx + i) % n];
+        if (!appearanceLocked(cand, profile)) { next = cand; break; }
+      }
+      try { window.localStorage.setItem("mub_theme", next); } catch (e) { /* ignore */ }
+      return next;
+    });
   }
 
   function toggleSound() {
@@ -16819,7 +16807,7 @@ export default function MathsUnlockedBN() {
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
-      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} theme={theme} onSetTheme={setAppearance} />}
+      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} />}
       {stepPracticeOpen && question && <StepPracticeModal question={question} onClose={() => setStepPracticeOpen(false)} playCorrect={playCorrect} playWrong={playWrong} />}
       {writePad && screen === "daily" && dailyQ && (
         <WritePad
@@ -17406,8 +17394,7 @@ export default function MathsUnlockedBN() {
               { icon: soundOn ? "🔊" : "🔇", label: "Sound", value: soundOn ? "On" : "Off", onClick: toggleSound },
               {
                 icon: (theme === "dark" || (CARD_BGS[theme] && CARD_BGS[theme].dark)) ? "🌙" : "☀️",
-                label: "Appearance", value: appearanceName(theme), chevron: true,
-                onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); },
+                label: "Appearance", value: appearanceName(theme), onClick: cycleAppearance,
               },
               { icon: "🏫", label: "School", value: profile.school && profile.school !== SOLO_SCHOOL ? "Set" : "None", chevron: true, onClick: () => { setSettingsOpen(false); setSchoolEditQuery(""); setShowSchool(true); } },
               { icon: "🎨", label: "Style", value: SOUND_PACKS[profile.soundPack] ? SOUND_PACKS[profile.soundPack].name : "Classic", chevron: true, onClick: () => { setSettingsOpen(false); setStylePickerOpen(true); } },
