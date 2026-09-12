@@ -15760,6 +15760,13 @@ export default function MathsUnlockedBN() {
                         {question.steps.map((s, i) => <li key={i} className="mub-mono" style={{ marginBottom: 4 }}><MathText text={s} /></li>)}
                       </ol>
                       <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>Answer: <span className="mub-mono" style={{ fontWeight: 700 }}><MathText text={question.answerDisplay || question.answer} /></span></div>
+                      {question.steps && question.steps.length > 0 && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                          <button onClick={() => setStepPracticeOpen(true)} style={{ padding: "6px 12px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                            🪜 Step by step
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                   {feedback.unlocked.length > 0 && (
@@ -15877,20 +15884,6 @@ export default function MathsUnlockedBN() {
                   {!profile.usedSketch && <NewDot />}🗒
                 </button>
               </>)}
-              {feedback && !feedback.correct && !feedback.hwComplete && !question.structured && question.steps && question.steps.length > 0 && (
-                <button
-                  onClick={() => setStepPracticeOpen(true)}
-                  title="Practice step by step" aria-label="Practice step by step"
-                  style={{
-                    position: "absolute", bottom: 8, right: hasTool(SKETCH_LV) ? 48 : 8, zIndex: 6,
-                    width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-                    border: "1px solid var(--blue)", background: "var(--card)", color: "var(--blue)",
-                    cursor: "pointer", boxShadow: "0 1px 4px var(--shadow-soft)", fontSize: 16, lineHeight: 1,
-                  }}
-                >
-                  🪜
-                </button>
-              )}
             </div>
           </div>
         )}
