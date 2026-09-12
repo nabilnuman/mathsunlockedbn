@@ -2505,13 +2505,19 @@ const TOPICS = [
   { id: "hcflcm", name: "HCF & LCM", icon: "➗", prereqs: ["arithmetic"],
     generate() {
       // a and b share a factor > 1 (HCF is never 1, LCM is never a × b),
-      // and neither divides the other (so the answer is never one of the
-      // two numbers).
+      // neither divides the other (so the answer is never one of the two
+      // numbers), and each has at least 2 DISTINCT prime factors — 4 = 2×2
+      // doesn't count (one prime, repeated), it needs to be like 12 = 2²×3.
+      const distinctPrimes = (x) => { let c = 0, v = x; for (let p = 2; p * p <= v; p++) { if (v % p === 0) { c++; while (v % p === 0) v /= p; } } if (v > 1) c++; return c; };
       const base = [2, 3, 4, 5, 6][randInt(0, 4)];
-      let m = randInt(2, 8), n = randInt(2, 8), tries = 0;
-      while ((m === n || m % n === 0 || n % m === 0) && tries++ < 50) { m = randInt(2, 8); n = randInt(2, 8); }
-      if (m === n || m % n === 0 || n % m === 0) { m = 4; n = 6; }
-      const a = base * m, b = base * n, g = gcd(a, b), l = lcm(a, b);
+      let m, n, a, b, tries = 0;
+      do {
+        m = randInt(2, 8); n = randInt(2, 8);
+        a = base * m; b = base * n;
+        tries++;
+      } while (tries < 200 && (m === n || m % n === 0 || n % m === 0 || distinctPrimes(a) < 2 || distinctPrimes(b) < 2));
+      if (m === n || m % n === 0 || n % m === 0 || distinctPrimes(a) < 2 || distinctPrimes(b) < 2) { a = 12; b = 18; } // guaranteed-good fallback
+      const g = gcd(a, b), l = lcm(a, b);
       const mode = Math.random() < 0.5 ? "HCF" : "LCM";
       return { prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : l}`, hint: "Enter a number.",
         steps: mode === "HCF"
@@ -3539,7 +3545,7 @@ const TOPICS = [
       if (r < 0.30) {
         const { m, c, x1, x2, y1, y2 } = twoPts();
         const rhs = `${mxTerm(`${m}`)}${plusC(c)}`, eq = `y = ${rhs}`;
-        return { prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2})`,
+        return { sub: "twopoints", prompt: `Find the equation of the line through (${x1}, ${y1}) and (${x2}, ${y2})`,
           answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "e.g. 2x - 1",
           steps: [`gradient m = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${m}`, `Substitute (${x1}, ${y1}):  ${y1} = ${m}(${x1}) + c  →  c = ${c}`, eq] };
       }
@@ -3577,7 +3583,7 @@ const TOPICS = [
         const t = nz(-3, 3), px = m * t, py = randInt(-6, 6), c = py + t;
         const mpS = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
         const rhs = `${mxTerm(mpS)}${plusC(c)}`, eq = `y = ${rhs}`;
-        return { prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py})`,
+        return { sub: "perpendicular", prompt: `Find the equation of the line perpendicular to y = ${mxTerm(`${m}`)}${plusC(rc)} that passes through (${px}, ${py})`,
           answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "e.g. -1/2x + 3",
           steps: [`Perpendicular gradient = −1 ÷ ${m} = ${mpS}`, `Through (${px}, ${py}):  ${py} = ${mpS}(${px}) + c  →  c = ${c}`, eq] };
       }
@@ -5539,13 +5545,13 @@ const TOPICS = [
         const rows = chosenW2.map((w) => { const from = x2, to = x2 + w; x2 += w; return { from, to, mid: from + w / 2, freq: randInt(2, 12) }; });
         const totalF = rows.reduce((s, row) => s + row.freq, 0);
         const sumFM = rows.reduce((s, row) => s + row.freq * row.mid, 0);
-        const mean = Math.round((sumFM / totalF) * 10) / 10;
+        const mean = Math.round(sumFM / totalF); // always a rounded whole number
         const label2 = pick(["mark", "score", "time (min)", "mass (kg)"]);
         return {
-          sub: "histogram",
+          sub: "meantable",
           prompt: `The grouped frequency table shows the ${label2} of a group of students. Estimate the mean.`,
           table: { rows: rows.map((row) => ({ from: row.from, to: row.to, freq: row.freq })), unitLabel: label2 },
-          answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, to 1 decimal place — the midpoint of a class is halfway between its boundaries",
+          answer: `${mean}`, hint: "mean ≈ Σ(midpoint × frequency) ÷ Σfrequency, rounded to the nearest whole number — the midpoint of a class is halfway between its boundaries",
           steps: [
             `Midpoints: ${rows.map((row) => row.mid).join(", ")}`,
             `Σ(frequency × midpoint) = ${sumFM}`,
@@ -5788,8 +5794,9 @@ const TOPICS = [
       if (roll < 0.28) {
         const A = [0, 0], B = [4.2, 0], D = [1.3, 3], C = [5.5, 3];
         const opt = pick([
-          { q: "DC", ca: 1, cb: 0, why: "DC = AB (opposite sides of a parallelogram are equal)" },
-          { q: "BC", ca: 0, cb: 1, why: "BC = AD (opposite sides are equal)" },
+          // (DC = a and BC = b were dropped — a bare "a" or "b" is too
+          // trivial an answer; every option here is at least a negation
+          // or a combination of both.)
           { q: "CB", ca: 0, cb: -1, why: "CB = −BC = −AD" },
           { q: "AC", ca: 1, cb: 1, why: "AC = AB + BC = a + b", diag: [A, C] },
           { q: "CA", ca: -1, cb: -1, why: "CA = −AC = −(a + b)", diag: [A, C] },
@@ -7127,6 +7134,7 @@ const SUBTOPICS = {
     { key: "averages", name: "Averages & range (mean, median, mode, range)" },
     { key: "cumfreq", name: "Cumulative frequency graphs" },
     { key: "histogram", name: "Frequency density histograms & tables" },
+    { key: "meantable", name: "Estimating the mean from a grouped frequency table" },
     { key: "correlation", name: "Scatter graphs — positive or negative correlation" },
   ],
 };
@@ -7171,11 +7179,33 @@ function pickMockExamPool(n, pool = MOCK_EXAM_POOL) {
 // app's questions were never authored with a mark scheme), based only on
 // how much work the question type generally represents.
 function marksForQuestion(q) {
+  // Specific, deliberately-set values first — these are quick, largely
+  // one-step question forms (or, for the coordinate-geometry pair, forms
+  // with a fixed 3-step method: find the gradient, substitute, state the
+  // equation) that the generic type-based heuristic below would otherwise
+  // over- or under-value.
+  if (q.topicId === "symmetry") return 1; // order of rotational / line symmetry
+  if (q.topicId === "sequences" && q.sub === "nextterm") return 1;
+  if (q.topicId === "limits") return q.sub === "combine" ? 2 : 1; // bounds: single value vs. a combined quantity (area, speed, ...)
+  if (q.topicId === "coordgeo" && (q.sub === "twopoints" || q.sub === "perpendicular")) return 3;
   if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
   if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
   if (q.choices) return 1;
   if (q.drawGraph || q.drawSolve || q.drawTransform || q.drawMirror || q.tapPoint || q.venn || q.placeVenn || q.region) return 3;
   return 2;
+}
+
+// Indicative O-Level-style grade bands (U / E / D / C / B / A / A*) — round
+// numbers for a practice paper, not any exam board's actual (and non-public,
+// session-to-session variable) grade boundaries.
+function gradeForPct(pct) {
+  if (pct >= 90) return "A*";
+  if (pct >= 80) return "A";
+  if (pct >= 70) return "B";
+  if (pct >= 60) return "C";
+  if (pct >= 50) return "D";
+  if (pct >= 40) return "E";
+  return "U";
 }
 
 // ---- Structured (multi-part) questions ----------------------------------
@@ -7204,14 +7234,20 @@ function tplTrigChain() {
   };
 }
 function tplAlgebraChain() {
-  const x = randInt(2, 9), a = randInt(2, 6), b = randInt(1, 20), c = a * x + b;
+  // x on both sides — a genuine 2-step solve (not just "isolate x" from a
+  // single move), with a wider range including negatives.
+  const x = randInt(-9, 12);
+  let a, c;
+  do { a = randInt(2, 7); c = randInt(1, 6); } while (a === c);
+  const b = randInt(1, 20), d = (a - c) * x + b; // guarantees ax+b = cx+d solves to this x
+  const spaced = (v) => (v >= 0 ? `+ ${v}` : `− ${-v}`);
   const p = randInt(2, 5), q = randInt(1, 10), y = p * x * x - q;
   return {
     context: `Use your answer to part (a) in part (b).`,
     topicId: "algebra", topicName: "Algebra", topicIcon: "🧮",
     parts: [
-      { label: "(a)", prompt: `Solve ${a}x + ${b} = ${c}.`, marks: 2, answer: `${x}`, check: numCheck(x, 0), hint: "isolate x", steps: [`${a}x = ${c} − ${b} = ${c - b}`, `x = ${c - b} ÷ ${a} = ${x}`] },
-      { label: "(b)", prompt: `Using your value of x, find the value of ${p}x² − ${q}.`, marks: 2, answer: `${y}`, check: numCheck(y, 0), hint: "substitute x, then follow the order of operations", steps: [`${p} × ${x}² − ${q} = ${p} × ${x * x} − ${q} = ${y}`] },
+      { label: "(a)", prompt: `Solve ${a}x ${spaced(b)} = ${c}x ${spaced(d)}.`, marks: 3, answer: `${x}`, check: numCheck(x, 0), hint: "collect the x terms on one side first", steps: [`${a}x − ${c}x = ${d} − ${b}`, `${a - c}x = ${d - b}`, `x = ${d - b} ÷ ${a - c} = ${x}`] },
+      { label: "(b)", prompt: `Using your value of x, find the value of ${p}x² − ${q}.`, marks: 2, answer: `${y}`, check: numCheck(y, 0), hint: "substitute x, then follow the order of operations", steps: [`${p} × (${x})² − ${q} = ${p} × ${x * x} − ${q} = ${y}`] },
     ],
   };
 }
@@ -7273,9 +7309,13 @@ function tplSimultChain() {
   };
 }
 const STRUCTURED_TEMPLATES = [tplTrigChain, tplAlgebraChain, tplMensurationChain, tplSimilarityChain, tplStatsChain, tplSimultChain];
-function generateStructuredQuestion() {
-  const tpl = STRUCTURED_TEMPLATES[randInt(0, STRUCTURED_TEMPLATES.length - 1)];
-  const q = tpl();
+// Parallel to STRUCTURED_TEMPLATES — each template's topicId is fixed
+// (not randomised), so this can just be listed once rather than generated
+// and thrown away to read it back off.
+const STRUCTURED_TEMPLATE_TOPIC = ["trigonometry", "algebra", "mensuration", "similarity", "statistics", "simultaneous"];
+function generateStructuredQuestion(templateIdx) {
+  const idx = templateIdx != null ? templateIdx : randInt(0, STRUCTURED_TEMPLATES.length - 1);
+  const q = STRUCTURED_TEMPLATES[idx]();
   const totalMarks = q.parts.reduce((s, p) => s + p.marks, 0);
   return {
     structured: true, totalMarks, steps: [],
@@ -7288,21 +7328,37 @@ function generateStructuredQuestion() {
 // Two papers, matching the real syllabus' own published shape (2 papers,
 // 100 marks each) — Paper 1 is all short single-part questions; Paper 2
 // mixes in structured multi-part ones, same as the real exam's balance.
+// excludeTopics / excludeSubs keep content that needs a calculator (or is
+// otherwise out of place) out of the non-calculator paper.
 const MOCK_PAPERS = {
-  p1: { key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 20, structuredCount: 0 },
-  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 120, singleCount: 6, structuredCount: 5 },
+  p1: {
+    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 20, structuredCount: 0,
+    excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
+    excludeSubs: { statistics: ["meantable"], similarity: ["volume"] }, // mean-from-table and cubing a scale factor need a calculator
+  },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 120, singleCount: 6, structuredCount: 5, excludeTopics: [], excludeSubs: {} },
 };
+// Builds the paper's question queue. Structured templates are chosen as a
+// distinct slice (never the same template twice), and their topics are
+// then excluded from the single-question pool — so no topic appears twice
+// in one paper, whether as a single question or a structured one.
 function buildMockQueue(paper) {
-  const topics = pickMockExamPool(paper.singleCount, MOCK_EXAM_POOL);
+  const idxs = STRUCTURED_TEMPLATES.map((_, i) => i);
+  for (let i = idxs.length - 1; i > 0; i--) { const j = randInt(0, i); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
+  const structIdxs = idxs.slice(0, Math.min(paper.structuredCount, idxs.length));
+  const structTopics = new Set(structIdxs.map((i) => STRUCTURED_TEMPLATE_TOPIC[i]));
+  const pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
+  const topics = pickMockExamPool(paper.singleCount, pool);
   const items = topics.map((id) => ({ type: "single", topicId: id }));
-  for (let i = 0; i < paper.structuredCount; i++) items.push({ type: "structured" });
+  structIdxs.forEach((i) => items.push({ type: "structured", templateIdx: i }));
   for (let i = items.length - 1; i > 0; i--) { const j = randInt(0, i); [items[i], items[j]] = [items[j], items[i]]; }
   return items;
 }
-// genMockItem(item) — turns a queue item into an actual question object.
-// Defined inline at each call site (startMockExam / nextQuestion) since it
-// needs the component's pickQuestion/freshQuestion (they read customQuestions
-// state and recentQRef), not just module-level data.
+// genMockItem(item, paper) — turns a queue item into an actual question
+// object. Defined inline at each call site (startMockExam / nextQuestion)
+// since the single-question path needs the component's pickQuestion/
+// freshQuestion (they read customQuestions state and recentQRef), not just
+// module-level data.
 function blitzQuestion() {
   const pick = (a) => a[randInt(0, a.length - 1)];
   const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = randInt(0, i); [r[i], r[j]] = [r[j], r[i]]; } return r; };
@@ -10720,10 +10776,14 @@ export default function MathsUnlockedBN() {
   // Mock Exam: turn one queue item (see buildMockQueue) into an actual
   // question — a single-part question from its topic, or a fresh
   // structured multi-part one.
-  function genMockItem(item) {
-    if (item.type === "structured") return generateStructuredQuestion();
+  function genMockItem(item, paper) {
+    if (item.type === "structured") return generateStructuredQuestion(item.templateIdx);
     const topic = TOPIC_BY_ID[item.topicId];
-    return freshQuestion(() => pickQuestion(topic));
+    const excl = paper && (paper.excludeSubs || {})[item.topicId];
+    const subs = excl && excl.length && SUBTOPICS[item.topicId]
+      ? SUBTOPICS[item.topicId].map((s) => s.key).filter((k) => !excl.includes(k))
+      : undefined;
+    return freshQuestion(() => pickQuestion(topic, subs));
   }
 
   // Mixed Review: a random question from any topic the student has unlocked.
@@ -11349,11 +11409,24 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (!mockProgress) return;
     const iv = setInterval(() => {
-      if (mockExamRef.current && Date.now() >= mockExamRef.current.deadline) { finishMockExam(); return; }
+      const mx = mockExamRef.current;
+      if (!mx || mx.stoppedAt) return; // frozen (see below) — nothing left to count down
+      if (Date.now() >= mx.deadline) { finishMockExam(); return; }
       setMockTick((t) => t + 1);
     }, 1000);
     return () => clearInterval(iv);
   }, [mockProgress]);
+
+  // Freeze the countdown the instant the LAST question in the paper is
+  // submitted — the clock shouldn't keep draining while its feedback is
+  // being reviewed; tapping "Next question" from there just shows results.
+  useEffect(() => {
+    const mx = mockExamRef.current;
+    if (feedback && mx && mx.idx === mx.total - 1 && !mx.stoppedAt) {
+      mx.stoppedAt = Date.now();
+      setMockTick((t) => t + 1);
+    }
+  }, [feedback]);
 
   // Blitz countdown — one interval while a run is live.
   useEffect(() => {
@@ -11791,7 +11864,7 @@ export default function MathsUnlockedBN() {
     if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
     recentQRef.current = [];
     const queue = buildMockQueue(paper);
-    const q = genMockItem(queue[0]);
+    const q = genMockItem(queue[0], paper);
     setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[queue[0].topicId]);
     setQuestion(q);
     const autoHint = autoHintDue(profile, q.topicId);
@@ -11843,8 +11916,17 @@ export default function MathsUnlockedBN() {
     const mx = mockExamRef.current;
     if (!mx) return;
     commitMockAnswer();
-    const elapsedSec = Math.round((Date.now() - mx.startedAt) / 1000);
-    setMockResult({ paper: mx.paper, correct: mx.correctCount, total: mx.total, marksEarned: mx.marksEarned, totalMarks: mx.totalMarks, elapsedSec, targetSec: mx.paper.minutes * 60 });
+    const elapsedSec = Math.round(((mx.stoppedAt || Date.now()) - mx.startedAt) / 1000);
+    // Raw marks (marksForQuestion is only ever a heuristic, so the paper's
+    // real total varies run to run) are rescaled to a flat "out of 100",
+    // matching the real exam's own mark scheme.
+    const pct = mx.totalMarks > 0 ? (mx.marksEarned / mx.totalMarks) * 100 : 0;
+    const scaledMarks = Math.round(pct);
+    setMockResult({
+      paper: mx.paper, correct: mx.correctCount, total: mx.total,
+      marksEarned: mx.marksEarned, totalMarks: mx.totalMarks, scaledMarks, grade: gradeForPct(pct),
+      elapsedSec, targetSec: mx.paper.minutes * 60,
+    });
     mockExamRef.current = null;
     setMockProgress(null);
     setScreen("mockresult");
@@ -11861,7 +11943,7 @@ export default function MathsUnlockedBN() {
       mx.idx += 1;
       if (mx.idx >= mx.total) { finishMockExam(); return; }
       mx.committed = false; // ready for this new question's own future commit
-      const q = genMockItem(mx.queue[mx.idx]);
+      const q = genMockItem(mx.queue[mx.idx], mx.paper);
       setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[mx.queue[mx.idx].topicId]);
       setQuestion(q);
       const autoHint = autoHintDue(profile, q.topicId);
@@ -11910,6 +11992,18 @@ export default function MathsUnlockedBN() {
     setShieldDeclined(false);
     setFeedback(null);
     startTimeRef.current = Date.now();
+  }
+
+  // Open the Perks modal, marking any currently-levelled-up perk as seen
+  // (clears the dashboard's red dot).
+  function openPerks() {
+    setPerksOpen(true);
+    patchProfile((prev) => {
+      const seen = { ...(prev.perkUpgradeSeen || {}) };
+      let changed = false;
+      for (const id of PERK_IDS) if (perkPlus(prev, id) && !seen[id]) { seen[id] = true; changed = true; }
+      return changed ? { perkUpgradeSeen: seen } : {};
+    });
   }
 
   // Equip / unequip a perk (up to perkSlots(profile)). Ignores locked perks.
@@ -13508,8 +13602,11 @@ export default function MathsUnlockedBN() {
                   <button onClick={() => setInventoryOpen(true)} style={{ ...util, color: "var(--blue)" }}>
                     <span style={{ fontSize: 17 }}>🎒</span>Inventory
                   </button>
-                  <button onClick={() => perksOk && setPerksOpen(true)} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS[PERK_IDS[0]].lv}`}
-                    style={{ ...util, color: perksOk ? "var(--blue)" : "var(--muted)", opacity: perksOk ? 1 : 0.55, cursor: perksOk ? "pointer" : "default" }}>
+                  <button onClick={() => perksOk && openPerks()} disabled={!perksOk} title={perksOk ? undefined : `Unlocks at Level ${PERKS[PERK_IDS[0]].lv}`}
+                    style={{ ...util, position: "relative", color: perksOk ? "var(--blue)" : "var(--muted)", opacity: perksOk ? 1 : 0.55, cursor: perksOk ? "pointer" : "default" }}>
+                    {perksOk && PERK_IDS.some((id) => perkPlus(profile, id) && !(profile.perkUpgradeSeen || {})[id]) && (
+                      <span style={{ position: "absolute", top: 2, right: 6, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />
+                    )}
                     <span style={{ fontSize: 17 }}>🎖</span>{perksOk ? "Perks" : "Perks 🔒"}
                   </button>
                   {teacherActive ? (
@@ -13714,7 +13811,7 @@ export default function MathsUnlockedBN() {
                   <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: 11, color: "var(--muted)" }}>insert:</span>
                     {syms.map((s) => (
-                      <button key={s} type="button" onClick={() => insertLessonSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 34, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
+                      <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertLessonSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 34, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
                     ))}
                   </div>
                 )}
@@ -14408,10 +14505,9 @@ export default function MathsUnlockedBN() {
 
         {/* MOCK EXAM RESULTS */}
         {screen === "mockresult" && mockResult && (() => {
-          const pct = Math.round((mockResult.correct / mockResult.total) * 100);
-          const markPct = mockResult.totalMarks ? Math.round((mockResult.marksEarned / mockResult.totalMarks) * 100) : null;
           const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
           const timedOut = mockResult.elapsedSec >= mockResult.targetSec - 1;
+          const GRADE_COL = { "A*": "var(--green)", A: "var(--green)", B: "var(--blue)", C: "var(--blue)", D: "var(--amber)", E: "var(--amber)", U: "var(--red)" };
           return (
             <div style={{
               maxWidth: 480, margin: "40px auto 0", background: "var(--card)", border: "1px solid var(--grid)",
@@ -14420,15 +14516,16 @@ export default function MathsUnlockedBN() {
               <div style={{ fontSize: 34, marginBottom: 4 }}>📝</div>
               <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginBottom: 2 }}>Mock Exam complete</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>{mockResult.paper.name}{timedOut ? " · time's up" : ""}</div>
-              <div className="mub-display" style={{ fontSize: 44, fontWeight: 900, color: "var(--blue)", margin: "10px 0 2px" }}>
-                {mockResult.correct}/{mockResult.total}
-              </div>
-              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>{pct}% of questions fully correct</div>
-              {markPct != null && (
-                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
-                  <strong style={{ color: "var(--ink)" }}>{mockResult.marksEarned}/{mockResult.totalMarks}</strong> marks ({markPct}%)
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 14, margin: "10px 0 2px" }}>
+                <div className="mub-display" style={{ fontSize: 44, fontWeight: 900, color: "var(--blue)" }}>
+                  {mockResult.scaledMarks}<span style={{ fontSize: 22, color: "var(--muted)" }}>/100</span>
                 </div>
-              )}
+                <div className="mub-display" style={{ fontSize: 32, fontWeight: 900, color: GRADE_COL[mockResult.grade] || "var(--ink)" }}>{mockResult.grade}</div>
+              </div>
+              <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 10 }}>indicative grade — not a real boundary</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
+                <strong style={{ color: "var(--ink)" }}>{mockResult.correct}/{mockResult.total}</strong> questions fully correct
+              </div>
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 20, fontSize: 12.5, color: "var(--muted)" }}>
                 <span>⏱ Your time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.elapsedSec)}</strong></span>
                 <span>Time limit: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.targetSec)}</strong></span>
@@ -14474,17 +14571,21 @@ export default function MathsUnlockedBN() {
             })()}
 
             {mockProgress && (() => {
-              const remaining = Math.max(0, Math.round((mockProgress.deadline - Date.now()) / 1000));
+              const mx = mockExamRef.current;
+              const now = mx && mx.stoppedAt ? mx.stoppedAt : Date.now();
+              const remaining = Math.max(0, Math.round((mockProgress.deadline - now) / 1000));
               const mm = String(Math.floor(remaining / 60)).padStart(2, "0"), ss = String(remaining % 60).padStart(2, "0");
               const urgent = remaining <= 300; // last 5 minutes
               const col = urgent ? "var(--red)" : "var(--amber)";
               return (
-                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: `1px solid ${col}`, borderRadius: 10, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
-                  <span style={{ fontWeight: 700, color: col }}>
-                    📝 Mock Exam · {mockProgress.paper.name} · Q {mockProgress.idx + 1} of {mockProgress.total}
-                    <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {mockProgress.correctCount} right so far</span>
-                  </span>
-                  <span className="mub-mono" style={{ fontWeight: 700, color: col, flexShrink: 0 }}>⏱ {mm}:{ss}</span>
+                <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: `1px solid ${col}`, borderRadius: 10, padding: "8px 12px", fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontWeight: 700, color: col }}>
+                      📝 Mock Exam · {mockProgress.paper.name} · Q {mockProgress.idx + 1} of {mockProgress.total}
+                    </span>
+                    <span className="mub-mono" style={{ fontWeight: 700, color: col, flexShrink: 0 }}>⏱ {mm}:{ss}</span>
+                  </div>
+                  <div style={{ marginTop: 2, color: "var(--muted)" }}>{mx ? mx.marksEarned : 0} marks so far</div>
                 </div>
               );
             })()}
@@ -14807,12 +14908,13 @@ export default function MathsUnlockedBN() {
                 if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
                 else if (/\^|²/.test(ctx)) syms.push("^");
                 if (question.topicId === "factorization") syms.push("(", ")", "+", "-");
+                if (question.topicId === "vectors") syms.push("+", "-");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, color: "var(--muted)", alignSelf: "center" }}>insert:</span>
                     {syms.map((s) => (
-                      <button key={s} type="button" onClick={() => insertSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 36, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
+                      <button key={s} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertSym(s)} className="mub-mono" style={{ fontSize: 15, minWidth: 36, padding: "4px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, cursor: "pointer", color: "var(--ink)" }}>{s}</button>
                     ))}
                   </div>
                 );
@@ -14994,7 +15096,7 @@ export default function MathsUnlockedBN() {
                 </div>
               )}
 
-              {!feedback && hasTool(CALC_LV) && (
+              {!feedback && hasTool(CALC_LV) && !(mockProgress && mockProgress.paper && !mockProgress.paper.calc) && (
                 <button
                   {...calcBtnHandlers}
                   title="Calculator — hold to change colour" aria-label="Calculator"
