@@ -2520,7 +2520,7 @@ const TOPICS = [
       if (m === n || m % n === 0 || n % m === 0 || distinctPrimes(a) < 2 || distinctPrimes(b) < 2) { a = 12; b = 18; } // guaranteed-good fallback
       const g = gcd(a, b), l = lcm(a, b);
       const mode = Math.random() < 0.5 ? "HCF" : "LCM";
-      return { prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : l}`, hint: "Enter a number.",
+      return { sub: mode === "HCF" ? "hcf" : "lcm", prompt: `Find the ${mode} of ${a} and ${b}`, answer: `${mode === "HCF" ? g : l}`, hint: "Enter a number.",
         steps: mode === "HCF"
           ? [`List the common factors of ${a} and ${b}, or use the Euclidean algorithm`, `HCF(${a}, ${b}) = ${g}`]
           : [`LCM = (${a} × ${b}) ÷ HCF(${a}, ${b})`, `HCF(${a}, ${b}) = ${g}`, `LCM = ${a * b} ÷ ${g} = ${l}`] };
@@ -2536,74 +2536,74 @@ const TOPICS = [
       const forms = [
         () => { // a^m × a^n = a^(m+n)
           const a = randInt(2, 6), b = randInt(2, 6), m = randInt(1, 4), n = randInt(1, 4);
-          return { prompt: `Simplify:   ${a}x${pw(m)} × ${b}x${pw(n)}`, answer: `${a * b}x${pw(m + n)}`, hint: alg,
+          return { sub: "lawsalg", prompt: `Simplify:   ${a}x${pw(m)} × ${b}x${pw(n)}`, answer: `${a * b}x${pw(m + n)}`, hint: alg,
             steps: [`Multiply the coefficients: ${a} × ${b} = ${a * b}`, `Add the powers: x${pw(m)} × x${pw(n)} = x${pw(m + n)}`, `Answer: ${a * b}x${pw(m + n)}`] };
         },
         () => { // a^m ÷ a^n = a^(m−n)
           const a = randInt(2, 6), b = randInt(2, 5), m = randInt(1, 4), n = randInt(1, 3);
-          return { prompt: `Simplify:   ${frac(`${a * b}x${pw(m + n)}`, `${b}x${pw(n)}`)}`, answer: `${a}x${pw(m)}`, hint: alg,
+          return { sub: "lawsalg", prompt: `Simplify:   ${frac(`${a * b}x${pw(m + n)}`, `${b}x${pw(n)}`)}`, answer: `${a}x${pw(m)}`, hint: alg,
             steps: [`Divide the coefficients: ${frac(a * b, b)} = ${a}`, `Subtract the powers: ${frac(`x${pw(m + n)}`, `x${pw(n)}`)} = x${pw(m)}`, `Answer: ${a}x${pw(m)}`] };
         },
         () => { // (a^m)^n = a^(mn)
           const a = randInt(2, 4), m = randInt(1, 4), n = randInt(2, 3);
-          return { prompt: `Simplify:   (${a}x${pw(m)})${sup(n)}`, answer: `${a ** n}x${pw(m * n)}`, hint: alg,
+          return { sub: "lawsalg", prompt: `Simplify:   (${a}x${pw(m)})${sup(n)}`, answer: `${a ** n}x${pw(m * n)}`, hint: alg,
             steps: [`Raise the coefficient: ${a}${sup(n)} = ${a ** n}`, `Multiply the powers: (x${pw(m)})${sup(n)} = x${pw(m * n)}`, `Answer: ${a ** n}x${pw(m * n)}`] };
         },
         () => { // a^0 = 1
           const a = randInt(2, 9), m = randInt(2, 4);
           const asNum = Math.random() < 0.5;
           return asNum
-            ? { prompt: `Evaluate:   ${a}${sup(0)}`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}${sup(0)} = 1`] }
-            : { prompt: `Simplify:   (${a}x${pw(m)})${sup(0)}`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x${pw(m)})${sup(0)} = 1`] };
+            ? { sub: "zeroneg", prompt: `Evaluate:   ${a}${sup(0)}`, answer: `1`, hint: num, steps: [`Anything (except 0) to the power 0 is 1`, `${a}${sup(0)} = 1`] }
+            : { sub: "zeroneg", prompt: `Simplify:   (${a}x${pw(m)})${sup(0)}`, answer: `1`, hint: num, steps: [`Anything to the power 0 is 1`, `(${a}x${pw(m)})${sup(0)} = 1`] };
         },
         () => { // a^(−m) = 1/a^m
           const a = randInt(2, 5), m = randInt(2, 3);
-          return { prompt: `Evaluate:   ${a}${sup(`-${m}`)}`, answer: `1/${a ** m}`, answerDisplay: frac(1, a ** m), hint: fracHint,
+          return { sub: "zeroneg", prompt: `Evaluate:   ${a}${sup(`-${m}`)}`, answer: `1/${a ** m}`, answerDisplay: frac(1, a ** m), hint: fracHint,
             steps: [`A negative index means "one over": ${a}${sup(`-${m}`)} = ${frac(1, `${a}${sup(m)}`)}`, `${a}${sup(m)} = ${a ** m}`, `Answer: ${frac(1, a ** m)}`] };
         },
         () => { // a^(1/n) = ⁿ√a
           const base = randInt(2, 6), n = randInt(2, 3);
-          return { prompt: `Evaluate:   ${base ** n}${supFrac(1, n)}`, answer: `${base}`, hint: num,
+          return { sub: "fractional", prompt: `Evaluate:   ${base ** n}${supFrac(1, n)}`, answer: `${base}`, hint: num,
             steps: [`A power of ${frac(1, n)} means the ${n === 2 ? "square" : "cube"} root`, `${n === 2 ? "√" : "∛"}${base ** n} = ${base}`] };
         },
         () => { // a^(m/n) = (ⁿ√a)^m
           const base = randInt(2, 3);
           const [n, m] = [[2, 3], [3, 2]][randInt(0, 1)];
-          return { prompt: `Evaluate:   ${base ** n}${supFrac(m, n)}`, answer: `${base ** m}`, hint: num,
+          return { sub: "fractional", prompt: `Evaluate:   ${base ** n}${supFrac(m, n)}`, answer: `${base ** m}`, hint: num,
             steps: [`${base ** n}${supFrac(m, n)} = (${n === 2 ? "√" : "∛"}${base ** n})${sup(m)} = ${base}${sup(m)}`, `Answer: ${base ** m}`] };
         },
         () => { // a^m × b^m = (ab)^m
           const a = randInt(2, 5), b = [2, 3, 4, 5].filter((x) => x !== a)[randInt(0, 2)], m = randInt(2, 3);
-          return { prompt: `Evaluate:   ${a}${sup(m)} × ${b}${sup(m)}`, answer: `${(a * b) ** m}`, hint: num,
+          return { sub: "combine", prompt: `Evaluate:   ${a}${sup(m)} × ${b}${sup(m)}`, answer: `${(a * b) ** m}`, hint: num,
             steps: [`Same power, so combine the bases: ${a}${sup(m)} × ${b}${sup(m)} = (${a} × ${b})${sup(m)} = ${a * b}${sup(m)}`, `Answer: ${(a * b) ** m}`] };
         },
         () => { // (a/b)^n = a^n / b^n
           const a = randInt(2, 3), b = randInt(a + 1, 5), n = randInt(2, 3);
-          return { prompt: `Evaluate:   (${frac(a, b)})${sup(n)}`, answer: `${a ** n}/${b ** n}`, answerDisplay: frac(a ** n, b ** n), hint: fracHint,
+          return { sub: "combine", prompt: `Evaluate:   (${frac(a, b)})${sup(n)}`, answer: `${a ** n}/${b ** n}`, answerDisplay: frac(a ** n, b ** n), hint: fracHint,
             steps: [`Raise the top and bottom separately: (${frac(a, b)})${sup(n)} = ${frac(`${a}${sup(n)}`, `${b}${sup(n)}`)}`, `Answer: ${frac(a ** n, b ** n)}`] };
         },
         () => { // if a^x = a^k then x = k
           const base = randInt(2, 4), k = randInt(2, 5);
-          return { prompt: `Solve for x:   ${base}${sup("x")} = ${base ** k}`, answer: `${k}`, hint: num,
+          return { sub: "solve", prompt: `Solve for x:   ${base}${sup("x")} = ${base ** k}`, answer: `${k}`, hint: num,
             steps: [`Write the right side as a power of ${base}: ${base ** k} = ${base}${sup(k)}`, `Equal bases means equal powers: x = ${k}`] };
         },
         () => { // b^m × b^n → b^(m+n), leave in index form
           const b = [2, 3, 5, 7][randInt(0, 3)], m = randInt(2, 6), n = randInt(2, 4);
-          return { prompt: `Write as a single power:   ${b}${sup(m)} × ${b}${sup(n)}`,
+          return { sub: "numeric", prompt: `Write as a single power:   ${b}${sup(m)} × ${b}${sup(n)}`,
             answer: `${b}^${m + n}`, answerDisplay: `${b}${sup(m + n)}`, hint: `Leave it as a power, e.g. ${b}^${m + n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m + n),
             steps: [`Same base — add the powers: ${m} + ${n} = ${m + n}`, `Answer: ${b}${sup(m + n)}`] };
         },
         () => { // b^m ÷ b^n → b^(m−n), leave in index form
           const b = [2, 3, 5, 7][randInt(0, 3)], n = randInt(1, 4), m = n + randInt(2, 6);
-          return { prompt: `Write as a single power:   ${frac(`${b}${sup(m)}`, `${b}${sup(n)}`)}`,
+          return { sub: "numeric", prompt: `Write as a single power:   ${frac(`${b}${sup(m)}`, `${b}${sup(n)}`)}`,
             answer: `${b}^${m - n}`, answerDisplay: `${b}${sup(m - n)}`, hint: `Leave it as a power, e.g. ${b}^${m - n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m - n),
             steps: [`Same base — subtract the powers: ${m} − ${n} = ${m - n}`, `Answer: ${b}${sup(m - n)}`] };
         },
         () => { // (b^m)^n → b^(mn), leave in index form
           const b = [2, 3, 5][randInt(0, 2)], m = randInt(2, 4), n = randInt(2, 3);
-          return { prompt: `Write as a single power:   (${b}${sup(m)})${sup(n)}`,
+          return { sub: "numeric", prompt: `Write as a single power:   (${b}${sup(m)})${sup(n)}`,
             answer: `${b}^${m * n}`, answerDisplay: `${b}${sup(m * n)}`, hint: `Leave it as a power, e.g. ${b}^${m * n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m * n),
             steps: [`Power of a power — multiply the powers: ${m} × ${n} = ${m * n}`, `Answer: ${b}${sup(m * n)}`] };
@@ -2617,7 +2617,7 @@ const TOPICS = [
       const forms = [
         () => { // simplify √N
           const k = randInt(2, 6), b = [2, 3, 5, 6, 7, 10, 11][randInt(0, 6)];
-          return { prompt: `Simplify:   √${k * k * b}`, answer: surdStr(k, b), hint: surdHint,
+          return { sub: "simplify", prompt: `Simplify:   √${k * k * b}`, answer: surdStr(k, b), hint: surdHint,
             check: (inp) => checkSimplifiedSurd(inp, surdStr(k, b)),
             steps: [`Find the biggest square factor: ${k * k * b} = ${k * k} × ${b}`, `√${k * k * b} = √${k * k} × √${b} = ${k}√${b}`] };
         },
@@ -2626,7 +2626,7 @@ const TOPICS = [
           const opts = [];
           for (let a = 2; a * a <= sq; a++) if (sq % a === 0) opts.push([a, sq / a]);
           const [a, b] = opts[randInt(0, opts.length - 1)];
-          return { prompt: `Simplify:   √${a} × √${b}`, answer: `${r}`, hint: "Enter a number.",
+          return { sub: "multiply", prompt: `Simplify:   √${a} × √${b}`, answer: `${r}`, hint: "Enter a number.",
             steps: [`Multiply under one root: √${a} × √${b} = √(${a} × ${b}) = √${sq}`, `√${sq} = ${r}`] };
         },
         () => { // p√a × q√b → simplified surd
@@ -2634,7 +2634,7 @@ const TOPICS = [
           const pool = [2, 3, 5, 6, 7]; // non-square radicands
           const a = pool[randInt(0, 4)], b = pool[randInt(0, 4)];
           const { c, d } = surdParts(p * q, a * b);
-          return { prompt: `Simplify:   ${surdStr(p, a)} × ${surdStr(q, b)}`, answer: surdStr(c, d), hint: surdHint,
+          return { sub: "multiply", prompt: `Simplify:   ${surdStr(p, a)} × ${surdStr(q, b)}`, answer: surdStr(c, d), hint: surdHint,
             check: (inp) => checkSimplifiedSurd(inp, surdStr(c, d)),
             steps: [`Multiply the numbers and the roots separately: ${p} × ${q} = ${p * q},  √${a} × √${b} = √${a * b}`, `${p * q}√${a * b}${d === a * b ? "" : ` = ${surdStr(c, d)}`}`] };
         },
@@ -2644,6 +2644,7 @@ const TOPICS = [
           const ans = den === 1 ? surdStr(nc, b) : `${nc === 1 ? "" : nc}√${b}/${den}`;
           const ansDisp = den === 1 ? surdStr(nc, b) : frac(`${nc === 1 ? "" : nc}√${b}`, `${den}`);
           return {
+            sub: "rationalise",
             prompt: `Rationalise the denominator:   ${frac(`${a}`, `√${b}`)}`,
             answer: ans, answerDisplay: ansDisp, hint: "e.g. 3√5/5",
             check: (inp) => {
@@ -2761,13 +2762,13 @@ const TOPICS = [
             : st === 3 ? `0.${digs}`
             : `0.00${digs}`;
           const raw = parseFloat(rawStr);
-          return { raw, rawStr, ans: `${clean(roundToSF(raw, sf))}`, label: `${sf} significant figure${sf > 1 ? "s" : ""}`,
+          return { sub: "sigfig", raw, rawStr, ans: `${clean(roundToSF(raw, sf))}`, label: `${sf} significant figure${sf > 1 ? "s" : ""}`,
             how: `Count from the first non-zero digit and keep ${sf}` };
         }
         if (mode === 1) { // decimal places
           const dp = randInt(1, 4), rawStr = `${randInt(1, 400)}.${digStr(dp + randInt(1, 2))}`;
           const raw = parseFloat(rawStr);
-          return { raw, rawStr, ans: (Math.round(raw * 10 ** dp) / 10 ** dp).toFixed(dp), label: `${dp} decimal place${dp > 1 ? "s" : ""}`,
+          return { sub: "decimalplaces", raw, rawStr, ans: (Math.round(raw * 10 ** dp) / 10 ** dp).toFixed(dp), label: `${dp} decimal place${dp > 1 ? "s" : ""}`,
             how: `Keep ${dp} digit${dp > 1 ? "s" : ""} after the decimal point` };
         }
         // nearest place value
@@ -2780,12 +2781,12 @@ const TOPICS = [
         const raw = parseFloat(rawStr);
         const rounded = Math.round(raw / unit) * unit;
         const decs = unit < 1 ? String(unit).split(".")[1].length : 0;
-        return { raw, rawStr, ans: decs ? rounded.toFixed(decs) : `${clean(rounded)}`, label: `the nearest ${name}`,
+        return { sub: "placevalue", raw, rawStr, ans: decs ? rounded.toFixed(decs) : `${clean(rounded)}`, label: `the nearest ${name}`,
           how: `Round to the nearest ${name}` };
       };
       let q;
       for (let i = 0; i < 15; i++) { q = build(); if (Math.abs(parseFloat(q.ans) - q.raw) > 1e-9) break; }
-      return { prompt: `Round ${q.rawStr} to ${q.label}`, answer: q.ans, hint: "Enter a number.",
+      return { sub: q.sub, prompt: `Round ${q.rawStr} to ${q.label}`, answer: q.ans, hint: "Enter a number.",
         steps: [q.how, `Use the next digit to decide whether to round up`, `Answer: ${q.ans}`] };
     } },
   { id: "limits", name: "Limits of Accuracy", icon: "📏", prereqs: ["sigfig"],
@@ -2926,7 +2927,7 @@ const TOPICS = [
           // a x + b = c
           const a = nz(-9, 9), x = nz(-9, 9), b = nz(-9, 9), c = a * x + b;
           if (c === 0) return null;
-          return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
+          return { sub: "basic", prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${xt(a)} = ${c - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
         }
         if (r < 0.55) {
@@ -2935,7 +2936,7 @@ const TOPICS = [
           if (a === c) return null;
           const x = nz(-9, 9), b = nz(-9, 9), d = (a - c) * x + b;
           if (d === 0) return null;
-          return { prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${xt(c)} ${spaced(d)}`, answer: `${x}`,
+          return { sub: "bothsides", prompt: `Solve for x:   ${xt(a)} ${spaced(b)} = ${xt(c)} ${spaced(d)}`, answer: `${x}`,
             steps: [`Bring the x-terms to one side:  ${xt(a - c)} ${spaced(b)} = ${d}`, `${moveText(b)}:  ${xt(a - c)} = ${d - b}`, ...(a - c === 1 ? [] : [divText(a - c, x)])] };
         }
 
@@ -2949,7 +2950,7 @@ const TOPICS = [
             if (numer % m !== 0) return null;
             const n = numer / m;
             if (n === 0) return null;
-            return { prompt: `Solve for x:   ${p}(x ${spaced(q)}) = ${m}(x ${spaced(n)})`, answer: `${x}`,
+            return { sub: "brackets", prompt: `Solve for x:   ${p}(x ${spaced(q)}) = ${m}(x ${spaced(n)})`, answer: `${x}`,
               steps: [
                 `Expand both sides:  ${p}x ${spaced(p * q)} = ${m}x ${spaced(m * n)}`,
                 `Bring the x-terms together:  ${xt(p - m)} ${spaced(p * q)} = ${m * n}`,
@@ -2966,7 +2967,7 @@ const TOPICS = [
           if (rhs === 0) return null;
           const cx = c === 1 ? "x" : `${c}x`;
           const lhs = s === 0 ? `${p}(${cx} ${spaced(q)})` : `${p}(${cx} ${spaced(q)}) ${spaced(s)}`;
-          return { prompt: `Solve for x:   ${lhs} = ${rhs}`, answer: `${x}`,
+          return { sub: "brackets", prompt: `Solve for x:   ${lhs} = ${rhs}`, answer: `${x}`,
             steps: [
               `Expand the bracket:  ${xt(p * c)} ${spaced(con)} = ${rhs}`,
               `${moveText(con)}:  ${xt(p * c)} = ${rhs - con}`,
@@ -2984,6 +2985,7 @@ const TOPICS = [
           const lead = A === 1 ? "x²" : `${A}x²`;
           const lhs = b === 0 ? lead : `${lead} ${spaced(b)}`;
           return {
+            sub: "squares",
             prompt: `Solve for x:   ${lhs} = ${cc}`,
             answer: `${k}`, answerDisplay: `±${k}`, hint: "x can be positive or negative — either is fine",
             check: (inp) => {
@@ -3006,7 +3008,7 @@ const TOPICS = [
           // x / den + b = c
           const den = randInt(2, 9), k = nz(-6, 6), x = den * k, b = nz(-9, 9), c = k + b;
           if (c === 0) return null;
-          return { prompt: `Solve for x:   ${frac("x", `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
+          return { sub: "fractions", prompt: `Solve for x:   ${frac("x", `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${frac("x", `${den}`)} = ${k}`, `Multiply both sides by ${den}:  x = ${x}`] };
         }
         if (form === 1) {
@@ -3017,14 +3019,14 @@ const TOPICS = [
           const den = dens[randInt(0, dens.length - 1)], k = ax / den;
           const b = nz(-9, 9), c = k + b;
           if (c === 0) return null;
-          return { prompt: `Solve for x:   ${frac(xt(a), `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
+          return { sub: "fractions", prompt: `Solve for x:   ${frac(xt(a), `${den}`)} ${spaced(b)} = ${c}`, answer: `${x}`,
             steps: [`${moveText(b)}:  ${frac(xt(a), `${den}`)} = ${k}`, `Multiply both sides by ${den}:  ${xt(a)} = ${den * k}`, `Divide both sides by ${a}:  x = ${x}`] };
         }
         if (form === 2) {
           // (a x + b) / den = c
           const den = randInt(2, 9), a = nz(-6, 6), x = nz(-9, 9), c = nz(-6, 6), b = c * den - a * x;
           if (b === 0) return null;
-          return { prompt: `Solve for x:   ${frac(`${xt(a)} ${spaced(b)}`, `${den}`)} = ${c}`, answer: `${x}`,
+          return { sub: "fractions", prompt: `Solve for x:   ${frac(`${xt(a)} ${spaced(b)}`, `${den}`)} = ${c}`, answer: `${x}`,
             steps: [`Multiply both sides by ${den}:  ${xt(a)} ${spaced(b)} = ${c * den}`, `${moveText(b)}:  ${xt(a)} = ${c * den - b}`, ...(a === 1 ? [] : [divText(a, x)])] };
         }
         if (form === 3) {
@@ -3033,7 +3035,7 @@ const TOPICS = [
           const b = Math.random() < 0.4 ? 0 : nz(-9, 9), c = k + b;
           if (c === 0) return null;
           const tail = b === 0 ? "" : ` ${spaced(b)}`;
-          return { prompt: `Solve for x:   ${frac(`${num}`, "x")}${tail} = ${c}`, answer: `${x}`,
+          return { sub: "fractions", prompt: `Solve for x:   ${frac(`${num}`, "x")}${tail} = ${c}`, answer: `${x}`,
             steps: [
               ...(b !== 0 ? [`${moveText(b)}:  ${frac(`${num}`, "x")} = ${k}`] : []),
               `Multiply both sides by x:  ${num} = ${xt(k)}`,
@@ -3045,7 +3047,7 @@ const TOPICS = [
         const b = Math.random() < 0.4 ? 0 : nz(-9, 9), c = k + b;
         if (c === 0) return null;
         const tail = b === 0 ? "" : ` ${spaced(b)}`;
-        return { prompt: `Solve for x:   ${frac(`${num}`, xt(a))}${tail} = ${c}`, answer: `${x}`,
+        return { sub: "fractions", prompt: `Solve for x:   ${frac(`${num}`, xt(a))}${tail} = ${c}`, answer: `${x}`,
           steps: [
             ...(b !== 0 ? [`${moveText(b)}:  ${frac(`${num}`, xt(a))} = ${k}`] : []),
             `Multiply both sides by ${xt(a)}:  ${num} = ${a * k}x`,
@@ -3076,12 +3078,12 @@ const TOPICS = [
         const g = randInt(2, 6);
         if (Math.random() < 0.6) {
           const m = randInt(1, 6), n = coprime(m, -6, 6), A = g * m, B = g * n;
-          return { prompt: `Factorise:   ${A}x² ${sgn(B)} ${Math.abs(B)}x`,
+          return { sub: "commonfactor", prompt: `Factorise:   ${A}x² ${sgn(B)} ${Math.abs(B)}x`,
             answer: `${g}x(${co(m)}x${tight(n)})`, hint: "Take out the biggest common factor first",
             steps: [`Both terms share ${g}x`, `${A}x² ${sgn(B)} ${Math.abs(B)}x = ${g}x(${co(m)}x ${sgn(n)} ${Math.abs(n)})`] };
         }
         const m = randInt(1, 6), n = coprime(m, 2, 9), A = g * m, B = g * n;
-        return { prompt: `Factorise:   ${A}x + ${B}`,
+        return { sub: "commonfactor", prompt: `Factorise:   ${A}x + ${B}`,
           answer: `${g}(${co(m)}x+${n})`, hint: "Take out the biggest common factor first",
           steps: [`Both terms share ${g}`, `${A}x + ${B} = ${g}(${co(m)}x + ${n})`] };
       }
@@ -3089,7 +3091,7 @@ const TOPICS = [
       // 10% — difference of two squares
       if (r < 0.20) {
         const k = randInt(2, 12);
-        return { prompt: `Factorise:   x² - ${k * k}`,
+        return { sub: "diffsquares", prompt: `Factorise:   x² - ${k * k}`,
           answer: `(x+${k})(x-${k})`, hint: "a² - b² = (a + b)(a - b)",
           steps: [`${k * k} = ${k}²`, `x² - ${k}² = (x + ${k})(x - ${k})`] };
       }
@@ -3099,7 +3101,7 @@ const TOPICS = [
         const lead = Math.random() < 0.5 ? 2 : 3;
         const b = coprime(lead, -6, 6), d = nz(-6, 6);
         const B = lead * d + b, C = b * d;
-        return { prompt: `Factorise:   ${lead}x² ${sgn(B)} ${co(B)}x ${sgn(C)} ${Math.abs(C)}`,
+        return { sub: "factorise", prompt: `Factorise:   ${lead}x² ${sgn(B)} ${co(B)}x ${sgn(C)} ${Math.abs(C)}`,
           answer: `(${lead}x${tight(b)})(x${tight(d)})`, hint: "e.g. (2x+1)(x-3)",
           steps: [`Multiply the ends: ${lead} × ${C} = ${lead * C}`,
             `Two numbers with product ${lead * C} and sum ${B}: ${lead * d} and ${b}`,
@@ -3109,7 +3111,7 @@ const TOPICS = [
       // 10% — perfect square
       if (r < 0.40) {
         const n = nz(-9, 9), B = 2 * n, C = n * n;
-        return { prompt: `Factorise:   x² ${sgn(B)} ${Math.abs(B)}x + ${C}`,
+        return { sub: "factorise", prompt: `Factorise:   x² ${sgn(B)} ${Math.abs(B)}x + ${C}`,
           answer: `(x${tight(n)})^2`, hint: "It's a perfect square: (x + a)²",
           steps: [`Half the x-term: ${B} ÷ 2 = ${n}`, `${n}² = ${C} ✓`, `= (x ${sgn(n)} ${Math.abs(n)})²`] };
       }
@@ -3122,6 +3124,7 @@ const TOPICS = [
         const tail = `${xterm(B)} ${spaced(C)}`.replace(/\s+/g, " ").trim();
         const roots = a === b ? [-a] : [Math.min(-a, -b), Math.max(-a, -b)];
         return {
+          sub: "solve",
           prompt: `By factorising, solve:   x² ${tail} = 0`,
           answer: roots.map((v) => `x = ${v}`).join(",  "),
           hint: a === b ? "one repeated solution" : "give both values of x, separated by a comma",
@@ -3166,6 +3169,7 @@ const TOPICS = [
           const bT = `${b > 0 ? "+ " : "− "}${Math.abs(b) === 1 ? "" : Math.abs(b)}x`;
           const cT = `${c > 0 ? "+ " : "− "}${Math.abs(c)}`;
           return {
+            sub: "formula",
             prompt: `Solve, giving each answer to 2 decimal places:   ${aT}x² ${bT} ${cT} = 0`,
             answer: `x = ${f(r1)},  x = ${f(r2)}`,
             hint: "use the quadratic formula",
@@ -3189,7 +3193,7 @@ const TOPICS = [
       // rest — standard x² + (p+q)x + pq
       const p = nz(-9, 9), q = nz(-9, 9);
       const tail = `${xterm(p + q)} ${spaced(p * q)}`.replace(/\s+/g, " ").trim();
-      return { prompt: `Factorise:   x² ${tail}`, answer: `(x${tight(p)})(x${tight(q)})`, hint: "e.g. (x+2)(x-3)",
+      return { sub: "factorise", prompt: `Factorise:   x² ${tail}`, answer: `(x${tight(p)})(x${tight(q)})`, hint: "e.g. (x+2)(x-3)",
         steps: [`Two numbers with product ${p * q} and sum ${p + q}: ${p} and ${q}`, `= (x${tight(p)})(x${tight(q)})`] };
     } },
   { id: "simultaneous", name: "Simultaneous Equations", icon: "🔗", prereqs: ["algebra"],
@@ -3539,7 +3543,7 @@ const TOPICS = [
 
       if (r < 0.14) {
         const { m, x1, x2, y1, y2 } = twoPts();
-        return { prompt: `Find the gradient of the line joining (${x1}, ${y1}) and (${x2}, ${y2})`, answer: `${m}`, hint: "Enter a number.",
+        return { sub: "gradient", prompt: `Find the gradient of the line joining (${x1}, ${y1}) and (${x2}, ${y2})`, answer: `${m}`, hint: "Enter a number.",
           steps: [`gradient = (y₂ − y₁) ÷ (x₂ − x₁)`, `= (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2 - y1} ÷ ${x2 - x1} = ${m}`] };
       }
 
@@ -3555,7 +3559,7 @@ const TOPICS = [
         const P = () => { const a = randInt(-6, 6); let b = randInt(-6, 6); while ((a - b) % 2 !== 0) b = randInt(-6, 6); return [a, b]; };
         const [x1, x2] = P(), [y1, y2] = P();
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        return { prompt: `Find the midpoint of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
+        return { sub: "midpoint", prompt: `Find the midpoint of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
           fields: [{ key: "x", label: "x =" }, { key: "y", label: "y =" }], answers: { x: `${mx}`, y: `${my}` },
           answer: `(${mx}, ${my})`, hint: "midpoint coordinates",
           steps: [`Midpoint = ( (x₁+x₂)/2 , (y₁+y₂)/2 )`, `= ( (${x1}${x2 < 0 ? "" : "+"}${x2})/2 , (${y1}${y2 < 0 ? "" : "+"}${y2})/2 ) = (${mx}, ${my})`] };
@@ -3567,7 +3571,7 @@ const TOPICS = [
         if (Math.random() < 0.6) { const [p, q] = triples[randInt(0, triples.length - 1)]; dx = (Math.random() < 0.5 ? 1 : -1) * p; dy = (Math.random() < 0.5 ? 1 : -1) * q; }
         else { dx = nz(-7, 7); dy = nz(-7, 7); }
         const x2 = x1 + dx, y2 = y1 + dy, sq = dx * dx + dy * dy, root = Math.sqrt(sq), exact = Number.isInteger(root);
-        return { prompt: `Find the length of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
+        return { sub: "distance", prompt: `Find the length of the segment joining (${x1}, ${y1}) and (${x2}, ${y2})`,
           answer: exact ? `${root}` : `sqrt(${sq})`, hint: exact ? "Enter a number." : "e.g. sqrt(20) or a decimal",
           steps: [`length = √( (x₂−x₁)² + (y₂−y₁)² )`, `= √( (${dx})² + (${dy})² ) = √(${dx * dx} + ${dy * dy}) = √${sq}`, exact ? `= ${root}` : `= √${sq} ≈ ${root.toFixed(2)}`] };
       }
@@ -3575,7 +3579,7 @@ const TOPICS = [
       if (r < 0.70) {
         const m = nz(-4, 4);
         const perp = Math.abs(m) === 1 ? `${-m}` : fr(-1, m);
-        return { prompt: `A line has gradient ${m}. Find the gradient of any line perpendicular to it`, answer: perp, hint: "fraction or decimal",
+        return { sub: "perpgradient", prompt: `A line has gradient ${m}. Find the gradient of any line perpendicular to it`, answer: perp, hint: "fraction or decimal",
           steps: [`Perpendicular gradient = −1 ÷ (gradient)`, `= −1 ÷ ${m} = ${perp}`] };
       }
 
@@ -3611,6 +3615,7 @@ const TOPICS = [
         const mS = fr(sn, sd);
         const rhs = `${mxTerm(mS)}${plusC(c)}`, eq = `y = ${rhs}`;
         return {
+          sub: "fromgraph",
           prompt: `The straight line is drawn on the grid. Find its equation`,
           graph: { m, c, marks }, answer: rhs, answerDisplay: eq, answerPrefix: "y =", hint: "read two points off the line",
           steps: [
@@ -3629,7 +3634,7 @@ const TOPICS = [
         ? `${A}y = ${mxTerm(`${B}`)}${plusC(Cc)}`
         : `${A}y ${Cc > 0 ? "- " + Cc : "+ " + -Cc} = ${mxTerm(`${B}`)}`;
       const askG = Math.random() < 0.5;
-      return { prompt: `The line ${eqForm}.\nFind the ${askG ? "gradient" : "y-intercept"}`,
+      return { sub: "rearrange", prompt: `The line ${eqForm}.\nFind the ${askG ? "gradient" : "y-intercept"}`,
         answer: askG ? fr(B, A) : `${cc}`, hint: "fraction or decimal",
         steps: [`Rearrange to y = mx + c — divide through by ${A}`, `y = ${fr(B, A)}x${plusC(cc)}`, askG ? `gradient = ${fr(B, A)}` : `y-intercept = ${cc}`] };
     } },
@@ -3647,6 +3652,7 @@ const TOPICS = [
         const cs = c === 0 ? "" : c > 0 ? ` + ${c}` : ` - ${-c}`;
         const eq = `y = ${mTerm}${cs}`;
         return {
+          sub: "drawline",
           prompt: `Draw the graph of:   ${eq}`,
           drawGraph: { m, c }, answer: eq, hint: "tap two points the line passes through",
           steps: [
@@ -3680,6 +3686,7 @@ const TOPICS = [
           const lo = Math.min(p, q), hi = Math.max(p, q);
           const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
           return {
+            sub: "curveintersect",
             prompt: `${label} is drawn. By drawing a suitable line, solve:   ${eqShown}`,
             curve, solveLine: { m: M, c: C },
             solvePoints: tangent ? [[p, cy(p)]] : [[p, cy(p)], [q, cy(q)]],
@@ -3717,6 +3724,7 @@ const TOPICS = [
           const label = `y = x³ ${cfg.b < 0 ? "-" : "+"} ${Math.abs(cfg.b) === 1 ? "" : `${Math.abs(cfg.b)}`}x`.replace("  ", " ");
           const num = (s) => { try { return evalString(String(s), 0); } catch (e) { return NaN; } };
           return {
+            sub: "curveintersect",
             prompt: `${label} is drawn. By drawing a suitable line, solve:   ${cfg.solve}`,
             curve: { kind: "cubic", b: cfg.b }, solveLine: { m: cfg.M, c: cfg.C },
             solvePoints: cfg.roots.map((r) => [r, f(r)]),
@@ -3800,6 +3808,7 @@ const TOPICS = [
         return s;
       };
       return {
+        sub: "linescross",
         prompt: `Find the x-coordinate where these lines cross:   y = ${rhs(m1, c1)}\ny = ${rhs(m2, c2)}`,
         answer: `${xI}`, hint: "Enter a number.",
         steps: [
@@ -4028,6 +4037,7 @@ const TOPICS = [
           if (kind !== "translation" && isSlide(a, b)) continue;
           const answer = kind[0].toUpperCase() + kind.slice(1);
           return {
+            sub: "identify",
             prompt: `Triangle A is mapped onto triangle B. Which single transformation is this?`,
             transform: { a, b },
             choices: ["Translation", "Rotation", "Enlargement", "Reflection"], answer,
@@ -4049,6 +4059,7 @@ const TOPICS = [
           const b = T.translate(a, v);
           if (!b.every(inGrid) || !apart(a, b)) continue;
           return {
+            sub: "translate",
             prompt: `Triangle A is translated to triangle B. Write down the translation vector`,
             transform: { a, b },
             vector: true,
@@ -4080,6 +4091,7 @@ const TOPICS = [
           const eqn = mEqn(m);
           if (Math.random() < 0.5) {
             return {
+              sub: "reflect",
               prompt: `Triangle A is reflected onto triangle B. Draw the mirror line by tapping two points on it`,
               transform: { a, b },
               drawMirror: m,
@@ -4096,6 +4108,7 @@ const TOPICS = [
           if (m.kind === "yx") { accept.add("y=x"); accept.add("x=y"); }
           if (m.kind === "y-x") { accept.add("y=-x"); accept.add("x=-y"); }
           return {
+            sub: "reflect",
             prompt: `Triangle A is reflected onto triangle B. Write down the equation of the mirror line`,
             transform: { a, b, answerMirror: m },
             check: (inp) => accept.has(norm(inp)),
@@ -4132,6 +4145,7 @@ const TOPICS = [
           if (k < 0 && !apart(a, b)) continue;   // negative SF: object and image must be clearly apart
           const rays = a.map((p, i) => [c, b[i]]);
           if (Math.random() < 0.55) return {
+            sub: "enlarge",
             prompt: `Triangle A is enlarged onto triangle B, centre (${c[0]}, ${c[1]}). Find the scale factor`,
             transform: { a, b, centre: c, rays },
             check: (inp) => { try { return Math.abs(evalString(String(inp), 0) - k) < 1e-6; } catch (e) { return false; } },
@@ -4143,6 +4157,7 @@ const TOPICS = [
             ],
           };
           return {
+            sub: "enlarge",
             prompt: `Triangle A is enlarged onto triangle B with scale factor ${kTxt}. Tap the centre of enlargement on the grid`,
             transform: { a, b, answerCentre: c, answerRays: rays },
             tapPoint: { correct: c },
@@ -4165,6 +4180,7 @@ const TOPICS = [
           const b = T.rotate(a, c, spec.deg);
           if (!b.every(inGrid) || !distinct(b) || isSlide(a, b) || !apart(a, b)) continue;
           if (Math.random() < 0.22) return {   // "find the centre" is hard — keep it rare
+            sub: "rotate",
             prompt: `Triangle A is rotated ${spec.t} onto triangle B. Find the centre of rotation as (x, y)`,
             transform: { a, b, answerCentre: c },
             check: (inp) => { const p = parseVec(inp); return !!p && p[0] === c[0] && p[1] === c[1]; },
@@ -4176,6 +4192,7 @@ const TOPICS = [
             ],
           };
           return {
+            sub: "rotate",
             prompt: `Triangle A is rotated about (${c[0]}, ${c[1]}) onto triangle B. Describe the rotation`,
             transform: { a, b, centre: c },
             choices: ["90° clockwise", "90° anticlockwise", "180°"], answer: spec.t,
@@ -4211,6 +4228,7 @@ const TOPICS = [
         }
         if (!a.every(inGrid) || !b.every(inGrid) || !distinct(b) || !apart(a, b)) continue;
         return {
+          sub: "drawimage",
           prompt: `${desc}\nTap the three vertices of the image triangle.`,
           transform: { a, draw: true, image: b },
           drawTransform: { image: b },
@@ -4225,6 +4243,7 @@ const TOPICS = [
       }
       const fa = [[0, 0], [3, 0], [0, 4]], fb = T.translate(fa, [2, 1]);
       return {
+        sub: "drawimage",
         prompt: `Translate triangle A by the vector (2, 1).\nTap the three vertices of the image triangle.`,
         transform: { a: fa, draw: true, image: fb }, drawTransform: { image: fb },
         answer: `(2, 1), (5, 1), (2, 5)`, hint: "tap three points",
@@ -4604,6 +4623,7 @@ const TOPICS = [
       const cap = (t) => t[0].toUpperCase() + t.slice(1);
       const askLines = Math.random() < 0.5;
       return {
+        sub: askLines ? "lines" : "rotational",
         prompt: askLines
           ? `The shape shown is ${s.label}.\nHow many lines of symmetry does it have?`
           : `The shape shown is ${s.label}.\nWhat is its order of rotational symmetry?`,
@@ -5179,7 +5199,7 @@ const TOPICS = [
       // 1. Single pick from a two-colour bag — P(one colour)
       if (r < 0.11) {
         const a = randInt(2, 9), b = randInt(2, 9);
-        return { prompt: `A bag has ${a} red balls and ${b} blue balls. Find the probability of picking a red ball`, answer: `${a}/(${a + b})`, hint: "Fraction or decimal.",
+        return { sub: "singlepick", prompt: `A bag has ${a} red balls and ${b} blue balls. Find the probability of picking a red ball`, answer: `${a}/(${a + b})`, hint: "Fraction or decimal.",
           steps: [`P(red) = number of red ÷ total balls`, `= ${a} ÷ (${a} + ${b}) = ${a}/${a + b}`] };
       }
 
@@ -5193,12 +5213,12 @@ const TOPICS = [
         const bagDesc = joinAnd(names.map((nm, i) => `${counts[i]} ${nm}`));
         if (Math.random() < 0.5) {
           const [sn, sd] = simp(n, total);
-          return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is ${c}.`,
+          return { sub: "singlepick", prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is ${c}.`,
             answer: `${n}/${total}`, hint: "favourable ÷ total, then simplify.",
             steps: [`P(${c}) = ${n} ÷ ${total} = ${sn}/${sd}`] };
         }
         const [sn, sd] = simp(total - n, total);
-        return { prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is NOT ${c}.`,
+        return { sub: "singlepick", prompt: `A bag contains ${bagDesc} counters. A counter is taken at random. Find the probability that it is NOT ${c}.`,
           answer: `${total - n}/${total}`, hint: "P(not X) = 1 − P(X).",
           steps: [`P(${c}) = ${n}/${total}`, `P(not ${c}) = 1 − ${n}/${total} = ${sn}/${sd}`] };
       }
@@ -5226,7 +5246,7 @@ const TOPICS = [
           desc = `the sum of the two numbers is at most ${k}`;
         }
         const [sn, sd] = simp(fav, total);
-        return { prompt: `Two fair ${sides}-sided spinners, each numbered 1 to ${sides}, are spun together. Find the probability that ${desc}.`,
+        return { sub: "spinners", prompt: `Two fair ${sides}-sided spinners, each numbered 1 to ${sides}, are spun together. Find the probability that ${desc}.`,
           answer: `${fav}/${total}`, hint: "A possibility diagram (grid of all outcomes) helps — count how many fit.",
           steps: [`There are ${sides} × ${sides} = ${total} equally likely outcomes.`, `${fav} of them fit.`, `P = ${fav}/${total} = ${sn}/${sd}`] };
       }
@@ -5246,7 +5266,7 @@ const TOPICS = [
         else { num = den - b * (b - 1); desc = "at least one counter is red";
           workLines = [`P(no red) = (${b}/${tt}) × (${b - 1}/${tt - 1})`, `P(at least one red) = 1 − P(no red)`]; }
         const [sn, sd] = simp(num, den);
-        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Two counters are taken at random, without replacement. Find the probability that ${desc}.`,
+        return { sub: "noreplace", prompt: `A bag contains ${rr} red counters and ${b} blue counters. Two counters are taken at random, without replacement. Find the probability that ${desc}.`,
           answer: `${num}/${den}`, hint: "Draw a tree diagram — multiply along the branches, add if there's more than one way.",
           steps: [...workLines, `= ${num}/${den} = ${sn}/${sd}`] };
       }
@@ -5258,7 +5278,7 @@ const TOPICS = [
         const cnt = useRed ? rr : b, name = useRed ? "red" : "blue";
         const num = cnt * (cnt - 1) * (cnt - 2), den = tt * (tt - 1) * (tt - 2);
         const [sn, sd] = simp(num, den);
-        return { prompt: `A bag contains ${rr} red counters and ${b} blue counters. Three counters are taken at random, without replacement. Find the probability that all three are ${name}.`,
+        return { sub: "noreplace", prompt: `A bag contains ${rr} red counters and ${b} blue counters. Three counters are taken at random, without replacement. Find the probability that all three are ${name}.`,
           answer: `${num}/${den}`, hint: "Multiply three fractions, one fewer each time.",
           steps: [`P(all ${name}) = (${cnt}/${tt}) × (${cnt - 1}/${tt - 1}) × (${cnt - 2}/${tt - 2})`, `= ${num}/${den} = ${sn}/${sd}`] };
       }
@@ -5272,7 +5292,7 @@ const TOPICS = [
         const den = n * n;
         const [sn, sd] = simp(num, den);
         const desc = both ? "both numbers are odd" : "one number is odd and the other is even";
-        return { prompt: `A bag contains ${n} balls numbered 1 to ${n}. A ball is taken at random, its number noted, and replaced. A second ball is then taken at random. Find the probability that ${desc}.`,
+        return { sub: "replace", prompt: `A bag contains ${n} balls numbered 1 to ${n}. A ball is taken at random, its number noted, and replaced. A second ball is then taken at random. Find the probability that ${desc}.`,
           answer: `${num}/${den}`, hint: `${oddCount} of the ${n} numbers are odd.`,
           steps: both
             ? [`P(odd) = ${oddCount}/${n}`, `P(both odd) = (${oddCount}/${n})² = ${num}/${den} = ${sn}/${sd}`]
@@ -5280,7 +5300,7 @@ const TOPICS = [
       }
 
       // 7. Two independent events with different probabilities
-      if (r < 0.78) {
+      if (r < 0.76) {
         const pA = pick([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]);
         const pB = pick([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]);
         const subjA = pick(["Maths", "English", "Science", "Art"]);
@@ -5291,13 +5311,13 @@ const TOPICS = [
         if (kind === "both") { ans = rnd(pA * pB); desc = `passes both ${subjA} and ${subjB}`; }
         else if (kind === "AnotB") { ans = rnd(pA * (1 - pB)); desc = `passes ${subjA} but does not pass ${subjB}`; }
         else { ans = rnd((1 - pA) * (1 - pB)); desc = "does not pass either subject"; }
-        return { prompt: `Sam takes exams in ${subjA} and ${subjB}. The probability that Sam passes ${subjA} is ${pA} and the probability that Sam passes ${subjB} is ${pB}. The results are independent. Find the probability that Sam ${desc}.`,
+        return { sub: "independent", prompt: `Sam takes exams in ${subjA} and ${subjB}. The probability that Sam passes ${subjA} is ${pA} and the probability that Sam passes ${subjB} is ${pB}. The results are independent. Find the probability that Sam ${desc}.`,
           answer: `${ans}`, hint: "Multiply the two probabilities (use 1 − p for 'does not pass').",
           steps: [`P(pass ${subjA}) = ${pA}`, `P(pass ${subjB}) = ${pB}`, `P(${desc}) = ${ans}`] };
       }
 
       // 8. Two-digit number formed from number cards, without replacement
-      if (r < 0.9) {
+      if (r < 0.86) {
         const pool = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, pick([4, 5]));
         const nums = [];
         for (const x of pool) for (const y of pool) if (x !== y) nums.push(x * 10 + y);
@@ -5309,18 +5329,35 @@ const TOPICS = [
         else if (kind === "multiple") { const mm = pick([3, 4, 5]); fav = nums.filter((v) => v % mm === 0).length; desc = `a multiple of ${mm}`; }
         else { fav = nums.filter(isPrime).length; desc = "a prime number"; }
         const [sn, sd] = simp(fav, nums.length);
-        return { prompt: `The cards ${pool.join(", ")} are shuffled. Two of them are chosen at random and placed next to each other to make a two-digit number. Find the probability that the two-digit number is ${desc}.`,
+        return { sub: "cards", prompt: `The cards ${pool.join(", ")} are shuffled. Two of them are chosen at random and placed next to each other to make a two-digit number. Find the probability that the two-digit number is ${desc}.`,
           answer: `${fav}/${nums.length}`, hint: "List all the possible two-digit numbers, then count.",
           steps: [`There are ${nums.length} possible two-digit numbers.`, `${fav} of them are ${desc}.`, `P = ${fav}/${nums.length} = ${sn}/${sd}`] };
       }
 
-      // 9. Reverse: given a probability and a count, find the total
+      // 9. Expected frequency — E(X) = probability × number of trials
+      if (r < 0.95) {
+        const [pn, pd] = pick([[1, 2], [1, 3], [2, 3], [1, 4], [3, 4], [1, 5], [2, 5], [1, 10], [3, 10], [1, 8]]);
+        const trials = pd * randInt(2, 12);
+        const expect = (pn / pd) * trials;
+        const terminates = pd % 3 !== 0; // thirds only round cleanly as a fraction
+        const pText = terminates && Math.random() < 0.5 ? `${Math.round((pn / pd) * 1000) / 1000}` : `${pn}/${pd}`;
+        const templates = [
+          () => `The probability that a spinner lands on red is ${pText}. It is spun ${trials} times. Find the expected number of times it lands on red.`,
+          () => `The probability that a biased coin lands on heads is ${pText}. It is tossed ${trials} times. Find the expected number of heads.`,
+          () => `The probability that a seed germinates is ${pText}. ${trials} seeds are planted. Find the expected number that germinate.`,
+          () => `The probability that Sam is late for school on any day is ${pText}. Find the expected number of late days in the next ${trials} school days.`,
+        ];
+        return { sub: "expectation", prompt: pick(templates)(), answer: `${expect}`, hint: "Enter a number.",
+          steps: [`Expected number = probability × number of trials`, `= ${pText} × ${trials} = ${expect}`] };
+      }
+
+      // 10. Reverse: given a probability and a count, find the total
       const mRaw = pick([4, 5, 8, 10, 20]);
       const [k, m] = simp(randInt(1, mRaw - 1), mRaw);
       const t = randInt(2, 6);
       const count = k * t, tot = m * t;
       const colourKnown = pick(["green", "red", "blue", "yellow"]);
-      return { prompt: `A bag contains ${colourKnown} pegs and other coloured pegs only. The probability that a peg taken at random from the bag is ${colourKnown} is ${k}/${m}. There are ${count} ${colourKnown} pegs in the bag. Find the total number of pegs in the bag.`,
+      return { sub: "reverse", prompt: `A bag contains ${colourKnown} pegs and other coloured pegs only. The probability that a peg taken at random from the bag is ${colourKnown} is ${k}/${m}. There are ${count} ${colourKnown} pegs in the bag. Find the total number of pegs in the bag.`,
         answer: `${tot}`, hint: "total = count ÷ probability.",
         steps: [`${colourKnown}/total = ${k}/${m}`, `${count}/total = ${k}/${m}`, `total = ${count} × ${m}/${k} = ${tot}`] };
     } },
@@ -5662,6 +5699,7 @@ const TOPICS = [
         const q = three ? pick(list3) : pick(list2);
         const nm = three ? nm3 : nm2;
         return {
+          sub: "shade",
           prompt: `Shade the region:   ${q.e}`,
           venn: { sets: three ? 3 : 2, target: q.t },
           answer: q.e, hint: "tap every part of the region — tap again to unshade",
@@ -5710,6 +5748,7 @@ const TOPICS = [
         const filled = order.filter((k) => groups[k] && groups[k].length);
 
         return {
+          sub: "place",
           prompt: `ζ = {1 ≤ x ≤ ${n}}\n${rules.map((r, i) => `${"AB"[i]} = ${r.name}`).join("\n")}\nDrag each number into the correct region of the Venn diagram.`,
           placeVenn: { sets: 2, universe, correct },
           answer: filled.map((k) => `${REGION_NAME[k]}: ${groups[k].join(", ")}`).join(" · "),
@@ -5729,7 +5768,7 @@ const TOPICS = [
         { q: "A ∩ B'  (in A but not B)", ans: aOnly, s: [`n(A ∩ B') = n(A) − n(A ∩ B)`, `= ${a} − ${both} = ${aOnly}`] },
         { q: "A' ∩ B  (in B but not A)", ans: bOnly, s: [`n(A' ∩ B) = n(B) − n(A ∩ B)`, `= ${b} − ${both} = ${bOnly}`] },
       ]);
-      return { prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in ${ask.q}`,
+      return { sub: "counting", prompt: `Set A has ${a} elements, Set B has ${b} elements, and ${both} elements are in both. Find the number of elements in ${ask.q}`,
         answer: `${ask.ans}`, hint: "Enter a number.", steps: ask.s };
     } },
   { id: "vectors", name: "Vectors", icon: "➡️", prereqs: ["algebra"],
@@ -5805,6 +5844,7 @@ const TOPICS = [
           { q: "DB", ca: 1, cb: -1, why: "DB = DA + AB = −b + a", diag: [B, D] },
         ]);
         return mkVec(opt.ca, opt.cb, {
+          sub: "parallelogram",
           prompt: `ABCD is a parallelogram.  ${vov("AB")} = a  and  ${vov("AD")} = b.\nWrite ${vov(opt.q)} in terms of a and b`,
           vec: {
             labels: [{ p: A, t: "A" }, { p: B, t: "B" }, { p: C, t: "C" }, { p: D, t: "D" }],
@@ -5827,6 +5867,7 @@ const TOPICS = [
         const isO = v.first === "OA";
         const N = isO ? { X: "O", Y: "A", Z: "B" } : { X: "A", Y: "B", Z: "C" };
         return mkVec(v.ca, v.cb, {
+          sub: "addvectors",
           prompt: `In the diagram, ${vov(v.first)} = a  and  ${vov(v.second)} = b.\nWrite ${vov(v.ask)} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: N.X }, { p: A, t: N.Y }, { p: Bp, t: N.Z }],
@@ -5851,6 +5892,7 @@ const TOPICS = [
         const isO = v.g1 === "OA";
         const N = isO ? ["O", "A", "B"] : ["A", "B", "C"];
         return mkVec(v.ca, v.cb, {
+          sub: "reverse",
           prompt: `${vov(v.g1)} = a  and  ${vov(v.g2)} = b.\nWrite ${vov(v.ask)} in terms of a and b   (remember ${vov("XY")} = −${vov("YX")})`,
           vec: {
             labels: [{ p: A, t: N[0] }, { p: B, t: N[1] }, { p: C, t: N[2] }],
@@ -5872,6 +5914,7 @@ const TOPICS = [
           { ask: "MB", ca: -0.5, cb: 0.5, work: "MB = ½ AB = ½(b − a)" },
         ]);
         return mkVec(v.ca, v.cb, {
+          sub: "midpoint",
           prompt: `M is the midpoint of ${vov("AB")}.  ${vov("OA")} = a  and  ${vov("OB")} = b.\nWrite ${vov(v.ask)} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
@@ -5896,6 +5939,7 @@ const TOPICS = [
           ? `OM = OA + AM = a + ${coef(t)}(b − a) = ${term(1 - t, t)}`
           : `AM = ${coef(t)} AB = ${coef(t)}(b − a)`;
         return mkVec(ca, cb, {
+          sub: "ratio",
           prompt: `M lies on ${vov("AB")} with ${vov("AM")} : ${vov("MB")} = ${r[0]} : ${r[1]}.  ${vov("OA")} = a  and  ${vov("OB")} = b.\nWrite ${vov(askOM ? "OM" : "AM")} in terms of a and b`,
           vec: {
             labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
@@ -7176,6 +7220,91 @@ const SUBTOPICS = {
     { key: "histogram", name: "Frequency density histograms & tables" },
     { key: "meantable", name: "Estimating the mean from a grouped frequency table" },
     { key: "correlation", name: "Scatter graphs — positive or negative correlation" },
+  ],
+  hcflcm: [
+    { key: "hcf", name: "Highest Common Factor (HCF)" },
+    { key: "lcm", name: "Lowest Common Multiple (LCM)" },
+  ],
+  indices: [
+    { key: "lawsalg", name: "Laws of indices with algebra (multiply, divide, power of a power)" },
+    { key: "zeroneg", name: "Zero and negative indices" },
+    { key: "fractional", name: "Fractional indices (roots)" },
+    { key: "combine", name: "Combining same-power bases" },
+    { key: "solve", name: "Solve aˣ = aᵏ" },
+    { key: "numeric", name: "Numeric laws, left as a power" },
+  ],
+  surds: [
+    { key: "simplify", name: "Simplifying a surd" },
+    { key: "multiply", name: "Multiplying surds" },
+    { key: "rationalise", name: "Rationalising the denominator" },
+  ],
+  sigfig: [
+    { key: "sigfig", name: "Significant figures" },
+    { key: "decimalplaces", name: "Decimal places" },
+    { key: "placevalue", name: "Nearest place value" },
+  ],
+  algebra: [
+    { key: "basic", name: "One/two-step linear equations" },
+    { key: "bothsides", name: "x on both sides" },
+    { key: "brackets", name: "Expand a bracket first" },
+    { key: "squares", name: "x² = k (square root both sides)" },
+    { key: "fractions", name: "Equations with fractions" },
+  ],
+  factorization: [
+    { key: "commonfactor", name: "Common factor" },
+    { key: "diffsquares", name: "Difference of two squares" },
+    { key: "factorise", name: "Factorising a quadratic" },
+    { key: "solve", name: "Solve by factorising (= 0)" },
+    { key: "formula", name: "Quadratic formula" },
+  ],
+  coordgeo: [
+    { key: "gradient", name: "Gradient between two points" },
+    { key: "twopoints", name: "Equation of a line through two points" },
+    { key: "midpoint", name: "Midpoint of a line segment" },
+    { key: "distance", name: "Length of a line segment" },
+    { key: "perpgradient", name: "Perpendicular gradient" },
+    { key: "perpendicular", name: "Equation of a perpendicular line" },
+    { key: "fromgraph", name: "Reading a line's equation from a graph" },
+    { key: "rearrange", name: "Gradient/y-intercept from a rearranged equation" },
+  ],
+  graphicalsolutions: [
+    { key: "drawline", name: "Draw the graph of a line" },
+    { key: "curveintersect", name: "Solve by drawing a line onto a curve" },
+    { key: "linescross", name: "Where two lines cross" },
+  ],
+  transformations: [
+    { key: "identify", name: "Identify the transformation" },
+    { key: "translate", name: "Translation — find the vector" },
+    { key: "reflect", name: "Reflection — the mirror line" },
+    { key: "enlarge", name: "Enlargement — scale factor or centre" },
+    { key: "rotate", name: "Rotation — centre or description" },
+    { key: "drawimage", name: "Draw the image" },
+  ],
+  symmetry: [
+    { key: "lines", name: "Lines of symmetry" },
+    { key: "rotational", name: "Order of rotational symmetry" },
+  ],
+  probability: [
+    { key: "singlepick", name: "Single pick from a bag" },
+    { key: "spinners", name: "Two spinners / possibility diagrams" },
+    { key: "noreplace", name: "Without replacement (tree diagrams)" },
+    { key: "replace", name: "With replacement (independent repeats)" },
+    { key: "independent", name: "Independent events with given probabilities" },
+    { key: "cards", name: "Arranging digits into numbers" },
+    { key: "expectation", name: "Expected number of successes" },
+    { key: "reverse", name: "Reverse problems — find the total" },
+  ],
+  sets: [
+    { key: "shade", name: "Shade a region on a Venn diagram" },
+    { key: "place", name: "Place elements into a Venn diagram" },
+    { key: "counting", name: "Number of elements (n(A∪B) etc.)" },
+  ],
+  vectors: [
+    { key: "parallelogram", name: "Parallelogram" },
+    { key: "addvectors", name: "Adding vectors round a figure" },
+    { key: "reverse", name: "Reversing a vector" },
+    { key: "midpoint", name: "Midpoint" },
+    { key: "ratio", name: "Ratio point on a line" },
   ],
 };
 
