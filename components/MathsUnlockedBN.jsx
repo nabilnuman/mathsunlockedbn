@@ -9680,10 +9680,11 @@ function weeklyTopStudentStats(profiles) {
     return { rank, name: r.name, school: r.school, xp: r.tw, level: r.level, prestige: r.prestige, delta: prev ? prev - rank : null, avatar: r.avatar, cardBg: r.cardBg };
   });
 }
-function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
+function WeeklyTopStudentsSVG({ rows, weekLabel, totalStudents }) {
   const W = 1080, HEAD = 196, ROW = 108, FOOT = 80;
   const H = HEAD + rows.length * ROW + FOOT;
   const C = { navy: "#0E1520", card: "#18212C", teal: "#4FB0A3", ink: "#EAF0F4", mut: "#8FA0AE", green: "#4CAF6A", red: "#D2603F", amber: "#D9A441" };
+  const MEDAL = { 1: "#D4A017", 2: "#9AA3AE", 3: "#B07437" }; // gold / silver / bronze — matches the schools graphic
   const F = "Inter, Arial, sans-serif";
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
@@ -9726,6 +9727,7 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
         const lightCard = !isPlainCard && !bgSpec.dark;
         const nameFill = lightCard ? C.navy : C.ink;
         const subFill = lightCard ? "#4B5C6B" : C.mut;
+        const badgeColor = MEDAL[r.rank] || C.teal;
         return (
           <g key={`${r.name}-${i}`}>
             {paint && paint.def && <defs>{paint.def}</defs>}
@@ -9733,7 +9735,7 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
             {!isPlainCard && bgSpec.dark && !bgSpec.img && (
               <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill="#000000" fillOpacity="0.34" />
             )}
-            <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={C.teal} />
+            <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={badgeColor} />
             <text x="62" y={cy + 17} textAnchor="middle" fill={C.navy} fontFamily={F} fontWeight="900" fontSize="46">{r.rank}</text>
             <circle cx="174" cy={cy} r="36" fill={isGold ? "url(#avGold)" : "#22303C"} stroke={C.teal} strokeWidth="3" />
             <text x="174" y={cy + 12} textAnchor="middle" fontFamily={F} fontSize="30">{emoji}</text>
@@ -9749,7 +9751,7 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
         );
       })}
       <text x={W / 2} y={H - 42} textAnchor="middle" fill={C.mut} fontFamily={F} fontWeight="600" fontSize="21">
-        {Number(totalActive || 0).toLocaleString()} students active this week  ·  mathsunlockedbn.vercel.app
+        {Number(totalStudents || 0).toLocaleString()} students registered  ·  mathsunlockedbn.vercel.app
       </text>
     </svg>
   );
@@ -11670,7 +11672,7 @@ export default function MathsUnlockedBN() {
 
     if (kind === "students") {
       const top = weeklyTopStudentStats(all).slice(0, 10);
-      setGfx({ kind, rows: top, weekLabel, activeTotal: top.length });
+      setGfx({ kind, rows: top, weekLabel, activeTotal: top.length, totalStudents: all.length });
       return;
     }
 
@@ -14873,7 +14875,7 @@ export default function MathsUnlockedBN() {
             ) : (
               <div ref={gfxRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--grid)", maxWidth: 440, margin: "0 auto" }}>
                 {gfx.kind === "students"
-                  ? <WeeklyTopStudentsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} totalActive={gfx.activeTotal} />
+                  ? <WeeklyTopStudentsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} totalStudents={gfx.totalStudents} />
                   : <WeeklySchoolsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} totalStudents={gfx.totalStudents} />}
               </div>
             )}
