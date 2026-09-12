@@ -9439,13 +9439,13 @@ function weeklySchoolStats(profiles) {
     return { rank, name: b.name, active: b.active, pct, gain, delta: prev ? prev - rank : null };
   });
 }
-function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
+function WeeklySchoolsSVG({ rows, weekLabel, totalStudents }) {
   const W = 1080, HEAD = 196, ROW = 108, FOOT = 80;
   const H = HEAD + rows.length * ROW + FOOT;
   const C = { navy: "#0E1520", card: "#18212C", teal: "#4FB0A3", ink: "#EAF0F4", mut: "#8FA0AE", green: "#4CAF6A", red: "#D2603F", amber: "#D9A441" };
   const F = "Inter, Arial, sans-serif";
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
       <rect width={W} height={H} fill={C.navy} />
       <rect x="0" y="0" width={W} height={HEAD} fill={C.teal} />
       <text x="48" y="64" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="25" letterSpacing="3">MATHS UNLOCKED · BN</text>
@@ -9483,7 +9483,78 @@ function WeeklySchoolsSVG({ rows, weekLabel, activeTotal }) {
         );
       })}
       <text x={W / 2} y={H - 42} textAnchor="middle" fill={C.mut} fontFamily={F} fontWeight="600" fontSize="21">
-        {Number(activeTotal || 0).toLocaleString()} students active this week  ·  mathsunlockedbn.vercel.app
+        {Number(totalStudents || 0).toLocaleString()} students registered  ·  mathsunlockedbn.vercel.app
+      </text>
+    </svg>
+  );
+}
+
+// [{ rank, name, school, xp, level, prestige, delta }] ordered by this
+// week's XP — one row per student, no aggregation (weeklySchoolStats
+// groups by school; students are already one-row-each).
+function weeklyTopStudentStats(profiles) {
+  const wk = weekKey();
+  const rows = (profiles || [])
+    .filter((m) => m && m.name)
+    .map((m) => ({
+      uid: m.uid, name: m.name,
+      school: m.school && m.school !== SOLO_SCHOOL ? m.school : null,
+      tw: m.week && m.week.of === wk ? (m.week.xp || 0) : 0,
+      lw: m.lastWeek && m.lastWeek.xp ? m.lastWeek.xp : 0,
+      level: levelFromExp(totalExp(m)), prestige: m.prestige || 0,
+    }))
+    .filter((r) => r.tw > 0);
+  const lastRank = {};
+  [...rows].sort((a, b) => b.lw - a.lw).forEach((r, i) => { lastRank[r.uid] = r.lw > 0 ? i + 1 : null; });
+  rows.sort((a, b) => b.tw - a.tw || a.name.localeCompare(b.name));
+  return rows.map((r, i) => {
+    const rank = i + 1;
+    const prev = r.uid ? lastRank[r.uid] || null : null;
+    return { rank, name: r.name, school: r.school, xp: r.tw, level: r.level, prestige: r.prestige, delta: prev ? prev - rank : null };
+  });
+}
+function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
+  const W = 1080, HEAD = 196, ROW = 108, FOOT = 80;
+  const H = HEAD + rows.length * ROW + FOOT;
+  const C = { navy: "#0E1520", card: "#18212C", teal: "#4FB0A3", ink: "#EAF0F4", mut: "#8FA0AE", green: "#4CAF6A", red: "#D2603F", amber: "#D9A441" };
+  const F = "Inter, Arial, sans-serif";
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} xmlns="http://www.w3.org/2000/svg" style={{ width: "100%", height: "auto", display: "block", borderRadius: 14 }}>
+      <rect width={W} height={H} fill={C.navy} />
+      <rect x="0" y="0" width={W} height={HEAD} fill={C.teal} />
+      <text x="48" y="64" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="25" letterSpacing="3">MATHS UNLOCKED · BN</text>
+      <text x="48" y="128" fill="#FFFFFF" fontFamily={F} fontWeight="900" fontSize="50">TOP STUDENTS THIS WEEK</text>
+      <text x="48" y="170" fill={C.navy} fontFamily={F} fontWeight="700" fontSize="25">{weekLabel}</text>
+      <text x="1044" y="188" textAnchor="end" fill={C.navy} fontFamily={F} fontWeight="800" fontSize="14" letterSpacing="1">RANK · XP THIS WEEK</text>
+      {rows.map((r, i) => {
+        const y = HEAD + i * ROW;
+        const cy = y + ROW / 2 - 3;
+        const up = r.delta != null && r.delta > 0;
+        const down = r.delta != null && r.delta < 0;
+        const initials = r.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+        const nameLines = wrapLabel(r.name, 26, 2);
+        const one = nameLines.length === 1;
+        const sub = [r.school, `Lv ${r.level}${r.prestige ? ` · P${r.prestige}` : ""}`].filter(Boolean).join("  ·  ");
+        return (
+          <g key={`${r.name}-${i}`}>
+            <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill={C.card} />
+            <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={C.teal} />
+            <text x="62" y={cy + 17} textAnchor="middle" fill={C.navy} fontFamily={F} fontWeight="900" fontSize="46">{r.rank}</text>
+            <circle cx="174" cy={cy} r="36" fill="#22303C" stroke={C.teal} strokeWidth="3" />
+            <text x="174" y={cy + 10} textAnchor="middle" fill={C.ink} fontFamily={F} fontWeight="800" fontSize="26">{initials}</text>
+            {nameLines.map((ln, j) => (
+              <text key={j} x="232" y={one ? cy - 2 : cy - 18 + j * 29} fill={C.ink} fontFamily={F} fontWeight="800" fontSize={one ? "27" : "24"}>{ln}</text>
+            ))}
+            {sub && <text x="232" y={cy + (one ? 25 : 31)} fill={C.mut} fontFamily={F} fontWeight="600" fontSize="16">{sub}</text>}
+            <text x="1044" y={cy - 22} textAnchor="end" fill={up ? C.green : down ? C.red : C.amber} fontFamily={F} fontWeight="900" fontSize="22">
+              {r.delta == null ? "NEW" : r.delta === 0 ? "SAME" : `${up ? "▲" : "▼"} ${Math.abs(r.delta)}`}
+            </text>
+            <text x="1044" y={cy + 15} textAnchor="end" fill={C.ink} fontFamily={F} fontWeight="900" fontSize="34">{r.xp.toLocaleString()} XP</text>
+          </g>
+        );
+      })}
+      <text x={W / 2} y={H - 42} textAnchor="middle" fill={C.mut} fontFamily={F} fontWeight="600" fontSize="21">
+        {Number(totalActive || 0).toLocaleString()} students active this week  ·  mathsunlockedbn.vercel.app
       </text>
     </svg>
   );
@@ -11279,13 +11350,24 @@ export default function MathsUnlockedBN() {
     setDailyElapsed(Math.max(0, (Date.now() - anchored.startedAt) / 1000));
   }
   // ---- admin: weekly schools graphic ----
-  async function openWeeklyGfx() {
+  async function openWeeklyGfx(kind = "schools") {
     if (!isAdmin) return;
     setScreen("weeklygfx");
     setGfx(null);
     let all = [];
     try { all = await getLeaderboard(); } catch (e) { /* offline */ }
-    all = all.filter((m) => m && !m.is_teacher && !m.teacherSignup); // no teachers on the schools graphic
+    all = all.filter((m) => m && !m.is_teacher && !m.teacherSignup); // no teachers on either graphic
+    const mon = new Date(weekKey() + "T00:00:00");
+    const sun = new Date(mon.getTime() + 6 * 86400000);
+    const fmt = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const weekLabel = `${fmt(mon)} – ${fmt(sun)} ${sun.getFullYear()}`;
+
+    if (kind === "students") {
+      const top = weeklyTopStudentStats(all).slice(0, 10);
+      setGfx({ kind, rows: top, weekLabel, activeTotal: top.length });
+      return;
+    }
+
     const stats = weeklySchoolStats(all);
     const activeTotal = stats.reduce((s, r) => s + r.active, 0);
     const top = stats.slice(0, 10);
@@ -11298,10 +11380,7 @@ export default function MathsUnlockedBN() {
         return { ...r, logo };
       } catch (e) { return r; }
     }));
-    const mon = new Date(weekKey() + "T00:00:00");
-    const sun = new Date(mon.getTime() + 6 * 86400000);
-    const fmt = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    setGfx({ rows: withLogos, activeTotal, weekLabel: `${fmt(mon)} – ${fmt(sun)} ${sun.getFullYear()}` });
+    setGfx({ kind, rows: withLogos, activeTotal, totalStudents: all.length, weekLabel });
   }
   async function downloadGraphic() {
     const svgEl = gfxRef.current && gfxRef.current.querySelector("svg");
@@ -11319,13 +11398,18 @@ export default function MathsUnlockedBN() {
           c.width = vb.width * scale; c.height = vb.height * scale;
           const ctx = c.getContext("2d");
           ctx.fillStyle = "#0E1520"; ctx.fillRect(0, 0, c.width, c.height);
+          // Explicit destination size — an SVG data-URI with no width/height
+          // XML attributes (only viewBox) resolves its "natural size" for an
+          // Image() inconsistently across browsers, which was cropping the
+          // downloaded PNG. Forcing the draw to exactly vb.width×vb.height
+          // (already scaled by the transform below) makes it browser-proof.
           ctx.setTransform(scale, 0, 0, scale, 0, 0);
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, vb.width, vb.height);
           c.toBlob((blob) => {
             if (!blob) return fail();
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `mathsunlocked-top-schools-${weekKey()}.png`;
+            a.download = `mathsunlocked-top-${gfx && gfx.kind === "students" ? "students" : "schools"}-${weekKey()}.png`;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(a.href), 8000);
             done();
@@ -13808,7 +13892,8 @@ export default function MathsUnlockedBN() {
                             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
                           </select>
                           <button onClick={devMaxTopic} style={b}>Max selected → S+</button>
-                          <button onClick={openWeeklyGfx} style={{ ...b, color: "var(--blue)", borderColor: "var(--blue)" }}>📸 Weekly schools graphic</button>
+                          <button onClick={() => openWeeklyGfx("schools")} style={{ ...b, color: "var(--blue)", borderColor: "var(--blue)" }}>📸 Weekly schools graphic</button>
+                          <button onClick={() => openWeeklyGfx("students")} style={{ ...b, color: "var(--blue)", borderColor: "var(--blue)" }}>📸 Weekly top students graphic</button>
                           <button onClick={devHardReset} style={{ ...b, color: "var(--red)", borderColor: "var(--red)" }}>Reset → Level 1, Prestige 0</button>
                         </>
                       );
@@ -14450,33 +14535,39 @@ export default function MathsUnlockedBN() {
           );
         })()}
 
-        {/* WEEKLY SCHOOLS GRAPHIC (admin) */}
+        {/* WEEKLY SCHOOLS / STUDENTS GRAPHIC (admin) */}
         {screen === "weeklygfx" && (
           <div>
             <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
               <ArrowLeft size={14} /> back
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>📸 Weekly schools graphic</div>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>
+                📸 Weekly {gfx && gfx.kind === "students" ? "top students" : "schools"} graphic
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={openWeeklyGfx} style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> reload</button>
+                <button onClick={() => openWeeklyGfx(gfx ? gfx.kind : "schools")} style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> reload</button>
                 <button onClick={downloadGraphic} disabled={!gfx || !gfx.rows.length || gfxBusy} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", opacity: !gfx || gfxBusy ? 0.6 : 1 }}>
                   {gfxBusy ? "Rendering…" : "⬇ Download PNG"}
                 </button>
               </div>
             </div>
             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
-              Top 10 schools by XP earned this week, with rank change and share-of-vote gain vs last week. Drop a
-              square logo at <span className="mub-mono">public/school-logos/&lt;school-slug&gt;.png</span> and it
-              replaces the initials.
+              {gfx && gfx.kind === "students"
+                ? "Top 10 students by XP earned this week, with rank change vs last week."
+                : (<>Top 10 schools by XP earned this week, with rank change and share-of-vote gain vs last week. Drop a
+                    square logo at <span className="mub-mono">public/school-logos/&lt;school-slug&gt;.png</span> and it
+                    replaces the initials.</>)}
             </div>
             {!gfx ? (
               <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading leaderboard…</div>
             ) : gfx.rows.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--muted)" }}>No school has earned XP this week yet.</div>
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>{gfx.kind === "students" ? "No student has earned XP this week yet." : "No school has earned XP this week yet."}</div>
             ) : (
               <div ref={gfxRef} style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--grid)", maxWidth: 440, margin: "0 auto" }}>
-                <WeeklySchoolsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} activeTotal={gfx.activeTotal} />
+                {gfx.kind === "students"
+                  ? <WeeklyTopStudentsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} totalActive={gfx.activeTotal} />
+                  : <WeeklySchoolsSVG rows={gfx.rows} weekLabel={gfx.weekLabel} totalStudents={gfx.totalStudents} />}
               </div>
             )}
           </div>
