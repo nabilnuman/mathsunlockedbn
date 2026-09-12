@@ -888,3 +888,53 @@ as $$
 $$;
 revoke all on function public.admin_teachers() from public, anon;
 grant execute on function public.admin_teachers() to authenticated;
+
+-- Parent link, fetched on demand for a teacher/admin viewing it on a
+-- student's behalf (e.g. a parent lost the link). admin_students() and
+-- class_roster() both deliberately strip parentToken from their bulk
+-- payload (same treatment as pin), so this is the one targeted way to
+-- read (or, if the student never opened their own Settings to generate
+-- one, create) a single student's token.
+--   Admin: any student.  Teacher: only a student currently in one of
+--   their own classes.
+create or replace function public.get_parent_link(target_uid uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  authorized boolean;
+  prof jsonb;
+  tok text;
+begin
+  select
+    exists(select 1 from teachers where uid = auth.uid() and admin)
+    or exists(
+      select 1 from class_members m
+      join classes c on c.id = m.class_id
+      where m.student_uid = target_uid and c.teacher_uid = auth.uid()
+    )
+  into authorized;
+
+  if not authorized then
+    raise exception 'Not authorized';
+  end if;
+
+  select value::jsonb into prof from kv_store where scope = target_uid::text and key = 'profile';
+  if prof is null then
+    raise exception 'Student not found';
+  end if;
+
+  tok := prof ->> 'parentToken';
+  if tok is null or tok = '' then
+    tok := substr(replace(gen_random_uuid()::text, '-', ''), 1, 18); -- same shape as the client's genToken()
+    update kv_store set value = (prof || jsonb_build_object('parentToken', tok))::text
+      where scope = target_uid::text and key = 'profile';
+  end if;
+
+  return tok;
+end;
+$$;
+revoke all on function public.get_parent_link(uuid) from public, anon;
+grant execute on function public.get_parent_link(uuid) to authenticated;

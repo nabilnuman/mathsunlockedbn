@@ -15,6 +15,7 @@ import {
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
   submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers,
+  getParentLinkFor,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 import {
@@ -10060,6 +10061,11 @@ export default function MathsUnlockedBN() {
   const [pickBanner, setPickBanner] = useState(false); // profile-card badge banner picker
   const [showParentLink, setShowParentLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // A teacher/admin viewing another student's parent link on their behalf
+  // (e.g. the parent lost it) — { name, loading? } while fetching, then
+  // { name, url } or { name, error }.
+  const [staffParentLink, setStaffParentLink] = useState(null);
+  const [staffLinkCopied, setStaffLinkCopied] = useState(false);
   const [parentView, setParentView] = useState(null); // read-only progress for a ?p= link
   const [board, setBoard] = useState(null);           // { loading, schools, weekly, ... }
   const [boardTab, setBoardTab] = useState("school"); // "school" | "players" | "friends"
@@ -12855,6 +12861,33 @@ export default function MathsUnlockedBN() {
     copyParentLink(url);
   }
 
+  // Teacher/admin: fetch (or trigger server-side creation of) a specific
+  // student's parent link. Authorization is enforced in get_parent_link()
+  // itself — admin for anyone, a teacher only for their own class's
+  // students — so a stray call here just comes back as an error.
+  async function viewParentLinkFor(uid, name) {
+    setStaffLinkCopied(false);
+    setStaffParentLink({ name, loading: true });
+    try {
+      const tok = await getParentLinkFor(uid);
+      const url = typeof window !== "undefined" ? `${window.location.origin}/?p=${tok}` : "";
+      setStaffParentLink({ name, url });
+    } catch (e) {
+      setStaffParentLink({ name, error: e.message || "Couldn't load that student's parent link." });
+    }
+  }
+  async function shareStaffParentLink(url, name) {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try { await navigator.share({ title: "MathsUnlocked progress", text: `${name || "Student"}'s MathsUnlocked progress`, url }); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setStaffLinkCopied(true);
+      setTimeout(() => setStaffLinkCopied(false), 2000);
+    } catch (e) { /* clipboard unavailable — the link is shown for manual copy */ }
+  }
+
   // Client-side aggregation: pull every public profile in one RPC call,
   // then build the boards — all-time (top-10 leaderboard scores), this
   // week (XP earned since Monday) and individual players.
@@ -14309,6 +14342,8 @@ export default function MathsUnlockedBN() {
                           <span>·</span>
                           <span>🏆 {achPct}%</span>
                           <span style={{ flex: 1 }} />
+                          <span onClick={(e) => { e.stopPropagation(); viewParentLinkFor(s.uid, s.name); }}
+                            style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid var(--grid)", borderRadius: 7, padding: "2px 8px" }}>👪 Parent link</span>
                           <span onClick={(e) => { e.stopPropagation(); setPinResetFor(pinResetFor === s.uid ? null : s.uid); setPinResetVal(""); setPinResetMsg(null); if (!open) setAdminExpanded(s.uid); }}
                             style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid var(--grid)", borderRadius: 7, padding: "2px 8px" }}>🔑 Reset PIN</span>
                         </div>
@@ -15395,7 +15430,10 @@ export default function MathsUnlockedBN() {
                           })}
                         </div>
                       )}
-                      <button onClick={() => doRemoveMember(s.uid)} style={{ fontSize: 10.5, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", marginTop: 6, padding: 0, textDecoration: "underline" }}>remove from class</button>
+                      <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                        <button onClick={() => viewParentLinkFor(s.uid, s.name)} style={{ fontSize: 10.5, color: "var(--blue)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>👪 parent link</button>
+                        <button onClick={() => doRemoveMember(s.uid)} style={{ fontSize: 10.5, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>remove from class</button>
+                      </div>
                     </div>
                   );
                 })}
@@ -16906,6 +16944,37 @@ export default function MathsUnlockedBN() {
                 <button onClick={() => shareParentLink(url)} disabled={!url} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
                   {linkCopied ? "Copied!" : canShare ? "Share link" : "Copy link"}
                 </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {staffParentLink && (() => {
+        const canShare = typeof navigator !== "undefined" && !!navigator.share;
+        return (
+          <div onClick={() => setStaffParentLink(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 24, maxWidth: 420, fontFamily: "Inter, sans-serif" }}>
+              <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Parent Link — {staffParentLink.name}</div>
+              {staffParentLink.error ? (
+                <div style={{ fontSize: 13, color: "var(--red)", marginBottom: 14 }}>{staffParentLink.error}</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 14 }}>
+                    Send this to {staffParentLink.name}'s parent. It opens a read-only page with their level, grade in every topic, and achievements. Anyone with the link can view it, so only share it with the family it belongs to.
+                  </div>
+                  <div style={{ fontSize: 12, wordBreak: "break-all", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontFamily: "monospace" }}>
+                    {staffParentLink.loading ? "Loading…" : staffParentLink.url}
+                  </div>
+                </>
+              )}
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => setStaffParentLink(null)} style={{ fontSize: 13, background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: "var(--ink)" }}>Close</button>
+                {!staffParentLink.error && (
+                  <button onClick={() => shareStaffParentLink(staffParentLink.url, staffParentLink.name)} disabled={!staffParentLink.url} style={{ fontSize: 13, fontWeight: 700, background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                    {staffLinkCopied ? "Copied!" : canShare ? "Share link" : "Copy link"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
