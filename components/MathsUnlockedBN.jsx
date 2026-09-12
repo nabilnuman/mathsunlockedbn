@@ -8269,6 +8269,37 @@ function cardBgStyle(b, swatch) {
   if (b.img) { s.backgroundImage = b.img; s.backgroundSize = b.size; }
   return s;
 }
+// The weekly PNG graphics are plain SVG rasterised to canvas — no CSS custom
+// properties, no CSS background-image — so a CARD_BGS entry's `bg` string
+// needs turning into real SVG paint. Resolves var(--card)/var(--paper) to
+// the dark theme (the graphics are always dark-branded) and expands a
+// linear-gradient(...) of any number of stops into an SVG <linearGradient>;
+// a plain colour passes through untouched. `defId` must be unique per use.
+function svgPaintFor(cssBg, defId) {
+  const resolved = String(cssBg || "")
+    .replace(/var\(--card\)/g, THEMES.dark["--card"])
+    .replace(/var\(--paper\)/g, THEMES.dark["--paper"]);
+  const m = resolved.match(/^linear-gradient\(\s*([\d.]+)deg\s*,\s*(.+)\)$/);
+  if (!m) return { fill: resolved, def: null };
+  const deg = Number(m[1]);
+  const stopsRaw = m[2].split(",").map((s) => s.trim());
+  const n = stopsRaw.length;
+  const stops = stopsRaw.map((s, i) => {
+    const parts = s.split(/\s+/);
+    return { color: parts[0], pct: parts[1] ? parseFloat(parts[1]) : (i / (n - 1)) * 100 };
+  });
+  const rad = ((deg - 90) * Math.PI) / 180;
+  const x1 = 0.5 - Math.cos(rad) * 0.5, y1 = 0.5 - Math.sin(rad) * 0.5;
+  const x2 = 0.5 + Math.cos(rad) * 0.5, y2 = 0.5 + Math.sin(rad) * 0.5;
+  return {
+    fill: `url(#${defId})`,
+    def: (
+      <linearGradient id={defId} x1={x1} y1={y1} x2={x2} y2={y2}>
+        {stops.map((st, i) => <stop key={i} offset={`${st.pct}%`} stopColor={st.color} />)}
+      </linearGradient>
+    ),
+  };
+}
 // Paint a leaderboard row with the player's own card background + give
 // callers the matching text colours. `full` is the raw profile. The
 // default "graph" / "plain" backgrounds render as a normal card so the
@@ -9615,6 +9646,7 @@ function weeklyTopStudentStats(profiles) {
       tw: m.week && m.week.of === wk ? (m.week.xp || 0) : 0,
       lw: m.lastWeek && m.lastWeek.xp ? m.lastWeek.xp : 0,
       level: levelFromExp(totalExp(m)), prestige: m.prestige || 0,
+      avatar: m.avatar, cardBg: m.cardBg,
     }))
     .filter((r) => r.tw > 0);
   const lastRank = {};
@@ -9623,7 +9655,7 @@ function weeklyTopStudentStats(profiles) {
   return rows.map((r, i) => {
     const rank = i + 1;
     const prev = r.uid ? lastRank[r.uid] || null : null;
-    return { rank, name: r.name, school: r.school, xp: r.tw, level: r.level, prestige: r.prestige, delta: prev ? prev - rank : null };
+    return { rank, name: r.name, school: r.school, xp: r.tw, level: r.level, prestige: r.prestige, delta: prev ? prev - rank : null, avatar: r.avatar, cardBg: r.cardBg };
   });
 }
 function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
@@ -9637,6 +9669,12 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
         <pattern id="bgGrid2" width="36" height="36" patternUnits="userSpaceOnUse">
           <path d="M 36 0 L 0 0 0 36" fill="none" stroke={C.ink} strokeWidth="1.5" strokeOpacity="0.16" />
         </pattern>
+        {/* Matches avatarBg()'s gold backdrop for an S+ topic icon — an emoji
+            glyph can't be recoloured, so the gold shows as its backing instead. */}
+        <radialGradient id="avGold" cx="35%" cy="30%" r="75%">
+          <stop offset="0%" stopColor="#FFE9A8" />
+          <stop offset="100%" stopColor="#D9A73B" />
+        </radialGradient>
       </defs>
       <rect width={W} height={H} fill={C.navy} />
       <rect width={W} height={H} fill="url(#bgGrid2)" />
@@ -9650,25 +9688,41 @@ function WeeklyTopStudentsSVG({ rows, weekLabel, totalActive }) {
         const cy = y + ROW / 2 - 3;
         const up = r.delta != null && r.delta > 0;
         const down = r.delta != null && r.delta < 0;
-        const initials = r.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+        const emoji = avatarChar({ avatar: r.avatar });
+        const isGold = ((r.avatar) || "").startsWith("topicgold:");
         const nameLines = wrapLabel(r.name, 26, 2);
         const one = nameLines.length === 1;
         const sub = [r.school, `Lv ${r.level}${r.prestige ? ` · P${r.prestige}` : ""}`].filter(Boolean).join("  ·  ");
+        // Same "distinctive card = coloured row" treatment as the in-app
+        // leaderboard (boardRowSkin): only players who picked a non-default
+        // card stand out, and a dark-but-imageless gradient gets a black
+        // wash so light text stays readable on it.
+        const cardId = r.cardBg || "graph";
+        const isPlainCard = cardId === "graph" || cardId === "plain";
+        const bgSpec = CARD_BGS[cardId] || CARD_BGS.graph;
+        const paint = !isPlainCard ? svgPaintFor(bgSpec.bg, `cardbg${i}`) : null;
+        const lightCard = !isPlainCard && !bgSpec.dark;
+        const nameFill = lightCard ? C.navy : C.ink;
+        const subFill = lightCard ? "#4B5C6B" : C.mut;
         return (
           <g key={`${r.name}-${i}`}>
-            <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill={C.card} />
+            {paint && paint.def && <defs>{paint.def}</defs>}
+            <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill={isPlainCard ? C.card : paint.fill} />
+            {!isPlainCard && bgSpec.dark && !bgSpec.img && (
+              <rect x="14" y={y + 6} width={W - 28} height={ROW - 12} rx="14" fill="#000000" fillOpacity="0.34" />
+            )}
             <path d={`M14 ${y + 20} q0 -14 14 -14 h82 v${ROW - 12} h-82 q-14 0 -14 -14 z`} fill={C.teal} />
             <text x="62" y={cy + 17} textAnchor="middle" fill={C.navy} fontFamily={F} fontWeight="900" fontSize="46">{r.rank}</text>
-            <circle cx="174" cy={cy} r="36" fill="#22303C" stroke={C.teal} strokeWidth="3" />
-            <text x="174" y={cy + 10} textAnchor="middle" fill={C.ink} fontFamily={F} fontWeight="800" fontSize="26">{initials}</text>
+            <circle cx="174" cy={cy} r="36" fill={isGold ? "url(#avGold)" : "#22303C"} stroke={C.teal} strokeWidth="3" />
+            <text x="174" y={cy + 12} textAnchor="middle" fontFamily={F} fontSize="30">{emoji}</text>
             {nameLines.map((ln, j) => (
-              <text key={j} x="232" y={one ? cy - 2 : cy - 18 + j * 29} fill={C.ink} fontFamily={F} fontWeight="800" fontSize={one ? "27" : "24"}>{ln}</text>
+              <text key={j} x="232" y={one ? cy - 2 : cy - 18 + j * 29} fill={nameFill} fontFamily={F} fontWeight="800" fontSize={one ? "27" : "24"}>{ln}</text>
             ))}
-            {sub && <text x="232" y={cy + (one ? 25 : 31)} fill={C.mut} fontFamily={F} fontWeight="600" fontSize="16">{sub}</text>}
+            {sub && <text x="232" y={cy + (one ? 25 : 31)} fill={subFill} fontFamily={F} fontWeight="600" fontSize="16">{sub}</text>}
             <text x="1044" y={cy - 22} textAnchor="end" fill={up ? C.green : down ? C.red : C.amber} fontFamily={F} fontWeight="900" fontSize="22">
               {r.delta == null ? "NEW" : r.delta === 0 ? "SAME" : `${up ? "▲" : "▼"} ${Math.abs(r.delta)}`}
             </text>
-            <text x="1044" y={cy + 15} textAnchor="end" fill={C.ink} fontFamily={F} fontWeight="900" fontSize="34">{r.xp.toLocaleString()} XP</text>
+            <text x="1044" y={cy + 15} textAnchor="end" fill={nameFill} fontFamily={F} fontWeight="900" fontSize="34">{r.xp.toLocaleString()} XP</text>
           </g>
         );
       })}
