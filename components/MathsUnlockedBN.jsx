@@ -8746,10 +8746,34 @@ function StudentProfileView({ profile, viewerAch }) {
 /* The read-only page a parent sees at /?p=<token>. Leads with a plain-
    English summary (one grade, what's going well, what needs work), then
    the profile card + full topic list. */
+// A small line chart of grade (avgRankIdx, 0..RANK_ORDER.length-1) across
+// a handful of weekly points, oldest→newest — the parent-link page's
+// "is this working over time" trend, not a snapshot.
+function TrendSparkline({ points }) {
+  const W = 280, H = 56, pad = 8;
+  const maxIdx = RANK_ORDER.length - 1;
+  const X = (i) => pad + (i / Math.max(1, points.length - 1)) * (W - pad * 2);
+  const Y = (v) => H - pad - (Math.max(0, v) / maxIdx) * (H - pad * 2);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${X(i).toFixed(1)} ${Y(p.avgRankIdx).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} role="img" aria-label="grade trend over recent weeks">
+      <path d={path} fill="none" stroke="var(--blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((p, i) => (
+        <circle key={i} cx={X(i)} cy={Y(p.avgRankIdx)} r={i === points.length - 1 ? 4 : 2.5}
+          fill={i === points.length - 1 ? "var(--blue)" : "var(--card)"} stroke="var(--blue)" strokeWidth="1.5" />
+      ))}
+    </svg>
+  );
+}
+
 function ParentProgressView({ profile }) {
+  const [showAllTopics, setShowAllTopics] = useState(false);
+  const [openTopicId, setOpenTopicId] = useState(null);
+  const [showStreakDetail, setShowStreakDetail] = useState(false);
+
   const topics = profile.topics || {};
   const started = TOPICS.map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 })).filter((x) => x.r >= 0);
-  const avgIdx = started.length ? started.reduce((s, x) => s + x.r, 0) / started.length : -1;
+  const avgIdx = avgRankIdxOf(profile);
   const overall = rankDisplay(avgIdx >= 0 ? Math.round(avgIdx) : -1);
   const level = levelFromExp(totalExp(profile));
   const weak = [...started].sort((a, b) => a.r - b.r).filter((x) => x.r < RANK_ORDER.indexOf("A")).slice(0, 3);
@@ -8759,54 +8783,149 @@ function ParentProgressView({ profile }) {
     .map(([id, ts]) => ({ a: ACHIEVEMENTS.find((x) => x.id === id), ts }))
     .filter((x) => x.a).sort((a, b) => b.ts - a.ts).slice(0, 3);
   const weekXp = profile.week && profile.week.of === weekKey() && typeof profile.week.xp === "number" ? profile.week.xp : null;
+  const lastWeekXp = profile.lastWeek && typeof profile.lastWeek.xp === "number" ? profile.lastWeek.xp : null;
+  const xpTrend = weekXp != null && lastWeekXp != null ? weekXp - lastWeekXp : null;
+
+  // Grade trend: up to 8 past weekly snapshots (see bumpWeek) plus this
+  // week's live value, oldest→newest. Only starts existing from whenever
+  // this shipped — nothing is backfilled — so it may read as "not enough
+  // history yet" for a while on an existing account.
+  const weekHistory = Array.isArray(profile.weekHistory) ? profile.weekHistory : [];
+  const trendPts = [...weekHistory.filter((h) => h.avgRankIdx >= 0)];
+  if (avgIdx >= 0) trendPts.push({ of: "now", avgRankIdx: avgIdx });
+  const gradeTrend = trendPts.length >= 2 ? trendPts[trendPts.length - 1].avgRankIdx - trendPts[trendPts.length - 2].avgRankIdx : null;
+
   const stat = (label, value) => (
     <div style={{ textAlign: "center", flex: 1 }}>
       <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>{value}</div>
       <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
     </div>
   );
-  const topicLine = (x) => (
-    <span key={x.t.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 999, padding: "3px 9px", margin: "2px 4px 2px 0" }}>
-      {x.t.icon} {x.t.name} <strong style={{ color: rankDisplay(x.r).color }}>{rankDisplay(x.r).label}</strong>
-    </span>
-  );
+  const statBtnReset = { background: "none", border: "none", padding: 0, margin: 0, cursor: "pointer", font: "inherit", flex: 1 };
+
+  // One tappable row per weak/strong topic — expands into what's actually
+  // tracked per topic: current + lifetime-best rank, best streak, and the
+  // last-10 correct/wrong strip. (No per-question mistake log exists for
+  // free practice — only homework runs keep that level of detail — so
+  // this shows what's real rather than promising more.)
+  const topicRow = (x) => {
+    const open = openTopicId === x.t.id;
+    const hist = ((topics[x.t.id] || {}).history || []).slice(-10);
+    const best = rankDisplay(bestRankOf(profile, x.t.id));
+    const bestStreak = bestTopicStreakOf(profile, x.t.id);
+    return (
+      <div key={x.t.id} style={{ marginBottom: 6 }}>
+        <button onClick={() => setOpenTopicId(open ? null : x.t.id)} style={{
+          display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", boxSizing: "border-box",
+          background: "var(--paper)", border: `1px solid ${open ? "var(--blue)" : "var(--grid)"}`, borderRadius: 10,
+          padding: "8px 10px", cursor: "pointer",
+        }}>
+          <span style={{ fontSize: 15 }}>{x.t.icon}</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--ink)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.t.name}</span>
+          <strong style={{ color: rankDisplay(x.r).color, fontSize: 13, flexShrink: 0 }}>{rankDisplay(x.r).label}</strong>
+          <span style={{ fontSize: 10, color: "var(--muted)", flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▸</span>
+        </button>
+        {open && (
+          <div style={{ marginTop: 4, padding: "9px 11px", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, fontSize: 11.5 }}>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", color: "var(--muted)", marginBottom: hist.length ? 8 : 0 }}>
+              <span>Best ever: <strong style={{ color: best.color }}>{best.label}</strong></span>
+              <span>Best streak: <strong style={{ color: "var(--ink)" }}>{bestStreak}</strong></span>
+            </div>
+            {hist.length > 0 && (
+              <>
+                <div style={{ color: "var(--muted)", marginBottom: 4 }}>Last {hist.length} question{hist.length === 1 ? "" : "s"} attempted:</div>
+                <div style={{ display: "flex", gap: 3 }}>
+                  {hist.map((v, i) => (
+                    <span key={i} style={{ width: 16, height: 16, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 800, color: "var(--on-accent)", background: v ? "var(--green)" : "var(--red)" }}>{v ? "✓" : "✗"}</span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
-      <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, marginBottom: 16 }}>
-        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Currently working at about</div>
-        <div className="mub-display" style={{ fontSize: 32, fontWeight: 800, color: overall.color, lineHeight: 1.1 }}>
-          Grade {overall.label === "—" ? "—" : overall.label}
-        </div>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-          across {started.length} topic{started.length === 1 ? "" : "s"} practised · Level {level}
+      <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, marginBottom: 14 }}>
+        <div className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>{profile.name || "Student"}</div>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>
+          Level {level}{profile.school && profile.school !== SOLO_SCHOOL ? ` · ${profile.school}` : ""}
           {profile.last_active ? ` · last practised ${timeAgo(profile.last_active)}` : ""}
         </div>
+
+        <button onClick={() => setShowAllTopics(true)} style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 12, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+          <span className="mub-display" style={{ fontSize: 36, fontWeight: 800, color: overall.color, lineHeight: 1 }}>
+            {overall.label === "—" ? "Grade —" : `Grade ${overall.label}`}
+          </span>
+          {gradeTrend != null && Math.abs(gradeTrend) >= 0.4 && (
+            <span style={{ fontSize: 13, fontWeight: 700, color: gradeTrend > 0 ? "var(--green)" : "var(--red)" }}>
+              {gradeTrend > 0 ? "↑ improving" : "↓ slipping"}
+            </span>
+          )}
+        </button>
+        <div style={{ fontSize: 11, color: "var(--blue)", marginTop: 2 }}>across {started.length} topic{started.length === 1 ? "" : "s"} · tap for the full breakdown</div>
+
+        <div style={{ marginTop: 14 }}>
+          {trendPts.length >= 2 ? (
+            <>
+              <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Grade over the last {trendPts.length} weeks</div>
+              <TrendSparkline points={trendPts} />
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>A grade-over-time chart appears here after a couple more weeks of practice.</div>
+          )}
+        </div>
+
         <div style={{ display: "flex", gap: 4, marginTop: 14, borderTop: "1px solid var(--grid)", paddingTop: 12 }}>
           {stat("Correct", profile.totalCorrect || 0)}
-          {stat("Best streak", profile.bestStreak || 0)}
-          {stat("Day streak", profile.playStreak || 0)}
-          {weekXp != null && stat("XP this wk", weekXp)}
+          <button onClick={() => setShowStreakDetail((v) => !v)} style={statBtnReset}>{stat("Day streak", profile.playStreak || 0)}</button>
+          {weekXp != null && (
+            <div style={{ textAlign: "center", flex: 1 }}>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>{weekXp}</div>
+              <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>XP this wk</div>
+              {xpTrend != null && xpTrend !== 0 && (
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: xpTrend > 0 ? "var(--green)" : "var(--red)" }}>
+                  {xpTrend > 0 ? "↑" : "↓"} {Math.abs(xpTrend)} vs last wk
+                </div>
+              )}
+            </div>
+          )}
         </div>
+        {showStreakDetail && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--grid)", fontSize: 11.5, color: "var(--ink)", display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <span>🔥 Current streak: <strong>{profile.playStreak || 0}</strong> day{(profile.playStreak || 0) === 1 ? "" : "s"}</span>
+            <span>🏅 Best ever: <strong>{profile.bestPlayStreak || 0}</strong> days</span>
+            <span>🛟 Freezes left: <strong>{profile.streakFreezes || 0}</strong></span>
+            <span>✅ Best answer streak: <strong>{profile.bestStreak || 0}</strong></span>
+          </div>
+        )}
       </div>
 
-      {weak.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Needs work</div>
-          <div>{weak.map(topicLine)}</div>
+      {(weak.length > 0 || strong.length > 0) && (
+        <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          {weak.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Needs work</div>
+              {weak.map(topicRow)}
+            </>
+          )}
+          {strong.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: 0.5, marginTop: weak.length ? 12 : 0, marginBottom: 6 }}>Strong</div>
+              {strong.map(topicRow)}
+            </>
+          )}
+          {notStarted > 0 && (
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{notStarted} unlocked topic{notStarted === 1 ? "" : "s"} not started yet.</div>
+          )}
         </div>
-      )}
-      {strong.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Strong</div>
-          <div>{strong.map(topicLine)}</div>
-        </div>
-      )}
-      {notStarted > 0 && (
-        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>{notStarted} unlocked topic{notStarted === 1 ? "" : "s"} not started yet.</div>
       )}
 
       {recentAch.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Recent milestones</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {recentAch.map(({ a, ts }) => (
@@ -8818,23 +8937,30 @@ function ParentProgressView({ profile }) {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-        <ProfileCard profile={profile} />
-      </div>
+      {!showAllTopics ? (
+        <button onClick={() => setShowAllTopics(true)} style={{ width: "100%", fontSize: 12.5, fontWeight: 700, color: "var(--blue)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", cursor: "pointer", marginBottom: 14 }}>
+          See all {TOPICS.length} topics ▾
+        </button>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Every topic · lowest grade first</div>
+            <button onClick={() => setShowAllTopics(false)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>hide ▴</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8, marginBottom: 14 }}>
+            {[...TOPICS].map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 }))
+              .sort((a, b) => (a.r < 0 ? 99 : a.r) - (b.r < 0 ? 99 : b.r))
+              .map(({ t, r }) => (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
+                  <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: rankDisplay(r).color, flexShrink: 0 }}>{rankDisplay(r).label}</span>
+                </div>
+              ))}
+          </div>
+        </>
+      )}
 
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Every topic · lowest grade first</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
-        {[...TOPICS].map((t) => ({ t, r: (topics[t.id] || {}).highestRank ?? -1 }))
-          .sort((a, b) => (a.r < 0 ? 99 : a.r) - (b.r < 0 ? 99 : b.r))
-          .map(({ t, r }) => (
-            <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
-              <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
-              <span style={{ fontWeight: 700, fontSize: 12, color: rankDisplay(r).color, flexShrink: 0 }}>{rankDisplay(r).label}</span>
-            </div>
-          ))}
-      </div>
-
-      <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginTop: 22, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginTop: 8, lineHeight: 1.6 }}>
         MathsUnlocked BN · O-Level Maths (4024) practice<br />
         This page refreshes each time {profile.name || "your child"} next practises. Reload for the latest.
       </div>
@@ -9081,12 +9207,27 @@ function weeklyFocusId(wk = weekKey()) {
 }
 const FOCUS_XP_MULT = 2;
 
+// Average highestRank index across every topic the student has started —
+// the one number a "Grade X" summary (and the weekly trend below) are
+// both built from. -1 if nothing has been started yet.
+function avgRankIdxOf(profile) {
+  const topics = profile.topics || {};
+  const started = TOPICS.map((t) => (topics[t.id] || {}).highestRank ?? -1).filter((r) => r >= 0);
+  return started.length ? started.reduce((s, r) => s + r, 0) / started.length : -1;
+}
+
 // Roll the weekly XP bucket over on a new week (stashing last week's total
-// for the "champions" banner), then add this session's gain.
+// for the "champions" banner), then add this session's gain. Also keeps a
+// rolling 8-week history of {xp, avgRankIdx} — the parent-link page's
+// trend line — entirely inside the existing profile JSON (no new table);
+// it only starts accumulating from whenever this shipped, not backfilled.
 function bumpWeek(profile, gain) {
   const wk = weekKey();
   if (!profile.week || profile.week.of !== wk) {
-    if (profile.week && profile.week.xp > 0) profile.lastWeek = { of: profile.week.of, xp: profile.week.xp };
+    if (profile.week && profile.week.xp > 0) {
+      profile.lastWeek = { of: profile.week.of, xp: profile.week.xp };
+      profile.weekHistory = [...(profile.weekHistory || []), { of: profile.week.of, xp: profile.week.xp, avgRankIdx: avgRankIdxOf(profile) }].slice(-8);
+    }
     profile.week = { of: wk, xp: 0 };
   }
   if (gain > 0) profile.week.xp += gain;
