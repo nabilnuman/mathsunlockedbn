@@ -12,6 +12,12 @@
         -> notifies every student in the class, only if the caller
            is that class's teacher
 
+     { "kind": "hwdone", "id": "<assignments.id>" }
+        -> notifies that class's teacher, only if the caller is a
+           member of the class (a student completing it for the
+           first time — the client only ever calls this once, on
+           that first completion)
+
    Response: { ok: true, sent, pruned }  or  { error } with a 4xx/5xx.
 
    Secrets to set (Dashboard -> Edge Functions -> Manage secrets, or
@@ -93,6 +99,21 @@ Deno.serve(async (req) => {
         body: `${cls.name}: ${asg.title || `${asg.count} questions`}`,
         url: "/",
         tag: "hw-" + id,
+      };
+    } else if (kind === "hwdone") {
+      const { data: asg } = await admin.from("assignments").select("class_id,title,count").eq("id", id).maybeSingle();
+      if (!asg) return json({ error: "no such assignment" }, 404);
+      const { data: cls } = await admin.from("classes").select("teacher_uid,name").eq("id", asg.class_id).maybeSingle();
+      if (!cls) return json({ error: "no such class" }, 404);
+      const { data: member } = await admin.from("class_members").select("student_uid")
+        .eq("class_id", asg.class_id).eq("student_uid", caller).maybeSingle();
+      if (!member) return json({ error: "not in that class" }, 403);
+      targets = [cls.teacher_uid];
+      payload = {
+        title: "✅ Homework completed",
+        body: `${await displayName(admin, caller)} finished "${asg.title || `${asg.count} questions`}" (${cls.name})`,
+        url: "/",
+        tag: "hwdone-" + id + "-" + caller,
       };
     } else {
       return json({ error: "unknown kind" }, 400);

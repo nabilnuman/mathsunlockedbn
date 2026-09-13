@@ -13298,6 +13298,7 @@ export default function MathsUnlockedBN() {
         next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: (prevRec.attempts || 0) + 1, log: keepLog } };
         next.hwRun = null;
         hwComplete = { assignmentId: run.assignmentId, topicId: run.topicId, count: run.count, score: gotRight, best, improved: gotRight > (prev ?? -1), first: prev === undefined || prev === null };
+        if (hwComplete.first) notifyPush("hwdone", run.assignmentId); // teacher's first-completion ping
       } else {
         next.hwRun = { ...run, done, correct: gotRight, log };
       }
