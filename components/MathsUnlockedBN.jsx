@@ -9138,7 +9138,7 @@ function ParentProgressView({ profile }) {
             {hist.length > 0 && (
               <>
                 <div style={{ color: "var(--muted)", marginBottom: 4 }}>Last {hist.length} question{hist.length === 1 ? "" : "s"} attempted:</div>
-                <div style={{ display: "flex", gap: 3 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                   {hist.map((v, i) => (
                     <span key={i} style={{ width: 16, height: 16, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9.5, fontWeight: 800, color: "var(--on-accent)", background: v ? "var(--green)" : "var(--red)" }}>{v ? "✓" : "✗"}</span>
                   ))}
@@ -9228,20 +9228,49 @@ function ParentProgressView({ profile }) {
         )}
       </div>
 
+      {Array.isArray(profile.assignments) && profile.assignments.length > 0 && (
+        <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Homework</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {profile.assignments.map((a) => {
+              const p = assignmentProgress(profile, a);
+              const tomorrow = new Date(Date.now() + 86400000);
+              const dueTomorrow = !p.complete && !p.overdue && a.due_at && todayKey(new Date(a.due_at)) === todayKey(tomorrow);
+              const topicName = (TOPIC_BY_ID[a.topic_id] || {}).name || a.topic_id;
+              const label = a.title || `${a.count} ${topicName} questions`;
+              const statusColor = p.complete ? "var(--green)" : p.overdue ? "var(--red)" : dueTomorrow ? "var(--amber)" : "var(--muted)";
+              const statusText = p.complete
+                ? `✓ ${p.best}/${a.total}`
+                : p.overdue ? "❗️ Overdue"
+                : dueTomorrow ? "⚠️ Due tomorrow"
+                : a.due_at ? `Due ${new Date(a.due_at).toLocaleDateString()}` : "No due date";
+              return (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 10 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{label}</span>
+                  <span style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: statusColor }}>{statusText}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {(weak.length > 0 || strong.length > 0) && (
         <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 14, marginBottom: 14 }}>
-          {weak.length > 0 && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Needs work</div>
-              {weak.map(topicRow)}
-            </>
-          )}
-          {strong.length > 0 && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: 0.5, marginTop: weak.length ? 12 : 0, marginBottom: 6 }}>Strong</div>
-              {strong.map(topicRow)}
-            </>
-          )}
+          <div style={{ display: "flex", gap: 12 }}>
+            {weak.length > 0 && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Needs work</div>
+                {weak.map(topicRow)}
+              </div>
+            )}
+            {strong.length > 0 && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Strong</div>
+                {strong.map(topicRow)}
+              </div>
+            )}
+          </div>
           {notStarted > 0 && (
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{notStarted} unlocked topic{notStarted === 1 ? "" : "s"} not started yet.</div>
           )}

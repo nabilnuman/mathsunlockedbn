@@ -119,7 +119,11 @@ grant execute on function public.get_leaderboard(boolean) to authenticated;
 --  5. PARENT LINK
 --     A parent isn't signed in, so ?p=<token> resolves through
 --     this function: one profile matched by its share token,
---     again with the secrets stripped.
+--     again with the secrets stripped. Also embeds the student's
+--     live homework list (from any class they belong to) since a
+--     parent has no session to query `assignments`/`class_members`
+--     directly — completion itself still reads from the profile's
+--     own `hw` field, already included above.
 -- ============================================================
 create or replace function public.get_parent_view(tok text)
 returns jsonb
@@ -128,8 +132,21 @@ stable
 security definer
 set search_path = public
 as $$
-  select jsonb_build_object('last_active', updated_at)
-         || ((value::jsonb) - 'pin' - 'parentToken')
+  select (jsonb_build_object('last_active', updated_at)
+         || ((value::jsonb) - 'pin' - 'parentToken'))
+         || jsonb_build_object('assignments', coalesce((
+              select jsonb_agg(jsonb_build_object(
+                       'id', a.id,
+                       'title', a.title,
+                       'topic_id', a.topic_id,
+                       'count', a.count,
+                       'due_at', a.due_at
+                     ) order by a.due_at nulls last, a.created_at)
+              from assignments a
+              join class_members cm on cm.class_id = a.class_id
+              where cm.student_uid = kv_store.scope::uuid
+                and not a.archived
+            ), '[]'::jsonb))
   from kv_store
   where key = 'profile'
     and value is not null
