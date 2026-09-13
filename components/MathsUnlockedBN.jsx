@@ -15393,7 +15393,12 @@ export default function MathsUnlockedBN() {
               {!adminLoading && !engagementMetrics && (
                 <div style={{ fontSize: 13, color: "var(--muted)" }}>Couldn't load metrics.</div>
               )}
-              {engagementMetrics && (() => {
+              {!adminLoading && engagementMetrics && engagementMetrics.error && (
+                <div style={{ fontSize: 13, color: "var(--red)", background: "var(--paper)", border: "1px solid var(--red)", borderRadius: 10, padding: "10px 12px" }}>
+                  {engagementMetrics.error}
+                </div>
+              )}
+              {engagementMetrics && !engagementMetrics.error && (() => {
                 const m = engagementMetrics;
                 const card = (label, value, sub) => (
                   <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
