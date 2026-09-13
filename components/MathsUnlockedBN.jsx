@@ -4349,25 +4349,37 @@ const TOPICS = [
         prompt: `From the speed–time graph, find the acceleration during the first ${t1} s in m/s²`,
         motion: { pts, ...stg, highlight: [0, 1] },
         answer: `${v1 / t1}`, hint: "acceleration = gradient",
-        steps: [`Acceleration = gradient = ${v1} ÷ ${t1} = ${v1 / t1} m/s²`],
+        steps: [
+          `Read from the graph: speed rises from 0 to ${v1} m/s over the first ${t1} s`,
+          `Acceleration = gradient = ${v1} ÷ ${t1} = ${v1 / t1} m/s²`,
+        ],
       };
       if (kind === "decel") return {
         prompt: `From the speed–time graph, find the deceleration during the last ${decel} s in m/s²`,
         motion: { pts, ...stg, highlight: [2, 3] },
         answer: `${v1 / decel}`, hint: "deceleration = size of the gradient",
-        steps: [`Deceleration = gradient size = ${v1} ÷ ${decel} = ${v1 / decel} m/s²`],
+        steps: [
+          `Read from the graph: speed falls from ${v1} m/s to 0 over the last ${decel} s`,
+          `Deceleration = gradient size = ${v1} ÷ ${decel} = ${v1 / decel} m/s²`,
+        ],
       };
       if (kind === "distTri") return {
         prompt: `From the speed–time graph, find the distance travelled in the first ${t1} s in m`,
         motion: { pts, ...stg, highlight: [0, 1], shadeFrom: 0, shadeTo: t1 },
         answer: `${(t1 * v1) / 2}`, hint: "distance = area under the graph",
-        steps: [`Area of the triangle = ½ × base × height`, `= ½ × ${t1} × ${v1} = ${(t1 * v1) / 2} m`],
+        steps: [
+          `Read from the graph: speed reaches ${v1} m/s after ${t1} s`,
+          `Area of the triangle = ½ × base × height`, `= ½ × ${t1} × ${v1} = ${(t1 * v1) / 2} m`,
+        ],
       };
       if (kind === "distRect") return {
         prompt: `From the speed–time graph, find the distance travelled while the speed is constant, in m`,
         motion: { pts, ...stg, highlight: [1, 2], shadeFrom: t1, shadeTo: t2 },
         answer: `${cruise * v1}`, hint: "distance = area under the graph",
-        steps: [`Area of the rectangle = ${cruise} × ${v1} = ${cruise * v1} m`],
+        steps: [
+          `Read from the graph: speed stays constant at ${v1} m/s for ${cruise} s`,
+          `Area of the rectangle = ${cruise} × ${v1} = ${cruise * v1} m`,
+        ],
       };
       const total = (t1 * v1) / 2 + cruise * v1 + (decel * v1) / 2;
       return {
@@ -4375,6 +4387,7 @@ const TOPICS = [
         motion: { pts, ...stg, shadeFrom: 0, shadeTo: t3 },
         answer: `${total}`, hint: "distance = total area under the graph",
         steps: [
+          `Read from the graph: peak speed ${v1} m/s — ${t1} s speeding up, ${cruise} s constant, ${decel} s slowing down`,
           `Split into triangle + rectangle + triangle`,
           `= ½·${t1}·${v1}  +  ${cruise}·${v1}  +  ½·${decel}·${v1}`,
           `= ${(t1 * v1) / 2} + ${cruise * v1} + ${(decel * v1) / 2} = ${total} m`,
@@ -8740,8 +8753,15 @@ function StepPracticeModal({ question, onClose, playCorrect, playWrong }) {
     if (isLast) onClose(); else setStepIdx((i) => i + 1);
   }
   const canAdvance = !choice || correct;
+  const qq = question && question.prompt ? splitPrompt(question.prompt) : null;
   return (
     <EditSheet title="🪜 Step-by-step practice" onClose={onClose}>
+      {qq && (
+        <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--grid)" }}>
+          <div className="mub-mono" style={{ fontSize: qq.expr ? 12.5 : 15, lineHeight: 1.5, color: qq.expr ? "var(--muted)" : "var(--ink)" }}><MathText text={qq.lead} /></div>
+          {qq.expr && <div className="mub-mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}><MathText text={qq.expr} /></div>}
+        </div>
+      )}
       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
         Step {stepIdx + 1} of {total}
       </div>
