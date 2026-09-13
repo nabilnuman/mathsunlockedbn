@@ -279,8 +279,17 @@ function checkIndexForm(input, base, exp) {
 // Standard form helpers. Accepts a*10^b, a×10^b, a x 10^b, aEb.
 function parseSF(s) {
   const t = String(s).replace(/\s|,/g, "").replace(/×/g, "*").replace(/x10/gi, "*10");
-  const m = t.match(/^(-?\d+(?:\.\d+)?)(?:\*10\^?|[eE])(-?\d+)$/);
-  return m ? { mant: parseFloat(m[1]), exp: parseInt(m[2], 10) } : null;
+  // full explicit form: mantissa *10^exp / *10exp / eExp
+  let m = t.match(/^(-?\d+(?:\.\d+)?)(?:\*10\^?|[eE])(-?\d+)$/);
+  if (m) return { mant: parseFloat(m[1]), exp: parseInt(m[2], 10) };
+  // "...*10" with no exponent shown at all — the ×10¹ is implied
+  m = t.match(/^(-?\d+(?:\.\d+)?)\*10\^?$/);
+  if (m) return { mant: parseFloat(m[1]), exp: 1 };
+  // a bare number, no ×10 at all — the ×10⁰ is implied (only ever valid
+  // when the mantissa range check below actually needs exp 0)
+  m = t.match(/^(-?\d+(?:\.\d+)?)$/);
+  if (m) return { mant: parseFloat(m[1]), exp: 0 };
+  return null;
 }
 function isStdForm(s, value) {
   const p = parseSF(s);
