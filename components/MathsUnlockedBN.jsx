@@ -9240,7 +9240,7 @@ function ParentProgressView({ profile }) {
               const label = a.title || `${a.count} ${topicName} questions`;
               const statusColor = p.complete ? "var(--green)" : p.overdue ? "var(--red)" : dueTomorrow ? "var(--amber)" : "var(--muted)";
               const statusText = p.complete
-                ? `✓ ${p.best}/${a.total}`
+                ? `✓ ${p.best}/${p.total}`
                 : p.overdue ? "❗️ Overdue"
                 : dueTomorrow ? "⚠️ Due tomorrow"
                 : a.due_at ? `Due ${new Date(a.due_at).toLocaleDateString()}` : "No due date";
