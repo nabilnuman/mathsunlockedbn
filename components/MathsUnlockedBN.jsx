@@ -9033,18 +9033,32 @@ function StudentProfileView({ profile, viewerAch }) {
 // a handful of weekly points, oldest→newest — the parent-link page's
 // "is this working over time" trend, not a snapshot.
 function TrendSparkline({ points }) {
-  const W = 280, H = 56, pad = 8;
+  const W = 280, H = 70, padX = 10, padTop = 16, padBottom = 10;
   const maxIdx = RANK_ORDER.length - 1;
-  const X = (i) => pad + (i / Math.max(1, points.length - 1)) * (W - pad * 2);
-  const Y = (v) => H - pad - (Math.max(0, v) / maxIdx) * (H - pad * 2);
+  const X = (i) => padX + (i / Math.max(1, points.length - 1)) * (W - padX * 2);
+  const Y = (v) => H - padBottom - (Math.max(0, v) / maxIdx) * (H - padTop - padBottom);
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${X(i).toFixed(1)} ${Y(p.avgRankIdx).toFixed(1)}`).join(" ");
+  // Label every point when there are few (the week view's daily dots);
+  // beyond that just the two ends, so a month/year of points doesn't
+  // turn into an unreadable pile of overlapping grade letters.
+  const labelAll = points.length <= 8;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} role="img" aria-label="grade trend over recent weeks">
       <path d={path} fill="none" stroke="var(--blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {points.map((p, i) => (
-        <circle key={i} cx={X(i)} cy={Y(p.avgRankIdx)} r={i === points.length - 1 ? 4 : 2.5}
-          fill={i === points.length - 1 ? "var(--blue)" : "var(--card)"} stroke="var(--blue)" strokeWidth="1.5" />
-      ))}
+      {points.map((p, i) => {
+        const cx = X(i), cy = Y(p.avgRankIdx);
+        const showLabel = labelAll || i === 0 || i === points.length - 1;
+        const rd = rankDisplay(Math.round(p.avgRankIdx));
+        return (
+          <g key={i}>
+            <circle cx={cx} cy={cy} r={i === points.length - 1 ? 4 : 2.5}
+              fill={i === points.length - 1 ? "var(--blue)" : "var(--card)"} stroke="var(--blue)" strokeWidth="1.5" />
+            {showLabel && (
+              <text x={cx} y={cy - 7} textAnchor="middle" fontSize="9" fontWeight="800" fill={rd.color}>{rd.label}</text>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }
