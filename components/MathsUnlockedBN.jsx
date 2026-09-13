@@ -14,7 +14,7 @@ import {
   loadAssignments, createAssignment, deleteAssignment, setAssignmentArchived, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
-  submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers,
+  submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers, adminEngagementMetrics,
   getParentLinkFor,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
@@ -9738,7 +9738,7 @@ const emptyProfile = () => ({
   consecWrong: 0, nightOwl: false, comeback: false, solvedSurd: false, got67: false,
   prestige: 0, prestigeAt: [], keys: 0, keyedTopics: [], levelReachedAt: {},
   bonusExp: 0, daily: null, milestones: {}, week: null, lastWeek: null, weekHistory: [],
-  day: null, dayHistory: [],
+  day: null, dayHistory: [], badSessions: [], // { at, returned } — a real (unfrozen) streak break; returned tells whether they came back within 48h, resolved the next time they open the app
   blitzBest: 0, mixedStreak: 0, bestMixedStreak: 0,
   boosts: 0, boostUntil: 0, hints: 0, shields: 0, perks: [], soundPack: "default",
   avatar: "grad", avatarFrame: "plain", banner: [], bannerColor: "plain",
@@ -10930,6 +10930,7 @@ export default function MathsUnlockedBN() {
   const [adminExpanded, setAdminExpanded] = useState(null); // admin table: which student row is expanded
   const [adminTab, setAdminTab] = useState("students"); // "students" | "teachers"
   const [adminTeacherRows, setAdminTeacherRows] = useState(null); // admin_teachers(); null = not loaded
+  const [engagementMetrics, setEngagementMetrics] = useState(null); // get_engagement_metrics(); null = not loaded
   const [adminSort, setAdminSort] = useState("active"); // "active" | "name" | "level"
   const [pinResetVal, setPinResetVal] = useState("");
   const [pinResetBusy, setPinResetBusy] = useState(false);
@@ -11416,6 +11417,15 @@ export default function MathsUnlockedBN() {
     if (newDay || newWeek) {
       const n = JSON.parse(JSON.stringify(profile));
       if (newDay) {
+        // Resolve any earlier streak-break still awaiting its 48h answer —
+        // "returned" means this new session (a real later app-open, never
+        // the same session that logged the break) landed inside that
+        // window. Must happen before today's own break (if any) is logged
+        // below, so a brand-new entry never resolves itself.
+        const nowT = Date.now();
+        n.badSessions = (n.badSessions || [])
+          .map((b) => (b.returned == null ? { ...b, returned: nowT - b.at <= 48 * 3600 * 1000 } : b))
+          .slice(-30);
         // Daily login streak — consecutive calendar days the app was opened.
         // A missed day resets it to 1 unless Streak Freezes cover the gap
         // (auto-consumed, one per missed day).
@@ -11431,6 +11441,9 @@ export default function MathsUnlockedBN() {
             n.playStreak = (n.playStreak || 0) + 1;
             n.streakFrozeOn = today; // → "streak saved" toast
           } else {
+            // A real, un-frozen break — only log it if there was an actual
+            // streak worth losing (going 0/1 → 1 isn't a loss to measure).
+            if ((n.playStreak || 0) > 1) n.badSessions = [...n.badSessions, { at: nowT, returned: null }].slice(-30);
             n.playStreak = 1;
           }
         }
@@ -13406,6 +13419,13 @@ export default function MathsUnlockedBN() {
     } catch (e) { setAdminTeacherRows([]); }
     setAdminLoading(false);
   }
+
+  async function loadEngagementMetrics() {
+    setAdminLoading(true);
+    try { setEngagementMetrics(await adminEngagementMetrics()); }
+    catch (e) { setEngagementMetrics(null); }
+    setAdminLoading(false);
+  }
   function openAdmin() {
     setScreen("admin");
     setAdminTab("students");
@@ -15218,14 +15238,14 @@ export default function MathsUnlockedBN() {
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Admin</div>
-              <button onClick={() => (adminTab === "students" ? loadStudents() : loadAdminTeachers())} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={() => (adminTab === "students" ? loadStudents() : adminTab === "teachers" ? loadAdminTeachers() : loadEngagementMetrics())} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {[["students", `Students${students.length ? ` (${students.length})` : ""}`], ["teachers", `Teachers${adminTeacherRows ? ` (${adminTeacherRows.length})` : ""}`]].map(([k, label]) => (
-                <button key={k} onClick={() => { setAdminTab(k); if (k === "teachers" && adminTeacherRows === null) loadAdminTeachers(); }} style={{
+              {[["students", `Students${students.length ? ` (${students.length})` : ""}`], ["teachers", `Teachers${adminTeacherRows ? ` (${adminTeacherRows.length})` : ""}`], ["metrics", "Metrics"]].map(([k, label]) => (
+                <button key={k} onClick={() => { setAdminTab(k); if (k === "teachers" && adminTeacherRows === null) loadAdminTeachers(); if (k === "metrics" && engagementMetrics === null) loadEngagementMetrics(); }} style={{
                   flex: 1, fontSize: 12.5, fontWeight: 700, padding: "8px 10px", borderRadius: 10, cursor: "pointer",
                   color: adminTab === k ? "var(--on-accent)" : "var(--muted)",
                   background: adminTab === k ? "var(--blue)" : "var(--card)",
@@ -15365,6 +15385,46 @@ export default function MathsUnlockedBN() {
                       ))}
                     </div>
                   </>
+                );
+              })()}
+            </>)}
+
+            {adminTab === "metrics" && (<>
+              {!adminLoading && !engagementMetrics && (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Couldn't load metrics.</div>
+              )}
+              {engagementMetrics && (() => {
+                const m = engagementMetrics;
+                const card = (label, value, sub) => (
+                  <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+                    <div className="mub-display" style={{ fontSize: 26, fontWeight: 800, color: "var(--ink)" }}>{value}</div>
+                    {sub && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>{sub}</div>}
+                  </div>
+                );
+                return (
+                  <div>
+                    {card(
+                      "Returned on a later day",
+                      `${m.pct_returned_any_day ?? "—"}%`,
+                      `${m.returned_any_day ?? 0} of ${m.total_students ?? 0} students ever came back after signup`
+                    )}
+                    {card(
+                      "Median topics at rank C+",
+                      m.median_topics_c_plus ?? "—",
+                      `across ${m.active_students_30d ?? 0} students active in the last 30 days`
+                    )}
+                    {card(
+                      "Return within 48h of a broken streak",
+                      m.resolved_bad_sessions ? `${m.pct_returned_within_48h_of_bad_session}%` : "Not enough data yet",
+                      m.resolved_bad_sessions
+                        ? `${m.returned_within_48h_of_bad_session} of ${m.resolved_bad_sessions} real streak breaks saw a comeback`
+                        : "Needs at least one resolved streak-break — check back in a few days"
+                    )}
+                    <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
+                      Computed {m.computed_at ? timeAgo(m.computed_at) : "just now"}
+                    </div>
+                  </div>
                 );
               })()}
             </>)}

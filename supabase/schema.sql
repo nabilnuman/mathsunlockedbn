@@ -955,3 +955,105 @@ end;
 $$;
 revoke all on function public.get_parent_link(uuid) from public, anon;
 grant execute on function public.get_parent_link(uuid) to authenticated;
+
+-- ============================================================
+--  16. ENGAGEMENT METRICS
+--     The three numbers worth checking in on (see the app's own
+--     "innovation accounting" notes): return-any-day retention,
+--     median topics reaching rank C+ among active (last 30d)
+--     students, and % who come back within 48h of a real streak
+--     break (profile.badSessions — see bumpWeek's daily-rollover
+--     effect in MathsUnlockedBN.jsx). Admin-only; computed live on
+--     every call, nothing cached.
+-- ============================================================
+create or replace function public.get_engagement_metrics()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with profiles as (
+    select scope, value::jsonb as v, updated_at
+    from kv_store
+    where key = 'profile'
+      and value is not null and value <> ''
+      and (value::jsonb) ? 'name'
+      and coalesce((value::jsonb ->> 'name'), '') <> ''
+      and scope not in (select uid::text from teachers)
+      and coalesce((value::jsonb ->> 'teacherSignup')::boolean, false) = false
+  ),
+  retention as (
+    select
+      count(*) as total_students,
+      count(*) filter (
+        where updated_at::date > to_timestamp(((v ->> 'createdAt')::bigint) / 1000.0)::date
+      ) as returned_any_day
+    from profiles
+    where (v ->> 'createdAt') is not null
+  ),
+  active as (
+    select scope, v from profiles where updated_at > now() - interval '30 days'
+  ),
+  topic_keys as (
+    select a.scope, k.key as topic_id
+    from active a,
+    lateral (
+      select jsonb_object_keys(coalesce(a.v -> 'topics', '{}'::jsonb)) as key
+      union
+      select jsonb_object_keys(coalesce(a.v -> 'bestRanks', '{}'::jsonb)) as key
+    ) k
+  ),
+  best_ranks as (
+    select
+      tk.scope,
+      greatest(
+        coalesce((a.v -> 'bestRanks' ->> tk.topic_id)::numeric, -1),
+        coalesce((a.v -> 'topics' -> tk.topic_id ->> 'highestRank')::numeric, -1)
+      ) as best
+    from topic_keys tk join active a on a.scope = tk.scope
+  ),
+  per_student as (
+    select
+      a.scope,
+      coalesce((select count(*) from best_ranks b where b.scope = a.scope and b.best >= 3), 0) as topics_c_plus
+    from active a
+  ),
+  progress as (
+    select
+      count(*) as active_students,
+      percentile_cont(0.5) within group (order by topics_c_plus) as median_topics_c_plus
+    from per_student
+  ),
+  comeback as (
+    -- Counted per bad-session EVENT, not per student (a student who broke
+    -- their streak twice contributes two events) — so both numbers share
+    -- the same unit.
+    select
+      (
+        select count(*)
+        from profiles p, jsonb_array_elements(coalesce(p.v -> 'badSessions', '[]'::jsonb)) bs
+        where (bs ->> 'returned') is not null
+      ) as resolved_bad_sessions,
+      (
+        select count(*)
+        from profiles p, jsonb_array_elements(coalesce(p.v -> 'badSessions', '[]'::jsonb)) bs
+        where (bs ->> 'returned')::boolean = true
+      ) as returned_within_48h
+  )
+  select jsonb_build_object(
+    'total_students', (select total_students from retention),
+    'returned_any_day', (select returned_any_day from retention),
+    'pct_returned_any_day', (select round(100.0 * returned_any_day / nullif(total_students, 0), 1) from retention),
+    'active_students_30d', (select active_students from progress),
+    'median_topics_c_plus', (select median_topics_c_plus from progress),
+    'resolved_bad_sessions', (select resolved_bad_sessions from comeback),
+    'returned_within_48h_of_bad_session', (select returned_within_48h from comeback),
+    'pct_returned_within_48h_of_bad_session',
+      (select round(100.0 * returned_within_48h / nullif(resolved_bad_sessions, 0), 1) from comeback),
+    'computed_at', now()
+  )
+  where exists (select 1 from teachers where uid = auth.uid() and admin)
+$$;
+revoke all on function public.get_engagement_metrics() from public, anon;
+grant execute on function public.get_engagement_metrics() to authenticated;
