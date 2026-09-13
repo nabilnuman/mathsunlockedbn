@@ -4609,12 +4609,25 @@ const TOPICS = [
       // — 3×3 = 9 combinations, grouped into 3 subtopics by askFor.
       const askFor = pick(["length", "area", "volume"]);
       const givenAs = pick(["length", "area", "volume"]);
-      const NOUNS = [["triangles", "triangle"], ["cylinders", "cylinder"], ["boxes", "box"], ["models", "model"], ["photo frames", "photo frame"], ["solids", "solid"]];
-      const [noun, nounSing] = pick(NOUNS);
+      // Every shape names its OWN length-type dimension — "corresponding
+      // lengths" is meaningless for e.g. a cylinder, which has a height, a
+      // radius and a circumference all at once. Area/volume need no such
+      // disambiguation (a shape has exactly one of each), so only `dim`
+      // (the length-specific word) varies by noun.
+      const NOUNS = [
+        { pl: "triangles", sing: "triangle", dim: "side length" },
+        { pl: "cylinders", sing: "cylinder", dim: "height" },
+        { pl: "cones", sing: "cone", dim: "height" },
+        { pl: "boxes", sing: "box", dim: "edge length" },
+        { pl: "photo frames", sing: "photo frame", dim: "width" },
+        { pl: "ladders", sing: "ladder", dim: "length" },
+      ];
+      const shape = pick(NOUNS);
+      const noun = shape.pl, nounSing = shape.sing;
       const k = randInt(2, 3);
       const pow = { length: 1, area: 2, volume: 3 };
       const unit = { length: "cm", area: "cm²", volume: "cm³" };
-      const word = { length: "length", area: "area", volume: "volume" };
+      const wordFor = (kind) => (kind === "length" ? shape.dim : kind === "area" ? "area" : "volume");
 
       const smallGiven = randInt(2, 9), bigGiven = smallGiven * (k ** pow[givenAs]);
       const smallAsk = randInt(2, 20), bigAsk = smallAsk * (k ** pow[askFor]);
@@ -4625,14 +4638,14 @@ const TOPICS = [
         ? `Area scale factor = ${bigGiven} ÷ ${smallGiven} = ${k * k},  so length scale factor = ${k}`
         : `Volume scale factor = ${bigGiven} ÷ ${smallGiven} = ${k * k * k},  so length scale factor = ${k}`;
       const applyStep = askFor === "length"
-        ? `Larger ${word[askFor]} = ${smallAsk} × ${k} = ${bigAsk} ${unit[askFor]}`
+        ? `Larger ${wordFor(askFor)} = ${smallAsk} × ${k} = ${bigAsk} ${unit[askFor]}`
         : askFor === "area"
-        ? `Area scale factor = ${k}² = ${k * k}.  Larger ${word[askFor]} = ${smallAsk} × ${k * k} = ${bigAsk} ${unit[askFor]}`
-        : `Volume scale factor = ${k}³ = ${k * k * k}.  Larger ${word[askFor]} = ${smallAsk} × ${k * k * k} = ${bigAsk} ${unit[askFor]}`;
+        ? `Area scale factor = ${k}² = ${k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k} = ${bigAsk} ${unit[askFor]}`
+        : `Volume scale factor = ${k}³ = ${k * k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k * k} = ${bigAsk} ${unit[askFor]}`;
 
       return {
         sub: askFor,
-        prompt: `Two similar ${noun} have corresponding ${word[givenAs]}s ${smallGiven} ${unit[givenAs]} and ${bigGiven} ${unit[givenAs]}.\nThe smaller ${nounSing} has ${word[askFor]} ${smallAsk} ${unit[askFor]}. Find the ${word[askFor]} of the larger one`,
+        prompt: `Two similar ${noun} have corresponding ${wordFor(givenAs)}s ${smallGiven} ${unit[givenAs]} and ${bigGiven} ${unit[givenAs]}.\nThe smaller ${nounSing} has ${wordFor(askFor)} ${smallAsk} ${unit[askFor]}. Find the ${wordFor(askFor)} of the larger one`,
         answer: `${bigAsk}`, hint: `Enter a number (${unit[askFor]}).`,
         steps: [scaleStep, applyStep],
       };
