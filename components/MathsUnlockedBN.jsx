@@ -925,7 +925,9 @@ function DailyActiveChart({ days }) {
       <circle cx={x(peakIdx)} cy={y(days[peakIdx].count)} r="3.2" fill="var(--blue)" />
       <circle cx={x(n - 1)} cy={y(days[n - 1].count)} r="3.2" fill="var(--blue)" stroke="var(--card)" strokeWidth="1.5" />
       {labelIdxs.map((idx) => (
-        <text key={idx} x={x(idx)} y={H - 6} fontSize="9" textAnchor="middle" fill="var(--muted)">{fmt(days[idx].day)}</text>
+        <text key={idx} x={x(idx)} y={H - 6} fontSize="9"
+          textAnchor={idx === 0 ? "start" : idx === n - 1 ? "end" : "middle"}
+          fill="var(--muted)">{fmt(days[idx].day)}</text>
       ))}
     </svg>
   );
@@ -11068,6 +11070,7 @@ export default function MathsUnlockedBN() {
   const [adminTeacherRows, setAdminTeacherRows] = useState(null); // admin_teachers(); null = not loaded
   const [engagementMetrics, setEngagementMetrics] = useState(null); // get_engagement_metrics(); null = not loaded
   const [dailyActive, setDailyActive] = useState(null); // adminDailyActive(); null = not loaded
+  const [dauRange, setDauRange] = useState("max"); // zoom window for the daily-active chart
   const [adminSort, setAdminSort] = useState("active"); // "active" | "name" | "level"
   const [pinResetVal, setPinResetVal] = useState("");
   const [pinResetBusy, setPinResetBusy] = useState(false);
@@ -15767,8 +15770,11 @@ ${aBlocks}
                 if (!rows.length) {
                   return <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>Not enough data yet for a daily chart — check back after a few days.</div>;
                 }
+                const DAU_RANGES = [["1w", 7], ["1m", 30], ["3m", 90], ["6m", 180], ["1y", 365], ["max", Infinity]];
+                const rangeDays = (DAU_RANGES.find(([k]) => k === dauRange) || DAU_RANGES[5])[1];
+                const visible = Number.isFinite(rangeDays) ? rows.slice(-rangeDays) : rows;
                 const today = rows[rows.length - 1];
-                const peak = rows.reduce((b, d) => (d.count > b.count ? d : b), rows[0]);
+                const peak = visible.reduce((b, d) => (d.count > b.count ? d : b), visible[0]);
                 const fmtDay = (iso) => {
                   const d = new Date(`${iso}T00:00:00`);
                   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -15776,7 +15782,7 @@ ${aBlocks}
                 return (
                   <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Daily active students</div>
-                    <div style={{ display: "flex", gap: 24, marginBottom: 10, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 24, marginBottom: 12, flexWrap: "wrap" }}>
                       <div>
                         <div className="mub-display" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink)" }}>{today.count}</div>
                         <div style={{ fontSize: 11, color: "var(--muted)" }}>today ({fmtDay(today.day)})</div>
@@ -15786,9 +15792,19 @@ ${aBlocks}
                         <div style={{ fontSize: 11, color: "var(--muted)" }}>peak day ({fmtDay(peak.day)})</div>
                       </div>
                     </div>
-                    <DailyActiveChart days={rows} />
+                    <div style={{ display: "flex", gap: 5, marginBottom: 10, flexWrap: "wrap" }}>
+                      {DAU_RANGES.map(([k]) => (
+                        <button key={k} onClick={() => setDauRange(k)} style={{
+                          fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999, cursor: "pointer",
+                          color: dauRange === k ? "var(--on-accent)" : "var(--muted)",
+                          background: dauRange === k ? "var(--blue)" : "var(--paper)",
+                          border: `1px solid ${dauRange === k ? "var(--blue)" : "var(--grid)"}`,
+                        }}>{k}</button>
+                      ))}
+                    </div>
+                    <DailyActiveChart days={visible} />
                     <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 6 }}>
-                      Last {rows.length} day{rows.length === 1 ? "" : "s"} · counts real students who earned XP that day
+                      Showing {visible.length} of {rows.length} tracked day{rows.length === 1 ? "" : "s"} · counts real students who earned XP that day
                     </div>
                   </div>
                 );
