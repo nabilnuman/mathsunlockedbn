@@ -468,6 +468,25 @@ function mathToPlainHtml(text) {
   return out;
 }
 
+// Best-effort answer-line label for the worksheet's printed/exported
+// sheet — "x = ....." for a solved variable, "AB = ....." for a vector
+// "write ... in terms of" question, "Time = ..... hours" for a "find the
+// X in <unit>" phrasing, or no label at all (just a blank line) for a
+// plain calculation. Pattern-matched off the prompt text rather than a
+// field every one of the 30 topics' generators would need to be taught
+// to set — most prompts won't match any pattern, which is fine: they
+// just fall back to an unlabelled blank.
+function wsAnswerParts(q) {
+  const p = String(q.prompt || "");
+  let m = p.match(/\bWrite\s+([A-Za-z]{1,3})\s+in terms of/i);
+  if (m) return { label: m[1], unit: "" };
+  if (/Solve for x:/i.test(p)) return { label: "x", unit: "" };
+  if (/^Solve,.*=\s*0/i.test(p) && /\bx[²³]?\b/.test(p)) return { label: "x", unit: "" };
+  m = p.match(/\bFind (?:the )?([a-zA-Z][a-zA-Z ]*?)(?:\s+taken)?\s+in\s+([a-zA-Z°%/]+)\s*$/i);
+  if (m) return { label: m[1].trim().replace(/^./, (c) => c.toUpperCase()), unit: m[2].trim() };
+  return { label: "", unit: "" };
+}
+
 // A small coordinate grid with one straight line and two marked lattice
 // points — used by the "read the equation off the graph" question.
 function LineGraph({ data }) {
@@ -11824,9 +11843,16 @@ export default function MathsUnlockedBN() {
   function doExportWorksheetDoc(docTitle, qs) {
     if (typeof window === "undefined" || !qs || !qs.length) return;
     const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const qRows = qs.map((q, i) => `
-      <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}<span style="float:right;font-size:9pt;color:#333;">[1]</span></p>
-      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:44pt;">&nbsp;</p>`).join("");
+    const qRows = qs.map((q, i) => {
+      const { label, unit } = wsAnswerParts(q);
+      return `
+      <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
+      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>
+      <p style="margin:0 0 16pt 26pt;">
+        <span style="float:right;font-size:9pt;color:#333;">[1]</span>
+        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
+      </p>`;
+    }).join("");
     const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
     const html = `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -14232,11 +14258,21 @@ export default function MathsUnlockedBN() {
         .mub-ws-q { margin-bottom: 15pt; page-break-inside: avoid; }
         .mub-ws-q::after { content: ""; display: table; clear: both; }
         .mub-ws-qnum { float: left; width: 20pt; font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 10.5pt; }
-        .mub-ws-marks { float: right; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; }
-        .mub-ws-qtext { display: block; margin: 0 30pt 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
+        .mub-ws-qtext { display: block; margin: 0 0 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
         .mub-ws-figure { clear: both; margin: 4pt 0 0 22pt; max-width: 220pt; }
         .mub-ws-figure svg { max-width: 100%; height: auto; display: block; }
-        .mub-ws-space { height: 50pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
+        .mub-ws-space { height: 28pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
+        /* The final answer line — "x = ......... [1]" (or a plain blank
+           when the prompt doesn't clearly name what's being found; see
+           wsAnswerParts). Not flexbox: this sits inside .mub-ws-q, which
+           is itself page-break-inside:avoid, and that combination is
+           exactly what silently dropped content earlier — floats only. */
+        .mub-ws-answerline { margin: 10pt 0 0 22pt; }
+        .mub-ws-answerline::after { content: ""; display: table; clear: both; }
+        .mub-ws-marks { float: right; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; margin-left: 8pt; }
+        .mub-ws-alabel { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; }
+        .mub-ws-dots { display: inline-block; width: 220pt; max-width: 55%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
+        .mub-ws-unit { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; margin-left: 4pt; }
         .mub-ws-answers { page-break-before: always; }
         .mub-ws-arow { margin-bottom: 8pt; page-break-inside: avoid; }
         .mub-ws-arow::after { content: ""; display: table; clear: both; }
@@ -16797,17 +16833,25 @@ export default function MathsUnlockedBN() {
                         <span>Date: ______________</span>
                       </div>
                       <div className="mub-ws-instr">Answer all questions. Show your working in the space provided. Topic: {scope} · Total marks: {wsQuestions.length}</div>
-                      {wsQuestions.map((q, i) => (
-                        <div key={i} className="mub-ws-q">
-                          <span className="mub-ws-qnum">{i + 1}.</span>
-                          <span className="mub-ws-marks">[1]</span>
-                          <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
-                          {(q.graph || q.motion || q.histogram || q.scatter || q.table || q.figure || q.tri || q.circle || q.parallel || q.triParallel || q.isoLine || q.straightLine || q.bearing || q.solid || q.vec || q.transform) && (
-                            <div className="mub-ws-figure"><QuestionFigure q={q} /></div>
-                          )}
-                          <div className="mub-ws-space" />
-                        </div>
-                      ))}
+                      {wsQuestions.map((q, i) => {
+                        const { label, unit } = wsAnswerParts(q);
+                        return (
+                          <div key={i} className="mub-ws-q">
+                            <span className="mub-ws-qnum">{i + 1}.</span>
+                            <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
+                            {(q.graph || q.motion || q.histogram || q.scatter || q.table || q.figure || q.tri || q.circle || q.parallel || q.triParallel || q.isoLine || q.straightLine || q.bearing || q.solid || q.vec || q.transform) && (
+                              <div className="mub-ws-figure"><QuestionFigure q={q} /></div>
+                            )}
+                            <div className="mub-ws-space" />
+                            <div className="mub-ws-answerline">
+                              <span className="mub-ws-marks">[1]</span>
+                              {label && <span className="mub-ws-alabel">{label} = </span>}
+                              <span className="mub-ws-dots" />
+                              {unit && <span className="mub-ws-unit">{unit}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="mub-ws-page mub-ws-answers">
                       <div className="mub-ws-title">Answers — {docTitle}</div>
