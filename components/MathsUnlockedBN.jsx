@@ -11847,11 +11847,11 @@ export default function MathsUnlockedBN() {
       const { label, unit } = wsAnswerParts(q);
       return `
       <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
-      <p style="margin:6pt 26pt 0 26pt;text-align:right;">
+      <p style="margin:6pt 26pt 0 26pt;line-height:1;text-align:right;">
         ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
         <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
       </p>
-      <p style="margin:1pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>`;
+      <p style="margin:-3pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>`;
     }).join("");
     const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
     const html = `<!DOCTYPE html>
@@ -14261,7 +14261,7 @@ export default function MathsUnlockedBN() {
         .mub-ws-qtext { display: block; margin: 0 0 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
         .mub-ws-figure { clear: both; margin: 4pt 0 0 22pt; max-width: 220pt; }
         .mub-ws-figure svg { max-width: 100%; height: auto; display: block; }
-        .mub-ws-space { height: 28pt; margin: 1pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
+        .mub-ws-space { height: 28pt; margin: -3pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
         /* The final answer line — "x = ......... [1]" (or a plain blank
            when the prompt doesn't clearly name what's being found; see
            wsAnswerParts) — sat right before the next question, reading as
@@ -14270,8 +14270,10 @@ export default function MathsUnlockedBN() {
            split apart instead of reading as one line, and this sits
            inside .mub-ws-q (page-break-inside:avoid), where flex is what
            silently dropped content earlier. Plain inline content grouped
-           by text-align has neither problem. */
-        .mub-ws-answerline { margin: 10pt 22pt 0 22pt; text-align: right; }
+           by text-align has neither problem. line-height:1 so the line's
+           own box doesn't add descender space below the visible rule,
+           which is what was still reading as a gap to the line beneath. */
+        .mub-ws-answerline { margin: 10pt 22pt 0 22pt; text-align: right; line-height: 1; }
         .mub-ws-alabel { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; }
         .mub-ws-dots { display: inline-block; width: 220pt; max-width: 55%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
         .mub-ws-unit { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; margin-left: 4pt; }
