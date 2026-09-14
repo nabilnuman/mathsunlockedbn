@@ -11153,6 +11153,21 @@ export default function MathsUnlockedBN() {
   useEffect(() => { isPushSubscribed().then(setPushOn); }, [settingsOpen]);
   useEffect(() => { isPushSubscribed().then(setPushOn); }, []); // also on first load, for the dashboard prompt
 
+  // Worksheet print isolation: a body class the print CSS uses to hide
+  // #mub-app-root (see the @media print rule near the top style block),
+  // kept in sync with whether the printable content actually exists —
+  // NOT toggled around a window.print() call. An earlier version added
+  // the class right before print() and removed it on the browser's
+  // "afterprint" event, but some Android print/PDF pipelines fire (or
+  // never fire) afterprint out of sync with when the print snapshot is
+  // actually taken, so the class could already be gone by render time —
+  // the app screen was printing as an extra page again. Deriving it
+  // straight from state has no such race.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("mub-has-worksheet-print", screen === "worksheet" && !!wsQuestions && wsQuestions.length > 0);
+  }, [screen, wsQuestions]);
+
   // Whether today's Daily Challenge is still outstanding (drives the red
   // dots on Special Modes). Re-checked on the dashboard, and re-fetched
   // whenever the Brunei day rolls over so a fresh challenge lights the dot.
@@ -11794,19 +11809,12 @@ export default function MathsUnlockedBN() {
     setWsQuestions(qs.length ? qs : null);
   }
 
-  // Print/save-as-PDF for the worksheet: adds a body class the print CSS
-  // uses to hide the rest of the app (see .mub-printing-worksheet above),
-  // removed again once the browser reports printing is done. A plain
-  // class, not a body:has(.mub-worksheet-print) selector, because some
-  // Android print pipelines render through an older engine without
-  // :has() support — that was letting the live app screen print as an
-  // extra first page instead of being hidden.
+  // Print/save-as-PDF for the worksheet. The #mub-app-root hide-for-print
+  // rule is kept in sync with state by its own effect (see
+  // .mub-has-worksheet-print above) rather than toggled here around the
+  // print call, so this just triggers the browser's print flow.
   function printWorksheet() {
-    if (typeof document === "undefined") return;
-    const cleanup = () => document.body.classList.remove("mub-printing-worksheet");
-    document.body.classList.add("mub-printing-worksheet");
-    window.addEventListener("afterprint", cleanup, { once: true });
-    try { window.print(); } catch (e) { cleanup(); }
+    try { window.print(); } catch (e) { /* ignore */ }
   }
 
   // Word-compatible export for the worksheet: an HTML document saved with
@@ -14190,14 +14198,16 @@ export default function MathsUnlockedBN() {
            appearing at all. Hiding the whole app and letting this print
            block sit in normal flow as a body-level sibling fixes that —
            its own height now genuinely drives pagination.
-           #mub-app-root is hidden via a body class the Print button adds
-           right before calling window.print() (and removes on the
-           browser's "afterprint" event) rather than a body:has(...)
+           #mub-app-root is hidden via a plain body class kept in sync with
+           state by its own effect (not a body:has(.mub-worksheet-print)
            selector — some Android print/PDF pipelines render through an
-           older engine that doesn't support :has(), which was silently
+           older engine without :has() support, which was silently
            printing the live app screen as an extra first page instead of
-           hiding it. A plain class works everywhere. */
-        @media print { .mub-printing-worksheet #mub-app-root { display: none; } }
+           hiding it; and not a class toggled around window.print() either
+           — afterprint's timing wasn't reliable enough on Android to
+           guarantee the class was still there when the print snapshot
+           was actually taken). See the useEffect on wsQuestions/screen. */
+        @media print { .mub-has-worksheet-print #mub-app-root { display: none; } }
         .mub-worksheet-print { display: none; }
         @media print {
           .mub-worksheet-print { display: block; }
