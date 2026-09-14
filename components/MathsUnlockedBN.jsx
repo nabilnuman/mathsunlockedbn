@@ -441,12 +441,27 @@ function prettyMathPreview(str) {
   return out;
 }
 
-// Downgrade MathText markup to plain HTML for contexts that can't run
-// <MathText>'s own layout (the worksheet's Word-doc export): a real
-// superscript becomes <sup>, a stacked fraction becomes "(num)/(den)"
-// text, and a vector gets a trailing combining arrow.
-function mathToPlainHtml(text) {
-  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Escape a string for literal RTF text: backslash/brace are RTF control
+// characters, and anything outside ASCII needs \uNNNN? — RTF has no
+// native Unicode text, so this is how ×, −, ², a combining vector arrow,
+// etc. survive into the document.
+function rtfEscape(text) {
+  let out = "";
+  for (const ch of String(text ?? "")) {
+    const code = ch.codePointAt(0);
+    if (ch === "\\" || ch === "{" || ch === "}") out += "\\" + ch;
+    else if (code < 128) out += ch;
+    else if (code <= 32767) out += `\\u${code}?`;
+    else out += `\\u${code - 65536}?`;
+  }
+  return out;
+}
+
+// Downgrade MathText markup to plain RTF for the worksheet's Word export:
+// a real superscript becomes an RTF \super run, a stacked fraction
+// becomes "(num)/(den)" text, and a vector gets a trailing combining
+// arrow character.
+function mathToRtf(text) {
   let s = String(text ?? "");
   if (s.includes(VEC.a)) {
     const re = new RegExp(`${VEC.a}([^${VEC.a}${VEC.b}]*)${VEC.b}`, "g");
@@ -456,15 +471,15 @@ function mathToPlainHtml(text) {
     const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
     s = s.replace(re, (_, num, den) => `(${num})/(${den})`);
   }
-  if (!s.includes(RAISE.a)) return esc(s);
+  if (!s.includes(RAISE.a)) return rtfEscape(s);
   const re = new RegExp(`${RAISE.a}([^${RAISE.a}${RAISE.b}]*)${RAISE.b}`, "g");
   let out = "", last = 0, m;
   while ((m = re.exec(s))) {
-    out += esc(s.slice(last, m.index));
-    out += `<sup>${esc(m[1])}</sup>`;
+    out += rtfEscape(s.slice(last, m.index));
+    out += `{\\super ${rtfEscape(m[1])}}`;
     last = m.index + m[0].length;
   }
-  out += esc(s.slice(last));
+  out += rtfEscape(s.slice(last));
   return out;
 }
 
@@ -477,7 +492,10 @@ function mathToPlainHtml(text) {
 // to set — most prompts won't match any pattern, which is fine: they
 // just fall back to an unlabelled blank.
 function wsAnswerParts(q) {
-  const p = String(q.prompt || "");
+  // Vector prompts wrap the label in the private-use VEC markers (e.g.
+  // "Write AM in terms of..." for MathText's over-arrow) —
+  // strip every markup delimiter so the patterns below see plain text.
+  const p = String(q.prompt || "").replace(new RegExp(`[${VEC.a}${VEC.b}${FR.a}${FR.b}${FR.c}${RAISE.a}${RAISE.b}]`, "g"), "");
   let m = p.match(/\bWrite\s+([A-Za-z]{1,3})\s+in terms of/i);
   if (m) return { label: m[1], unit: "" };
   if (/Solve for x:/i.test(p)) return { label: "x", unit: "" };
@@ -11836,47 +11854,49 @@ export default function MathsUnlockedBN() {
     try { window.print(); } catch (e) { /* ignore */ }
   }
 
-  // Word-compatible export for the worksheet: an HTML document saved with
-  // a .doc extension, which Word opens natively (no server-side docx lib
-  // needed). Downgrades the on-screen MathText markup to plain characters
-  // Word can render inline — see mathToPlainHtml.
+  // Word-compatible export for the worksheet: a real .rtf file, built by
+  // hand-writing RTF markup (no server-side docx lib needed — see
+  // mathToRtf/rtfEscape). This used to be an HTML document saved with a
+  // .doc extension — a trick desktop Word has long tolerated (it silently
+  // opens HTML-as-.doc as a filtered web page), but mobile Office/Word
+  // apps and Android's Word-app file-type sniffing don't extend it the
+  // same leniency, so that file simply failed to open on a phone. RTF is
+  // a real, fully-specified text-based format every Word app (desktop or
+  // mobile) reads directly.
   function doExportWorksheetDoc(docTitle, qs) {
     if (typeof window === "undefined" || !qs || !qs.length) return;
-    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const qRows = qs.map((q, i) => {
+    // A run of non-breaking spaces under \ul — a plain space run risks
+    // being trimmed by a less careful RTF reader, \~ won't be.
+    const blank = (n) => "\\~".repeat(n);
+    const qBlocks = qs.map((q, i) => {
       const { label, unit } = wsAnswerParts(q);
-      return `
-      <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
-      <p style="margin:14pt 26pt 0 26pt;line-height:1;text-align:right;">
-        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:165pt;max-width:41%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
-        <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
-      </p>
-      <p style="margin:0 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:9pt;">&nbsp;</p>`;
-    }).join("");
-    const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
-    const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>${esc(docTitle)}</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; }
-  h1 { font-family: Arial, Helvetica, sans-serif; font-size: 13pt; }
-  .meta { font-size: 10pt; margin-bottom: 8pt; }
-  .instr { font-size: 9.5pt; border-bottom: 1pt solid #000; padding-bottom: 8pt; margin-bottom: 14pt; }
-</style></head>
-<body>
-  <h1>${esc(docTitle)}</h1>
-  <p class="meta">Name: ________________________&nbsp;&nbsp;&nbsp;&nbsp;Class: ______________&nbsp;&nbsp;&nbsp;&nbsp;Date: ______________</p>
-  <p class="instr">Answer all questions. Show your working in the space provided. Total marks: ${qs.length}</p>
-  ${qRows}
-  <br clear="all" style="mso-special-character:line-break;page-break-before:always" />
-  <h1>Answers — ${esc(docTitle)}</h1>
-  ${aRows}
-</body></html>`;
-    const blob = new Blob(["﻿", html], { type: "application/msword" });
+      const labelTxt = label ? `${rtfEscape(label)} = ` : "";
+      const unitTxt = unit ? ` ${rtfEscape(unit)}` : "";
+      return `{\\b ${i + 1}.}\\tab ${mathToRtf(q.prompt)}\\par
+\\par
+\\qr ${labelTxt}{\\ul ${blank(18)}}\\ulnone${unitTxt}${blank(2)}{\\fs16\\cf1 [1]}\\par
+\\ql\\par`;
+    }).join("\n");
+    const aBlocks = qs.map((q, i) => `{\\b ${i + 1}.} ${mathToRtf(q.answer)}\\par`).join("\n");
+    const rtf = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033
+{\\fonttbl{\\f0\\fswiss Arial;}}
+{\\colortbl;\\red51\\green51\\blue51;}
+\\f0\\fs21
+{\\b\\fs28 ${rtfEscape(docTitle)}\\par}
+\\fs20 Name: ${blank(20)}${blank(4)}Class: ${blank(12)}${blank(4)}Date: ${blank(12)}\\par
+\\fs19 Answer all questions. Show your working in the space provided. Total marks: ${qs.length}\\par
+\\par
+${qBlocks}
+\\page
+{\\b\\fs28 Answers \\endash ${rtfEscape(docTitle)}\\par}
+\\fs20
+${aBlocks}
+}`;
+    const blob = new Blob([rtf], { type: "application/rtf" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(docTitle || "worksheet").replace(/[^\w\- ]+/g, "").trim() || "worksheet"}.doc`;
+    a.download = `${(docTitle || "worksheet").replace(/[^\w\- ]+/g, "").trim() || "worksheet"}.rtf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
