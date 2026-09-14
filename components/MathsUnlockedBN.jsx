@@ -1959,6 +1959,37 @@ function CircleFigure({ type = "line", ...S }) {
   );
 }
 
+// Static, non-interactive diagram for a question — the subset of the quiz
+// card's figure switch (see the "quiz" screen) that's pure data with no
+// tap/drag handlers, so it's safe to reuse anywhere a question is shown
+// outside its normal answer flow (the worksheet generator's preview and
+// printed sheet). Question types built entirely around tapping/dragging
+// to construct an answer (drawGraph, region, venn, placeVenn, buildHist,
+// cumfreq, an interactive transform) don't have a well-defined static
+// form and are intentionally left out.
+function QuestionFigure({ q }) {
+  if (!q) return null;
+  if (q.graph) return <LineGraph data={q.graph} />;
+  if (q.motion) return <MotionGraph {...q.motion} />;
+  if (q.histogram) return <HistogramGraph {...q.histogram} />;
+  if (q.scatter) return <ScatterGraph {...q.scatter} />;
+  if (q.table) return <FreqTable rows={q.table.rows} unitLabel={q.table.unitLabel} />;
+  if (q.figure) return <ShapeFigure shape={q.figure.shape} />;
+  if (q.tri) return <TriangleFigure {...q.tri} />;
+  if (q.circle) return <CircleFigure {...q.circle} />;
+  if (q.parallel) return <ParallelFigure {...q.parallel} />;
+  if (q.triParallel) return <TriParallelFigure {...q.triParallel} />;
+  if (q.isoLine) return <IsoLineFigure {...q.isoLine} />;
+  if (q.straightLine) return <StraightLineFigure {...q.straightLine} />;
+  if (q.bearing) return <BearingFigure {...q.bearing} />;
+  if (q.solid) return <MensurationFigure {...q.solid} />;
+  if (q.vec) return <VectorFigure {...q.vec} />;
+  if (q.transform && !q.transform.draw && !q.drawMirror && !q.tapPoint) {
+    return <TransformFigure a={q.transform.a} b={q.transform.b} centre={q.transform.centre} rays={q.transform.rays} />;
+  }
+  return null;
+}
+
 // A Venn diagram whose regions the student taps to shade a target set.
 function VennShade({ venn, pressed, onToggle, showAnswer }) {
   const two = venn.sets === 2;
@@ -11763,6 +11794,21 @@ export default function MathsUnlockedBN() {
     setWsQuestions(qs.length ? qs : null);
   }
 
+  // Print/save-as-PDF for the worksheet: adds a body class the print CSS
+  // uses to hide the rest of the app (see .mub-printing-worksheet above),
+  // removed again once the browser reports printing is done. A plain
+  // class, not a body:has(.mub-worksheet-print) selector, because some
+  // Android print pipelines render through an older engine without
+  // :has() support — that was letting the live app screen print as an
+  // extra first page instead of being hidden.
+  function printWorksheet() {
+    if (typeof document === "undefined") return;
+    const cleanup = () => document.body.classList.remove("mub-printing-worksheet");
+    document.body.classList.add("mub-printing-worksheet");
+    window.addEventListener("afterprint", cleanup, { once: true });
+    try { window.print(); } catch (e) { cleanup(); }
+  }
+
   // Word-compatible export for the worksheet: an HTML document saved with
   // a .doc extension, which Word opens natively (no server-side docx lib
   // needed). Downgrades the on-screen MathText markup to plain characters
@@ -14143,14 +14189,18 @@ export default function MathsUnlockedBN() {
            with the forced-new-page answer key past the cutoff never
            appearing at all. Hiding the whole app and letting this print
            block sit in normal flow as a body-level sibling fixes that —
-           its own height now genuinely drives pagination. Still gated on
-           .mub-worksheet-print actually being in the DOM, so the older
-           bare window.print() on the class roster page (no such element)
-           keeps printing as before. */
+           its own height now genuinely drives pagination.
+           #mub-app-root is hidden via a body class the Print button adds
+           right before calling window.print() (and removes on the
+           browser's "afterprint" event) rather than a body:has(...)
+           selector — some Android print/PDF pipelines render through an
+           older engine that doesn't support :has(), which was silently
+           printing the live app screen as an extra first page instead of
+           hiding it. A plain class works everywhere. */
+        @media print { .mub-printing-worksheet #mub-app-root { display: none; } }
         .mub-worksheet-print { display: none; }
         @media print {
           .mub-worksheet-print { display: block; }
-          body:has(.mub-worksheet-print) #mub-app-root { display: none; }
           @page { margin: 16mm 14mm; }
         }
         /* Deliberately plain block/float layout below, not flexbox or CSS
@@ -14169,6 +14219,8 @@ export default function MathsUnlockedBN() {
         .mub-ws-qnum { float: left; width: 20pt; font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 10.5pt; }
         .mub-ws-marks { float: right; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; }
         .mub-ws-qtext { display: block; margin: 0 30pt 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
+        .mub-ws-figure { clear: both; margin: 4pt 0 0 22pt; max-width: 220pt; }
+        .mub-ws-figure svg { max-width: 100%; height: auto; display: block; }
         .mub-ws-space { height: 50pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
         .mub-ws-answers { page-break-before: always; }
         .mub-ws-arow { margin-bottom: 8pt; page-break-inside: avoid; }
@@ -16685,16 +16737,19 @@ export default function MathsUnlockedBN() {
 
               {wsQuestions && wsQuestions.length > 0 && (<>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
-                  <button onClick={() => { try { window.print(); } catch (e) { /* ignore */ } }} style={prim}>🖨 Print / Save as PDF</button>
+                  <button onClick={printWorksheet} style={prim}>🖨 Print / Save as PDF</button>
                   <button onClick={() => doExportWorksheetDoc(docTitle, wsQuestions)} style={ghost}>📄 Save as Word</button>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{wsQuestions.length} questions · {scope} · answers on the last page</span>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
                   {wsQuestions.map((q, i) => (
-                    <div key={i} style={{ fontSize: 12.5, padding: "8px 10px", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, display: "flex", gap: 8 }}>
+                    <div key={i} style={{ fontSize: 12.5, padding: "8px 10px", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{i + 1}.</span>
-                      <MathText text={q.prompt} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <MathText text={q.prompt} />
+                        <QuestionFigure q={q} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -16710,7 +16765,15 @@ export default function MathsUnlockedBN() {
                     marked page-break-inside:avoid, and multi-column print
                     layouts are similarly unreliable across devices. */}
                 {typeof document !== "undefined" && createPortal(
-                  <div className="mub-worksheet-print">
+                  // Diagram components (QuestionFigure) colour themselves with
+                  // var(--ink)/var(--blue)/etc., which are only defined as an
+                  // inline style on #mub-app-root — this portal renders as a
+                  // sibling of that div, outside its cascade, so those vars
+                  // would otherwise resolve to nothing. Re-declare them here,
+                  // always from the light theme regardless of the teacher's
+                  // active theme, so a printed diagram never ends up
+                  // light-on-white from a dark-mode palette.
+                  <div className="mub-worksheet-print" style={THEMES.light}>
                     <div className="mub-ws-page">
                       <div className="mub-ws-title">{docTitle}</div>
                       <div className="mub-ws-meta">
@@ -16724,6 +16787,9 @@ export default function MathsUnlockedBN() {
                           <span className="mub-ws-qnum">{i + 1}.</span>
                           <span className="mub-ws-marks">[1]</span>
                           <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
+                          {(q.graph || q.motion || q.histogram || q.scatter || q.table || q.figure || q.tri || q.circle || q.parallel || q.triParallel || q.isoLine || q.straightLine || q.bearing || q.solid || q.vec || q.transform) && (
+                            <div className="mub-ws-figure"><QuestionFigure q={q} /></div>
+                          )}
                           <div className="mub-ws-space" />
                         </div>
                       ))}
