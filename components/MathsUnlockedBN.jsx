@@ -11012,6 +11012,11 @@ export default function MathsUnlockedBN() {
   const [pendingJoin, setPendingJoin] = useState(null); // ?join=<code> to act on once signed in
   const [joinLinkCopied, setJoinLinkCopied] = useState(false);
   const [subPickerOpen, setSubPickerOpen] = useState(false);
+  // Teacher worksheet generator: standalone practice/test sheets, not tied
+  // to a class — see doGenerateWorksheet (near pickQuestion) and the
+  // "worksheet" screen for the printable layout.
+  const [wsForm, setWsForm] = useState({ topicId: TOPICS[0].id, count: 15, title: "", subs: [] });
+  const [wsQuestions, setWsQuestions] = useState(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [fbText, setFbText] = useState("");
   const [fbRating, setFbRating] = useState(0);
@@ -11359,6 +11364,9 @@ export default function MathsUnlockedBN() {
     if (!teacherActive && (screen === "classes" || screen === "classDetail")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
+    if (!(teacherActive || (teacherAccount && teacherAccount.admin)) && screen === "worksheet") {
+      setScreen(profile.name ? "dashboard" : "login");
+    }
     if (screen === "assignments" && !(assignments.length || studentClasses.some((c) => !c.archived))) {
       setScreen(profile.name ? "dashboard" : "login");
     }
@@ -11695,6 +11703,30 @@ export default function MathsUnlockedBN() {
       q = topic.generate();
     }
     return { ...q, topicId: topic.id, topicName: topic.name, topicIcon: topic.icon };
+  }
+
+  // Teacher worksheet generator: a standalone set of practice/test
+  // questions, independent of any class — printed with a full answer key
+  // on the last page (see the "worksheet" screen). Reuses the same
+  // question engine as homework (pickQuestion), just without a student
+  // profile or an assignment row behind it. Avoids exact-duplicate prompts
+  // within one sheet where the topic's pool allows it.
+  function doGenerateWorksheet() {
+    const topic = TOPIC_BY_ID[wsForm.topicId];
+    if (!topic) return;
+    const list = SUBTOPICS[wsForm.topicId] || [];
+    const subs = (wsForm.subs || []).filter((k) => list.some((s) => s.key === k));
+    const effSubs = subs.length && subs.length < list.length ? subs : undefined;
+    const n = Math.max(1, Math.min(100, parseInt(wsForm.count, 10) || 10));
+    const seen = new Set();
+    const qs = [];
+    for (let i = 0; i < n; i++) {
+      let q, tries = 0;
+      do { q = pickQuestion(topic, effSubs); tries++; } while (seen.has(q.prompt) && tries < 25);
+      seen.add(q.prompt);
+      qs.push(q);
+    }
+    setWsQuestions(qs);
   }
 
   // Mock Exam: turn one queue item (see buildMockQueue) into an actual
@@ -13434,6 +13466,11 @@ export default function MathsUnlockedBN() {
   // Cycle the sort: Recent → Name → Level → Recent
   const cycleAdminSort = () => setAdminSort((s) => (s === "active" ? "name" : s === "name" ? "level" : "active"));
 
+  /* ---- teacher: worksheet generator (standalone, no class) ---- */
+  function openWorksheet() {
+    setScreen("worksheet");
+  }
+
   /* ---- teacher: classes ---- */
   async function openClasses() {
     setActiveClass(null);
@@ -14007,7 +14044,7 @@ export default function MathsUnlockedBN() {
   return (
     <div style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", background: "var(--page-bg)", minHeight: "100dvh", display: "flex", flexDirection: "column", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600;700&family=STIX+Two+Math&display=swap');
         @keyframes calcCaret { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
         .mub-px { transition: none; }
         .mub-px:active { transform: translate(2px, 2px); box-shadow: none !important; }
@@ -14020,6 +14057,35 @@ export default function MathsUnlockedBN() {
           background-size: 24px 24px;
           background-color: var(--paper);
         }
+        /* Teacher worksheet generator — printable exam-paper layout.
+           Hidden on screen (the app shows its own compact preview list
+           instead); shown only inside @media print, and only isolated
+           from the rest of the app when .mub-worksheet-print is actually
+           in the DOM — so the older bare window.print() on the class
+           roster page (no such element) keeps printing as before. */
+        .mub-worksheet-print { display: none; }
+        @media print {
+          .mub-worksheet-print { display: block; }
+          body:has(.mub-worksheet-print) * { visibility: hidden; }
+          body:has(.mub-worksheet-print) .mub-worksheet-print,
+          body:has(.mub-worksheet-print) .mub-worksheet-print * { visibility: visible; }
+          .mub-worksheet-print { position: absolute; left: 0; top: 0; width: 100%; }
+          @page { size: A4; margin: 16mm 14mm; }
+        }
+        .mub-ws-page { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #000; background: #fff; }
+        .mub-ws-title { font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 13pt; margin-bottom: 6pt; }
+        .mub-ws-meta { display: flex; gap: 22pt; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; margin-bottom: 8pt; }
+        .mub-ws-instr { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; padding-bottom: 8pt; margin-bottom: 14pt; border-bottom: 1pt solid #000; }
+        .mub-ws-q { margin-bottom: 15pt; page-break-inside: avoid; }
+        .mub-ws-row { display: flex; gap: 8pt; align-items: baseline; }
+        .mub-ws-qnum { flex: 0 0 20pt; font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 10.5pt; }
+        .mub-ws-qtext { flex: 1; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
+        .mub-ws-marks { flex: 0 0 auto; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; }
+        .mub-ws-space { height: 56pt; margin: 6pt 0 0 28pt; border-bottom: 0.5pt dotted #999; }
+        .mub-ws-answers { page-break-before: always; }
+        .mub-ws-alist { columns: 2; column-gap: 26pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 10.5pt; }
+        .mub-ws-arow { display: flex; gap: 6pt; margin-bottom: 8pt; break-inside: avoid; }
+        .mub-ws-arow .mub-ws-qnum { flex: 0 0 18pt; font-size: 10pt; }
         @keyframes stampIn { 0% { transform: scale(2.2) rotate(-8deg); opacity: 0; } 60% { transform: scale(0.9) rotate(-8deg); opacity: 1; } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
         @keyframes wobble { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
         @keyframes rankPop { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 78% { transform: scale(0.9) rotate(-4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
@@ -14069,6 +14135,11 @@ export default function MathsUnlockedBN() {
             {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "classes" && screen !== "classDetail" && (
               <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
                 🎓 Classes
+              </button>
+            )}
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && (teacherActive || (teacherAccount && teacherAccount.admin)) && screen !== "worksheet" && (
+              <button onClick={openWorksheet} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
+                📝 Worksheets
               </button>
             )}
             {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "admin" && (
@@ -16439,6 +16510,114 @@ export default function MathsUnlockedBN() {
                   );
                 })}
               </div>
+            </div>
+          );
+        })()}
+
+        {/* TEACHER — WORKSHEET GENERATOR (standalone, no class) */}
+        {screen === "worksheet" && (() => {
+          const back = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 };
+          const prim = { fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
+          const inp = { fontSize: 13, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", background: "var(--card)", color: "var(--ink)" };
+          const topic = TOPIC_BY_ID[wsForm.topicId];
+          const list = SUBTOPICS[wsForm.topicId] || [];
+          const subs = (wsForm.subs || []).filter((k) => list.some((s) => s.key === k));
+          const scope = subs.length && subs.length < list.length
+            ? subs.map((k) => list.find((s) => s.key === k).name).join(", ")
+            : (topic ? topic.name : "");
+          const docTitle = wsForm.title.trim() || `${topic ? topic.name : "Maths"} — Worksheet`;
+          return (
+            <div>
+              <button onClick={() => setScreen("dashboard")} style={back}><ArrowLeft size={14} /> back</button>
+              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Worksheet generator</div>
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                Generate a set of practice questions to print or save as a PDF — full answer key on the last page. Not tied to any class, so it&rsquo;s ready for a test, a cover lesson, or homework on paper.
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
+                <input value={wsForm.title} onChange={(e) => setWsForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Worksheet title (e.g. Standard Form — Test 1)"
+                  style={{ ...inp, padding: "8px 10px", width: "100%", maxWidth: 340, boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={wsForm.topicId} onChange={(e) => setWsForm((f) => ({ ...f, topicId: e.target.value, subs: [] }))} style={{ ...inp, padding: "8px 8px", maxWidth: 190 }}>
+                    {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <input type="number" min={1} max={100} value={wsForm.count} onChange={(e) => setWsForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 56, padding: "8px 6px" }} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>questions</span>
+                </div>
+                {list.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {list.map((s) => {
+                      const on = subs.includes(s.key);
+                      return (
+                        <button key={s.key} onClick={() => setWsForm((f) => {
+                          const c = f.subs || [];
+                          return { ...f, subs: c.includes(s.key) ? c.filter((k) => k !== s.key) : [...c, s.key] };
+                        })} style={{
+                          fontSize: 11, fontWeight: 600, padding: "5px 10px", borderRadius: 999, cursor: "pointer",
+                          border: `1px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: on ? "var(--blue)" : "var(--card)", color: on ? "var(--on-accent)" : "var(--muted)",
+                        }}>{s.name}</button>
+                      );
+                    })}
+                    <div style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>Leave none selected (or select all) for a general mix across the whole topic.</div>
+                  </div>
+                )}
+                <button onClick={doGenerateWorksheet} style={{ ...prim, alignSelf: "flex-start", marginTop: 4 }}>{wsQuestions ? "🔁 Regenerate" : "Generate"}</button>
+              </div>
+
+              {wsQuestions && wsQuestions.length > 0 && (<>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+                  <button onClick={() => { try { window.print(); } catch (e) { /* ignore */ } }} style={prim}>🖨 Print / Save as PDF</button>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{wsQuestions.length} questions · {scope} · answers on the last page</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
+                  {wsQuestions.map((q, i) => (
+                    <div key={i} style={{ fontSize: 12.5, padding: "8px 10px", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, display: "flex", gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>{i + 1}.</span>
+                      <MathText text={q.prompt} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Print-only document — hidden on screen, isolated from the
+                    rest of the app via the body:has() rule below so the
+                    existing bare window.print() on the class page (which
+                    has no .mub-worksheet-print in its DOM) still works
+                    unchanged. */}
+                <div className="mub-worksheet-print">
+                  <div className="mub-ws-page">
+                    <div className="mub-ws-title">{docTitle}</div>
+                    <div className="mub-ws-meta">
+                      <span>Name: ________________________</span>
+                      <span>Class: ______________</span>
+                      <span>Date: ______________</span>
+                    </div>
+                    <div className="mub-ws-instr">Answer all questions. Show your working in the space provided. Topic: {scope} · Total marks: {wsQuestions.length}</div>
+                    {wsQuestions.map((q, i) => (
+                      <div key={i} className="mub-ws-q">
+                        <div className="mub-ws-row">
+                          <span className="mub-ws-qnum">{i + 1}.</span>
+                          <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
+                          <span className="mub-ws-marks">[1]</span>
+                        </div>
+                        <div className="mub-ws-space" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mub-ws-page mub-ws-answers">
+                    <div className="mub-ws-title">Answers — {docTitle}</div>
+                    <div className="mub-ws-alist">
+                      {wsQuestions.map((q, i) => (
+                        <div key={i} className="mub-ws-arow">
+                          <span className="mub-ws-qnum">{i + 1}.</span>
+                          <MathText text={q.answer} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>)}
             </div>
           );
         })()}
