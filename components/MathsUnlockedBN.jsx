@@ -440,6 +440,33 @@ function prettyMathPreview(str) {
   return out;
 }
 
+// Downgrade MathText markup to plain HTML for contexts that can't run
+// <MathText>'s own layout (the worksheet's Word-doc export): a real
+// superscript becomes <sup>, a stacked fraction becomes "(num)/(den)"
+// text, and a vector gets a trailing combining arrow.
+function mathToPlainHtml(text) {
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let s = String(text ?? "");
+  if (s.includes(VEC.a)) {
+    const re = new RegExp(`${VEC.a}([^${VEC.a}${VEC.b}]*)${VEC.b}`, "g");
+    s = s.replace(re, (_, label) => `${label}⃗`);
+  }
+  if (s.includes(FR.a)) {
+    const re = new RegExp(`${FR.a}([^${FR.a}${FR.b}${FR.c}]*)${FR.b}([^${FR.a}${FR.b}${FR.c}]*)${FR.c}`, "g");
+    s = s.replace(re, (_, num, den) => `(${num})/(${den})`);
+  }
+  if (!s.includes(RAISE.a)) return esc(s);
+  const re = new RegExp(`${RAISE.a}([^${RAISE.a}${RAISE.b}]*)${RAISE.b}`, "g");
+  let out = "", last = 0, m;
+  while ((m = re.exec(s))) {
+    out += esc(s.slice(last, m.index));
+    out += `<sup>${esc(m[1])}</sup>`;
+    last = m.index + m[0].length;
+  }
+  out += esc(s.slice(last));
+  return out;
+}
+
 // A small coordinate grid with one straight line and two marked lattice
 // points — used by the "read the equation off the graph" question.
 function LineGraph({ data }) {
@@ -11014,8 +11041,10 @@ export default function MathsUnlockedBN() {
   const [subPickerOpen, setSubPickerOpen] = useState(false);
   // Teacher worksheet generator: standalone practice/test sheets, not tied
   // to a class — see doGenerateWorksheet (near pickQuestion) and the
-  // "worksheet" screen for the printable layout.
-  const [wsForm, setWsForm] = useState({ topicId: TOPICS[0].id, count: 15, title: "", subs: [] });
+  // "worksheet" screen for the printable layout. Can mix several topics
+  // in one sheet: perTopic[topicId] = { count, subs }.
+  const [wsForm, setWsForm] = useState({ title: "", perTopic: {} });
+  const [wsExpandedTopic, setWsExpandedTopic] = useState(null);
   const [wsQuestions, setWsQuestions] = useState(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [fbText, setFbText] = useState("");
@@ -11709,24 +11738,68 @@ export default function MathsUnlockedBN() {
   // questions, independent of any class — printed with a full answer key
   // on the last page (see the "worksheet" screen). Reuses the same
   // question engine as homework (pickQuestion), just without a student
-  // profile or an assignment row behind it. Avoids exact-duplicate prompts
-  // within one sheet where the topic's pool allows it.
+  // profile or an assignment row behind it. Can mix questions from
+  // several topics (wsForm.perTopic), each with its own subtopic filter.
+  // Avoids exact-duplicate prompts within a single topic's run where the
+  // pool allows it.
   function doGenerateWorksheet() {
-    const topic = TOPIC_BY_ID[wsForm.topicId];
-    if (!topic) return;
-    const list = SUBTOPICS[wsForm.topicId] || [];
-    const subs = (wsForm.subs || []).filter((k) => list.some((s) => s.key === k));
-    const effSubs = subs.length && subs.length < list.length ? subs : undefined;
-    const n = Math.max(1, Math.min(100, parseInt(wsForm.count, 10) || 10));
-    const seen = new Set();
     const qs = [];
-    for (let i = 0; i < n; i++) {
-      let q, tries = 0;
-      do { q = pickQuestion(topic, effSubs); tries++; } while (seen.has(q.prompt) && tries < 25);
-      seen.add(q.prompt);
-      qs.push(q);
+    for (const topic of TOPICS) {
+      const cfg = wsForm.perTopic[topic.id];
+      const n = cfg ? Math.max(0, Math.min(100, parseInt(cfg.count, 10) || 0)) : 0;
+      if (!n) continue;
+      const list = SUBTOPICS[topic.id] || [];
+      const subs = (cfg.subs || []).filter((k) => list.some((s) => s.key === k));
+      const effSubs = subs.length && subs.length < list.length ? subs : undefined;
+      const seen = new Set();
+      for (let i = 0; i < n; i++) {
+        let q, tries = 0;
+        do { q = pickQuestion(topic, effSubs); tries++; } while (seen.has(q.prompt) && tries < 25);
+        seen.add(q.prompt);
+        qs.push(q);
+      }
     }
-    setWsQuestions(qs);
+    setWsQuestions(qs.length ? qs : null);
+  }
+
+  // Word-compatible export for the worksheet: an HTML document saved with
+  // a .doc extension, which Word opens natively (no server-side docx lib
+  // needed). Downgrades the on-screen MathText markup to plain characters
+  // Word can render inline — see mathToPlainHtml.
+  function doExportWorksheetDoc(docTitle, qs) {
+    if (typeof window === "undefined" || !qs || !qs.length) return;
+    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const qRows = qs.map((q, i) => `
+      <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}<span style="float:right;font-size:9pt;color:#333;">[1]</span></p>
+      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:44pt;">&nbsp;</p>`).join("");
+    const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
+    const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(docTitle)}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; }
+  h1 { font-family: Arial, Helvetica, sans-serif; font-size: 13pt; }
+  .meta { font-size: 10pt; margin-bottom: 8pt; }
+  .instr { font-size: 9.5pt; border-bottom: 1pt solid #000; padding-bottom: 8pt; margin-bottom: 14pt; }
+</style></head>
+<body>
+  <h1>${esc(docTitle)}</h1>
+  <p class="meta">Name: ________________________&nbsp;&nbsp;&nbsp;&nbsp;Class: ______________&nbsp;&nbsp;&nbsp;&nbsp;Date: ______________</p>
+  <p class="instr">Answer all questions. Show your working in the space provided. Total marks: ${qs.length}</p>
+  ${qRows}
+  <br clear="all" style="mso-special-character:line-break;page-break-before:always" />
+  <h1>Answers — ${esc(docTitle)}</h1>
+  ${aRows}
+</body></html>`;
+    const blob = new Blob(["﻿", html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "worksheet").replace(/[^\w\- ]+/g, "").trim() || "worksheet"}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
   // Mock Exam: turn one queue item (see buildMockQueue) into an actual
@@ -14070,22 +14143,30 @@ export default function MathsUnlockedBN() {
           body:has(.mub-worksheet-print) .mub-worksheet-print,
           body:has(.mub-worksheet-print) .mub-worksheet-print * { visibility: visible; }
           .mub-worksheet-print { position: absolute; left: 0; top: 0; width: 100%; }
-          @page { size: A4; margin: 16mm 14mm; }
+          @page { margin: 16mm 14mm; }
         }
+        /* Deliberately plain block/float layout below, not flexbox or CSS
+           columns — Chrome's print engine has been seen to silently drop
+           content out of flex items marked page-break-inside:avoid, and
+           multi-column print layouts are similarly unreliable across
+           devices (especially mobile). Floats + page-break-* have decades
+           of solid print support, so that's what carries the pagination. */
         .mub-ws-page { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #000; background: #fff; }
         .mub-ws-title { font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 13pt; margin-bottom: 6pt; }
-        .mub-ws-meta { display: flex; gap: 22pt; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; margin-bottom: 8pt; }
+        .mub-ws-meta { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; margin-bottom: 8pt; }
+        .mub-ws-meta span { display: inline-block; margin-right: 22pt; }
         .mub-ws-instr { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; padding-bottom: 8pt; margin-bottom: 14pt; border-bottom: 1pt solid #000; }
         .mub-ws-q { margin-bottom: 15pt; page-break-inside: avoid; }
-        .mub-ws-row { display: flex; gap: 8pt; align-items: baseline; }
-        .mub-ws-qnum { flex: 0 0 20pt; font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 10.5pt; }
-        .mub-ws-qtext { flex: 1; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
-        .mub-ws-marks { flex: 0 0 auto; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; }
-        .mub-ws-space { height: 56pt; margin: 6pt 0 0 28pt; border-bottom: 0.5pt dotted #999; }
+        .mub-ws-q::after { content: ""; display: table; clear: both; }
+        .mub-ws-qnum { float: left; width: 20pt; font-family: Arial, Helvetica, sans-serif; font-weight: 700; font-size: 10.5pt; }
+        .mub-ws-marks { float: right; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; }
+        .mub-ws-qtext { display: block; margin: 0 30pt 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
+        .mub-ws-space { height: 50pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
         .mub-ws-answers { page-break-before: always; }
-        .mub-ws-alist { columns: 2; column-gap: 26pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 10.5pt; }
-        .mub-ws-arow { display: flex; gap: 6pt; margin-bottom: 8pt; break-inside: avoid; }
-        .mub-ws-arow .mub-ws-qnum { flex: 0 0 18pt; font-size: 10pt; }
+        .mub-ws-arow { margin-bottom: 8pt; page-break-inside: avoid; }
+        .mub-ws-arow::after { content: ""; display: table; clear: both; }
+        .mub-ws-arow .mub-ws-qnum { width: 18pt; font-size: 10pt; }
+        .mub-ws-atext { display: block; margin-left: 20pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 10.5pt; }
         @keyframes stampIn { 0% { transform: scale(2.2) rotate(-8deg); opacity: 0; } 60% { transform: scale(0.9) rotate(-8deg); opacity: 1; } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
         @keyframes wobble { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
         @keyframes rankPop { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 78% { transform: scale(0.9) rotate(-4deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
@@ -16518,56 +16599,86 @@ export default function MathsUnlockedBN() {
         {screen === "worksheet" && (() => {
           const back = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 };
           const prim = { fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
+          const ghost = { fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
           const inp = { fontSize: 13, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", background: "var(--card)", color: "var(--ink)" };
-          const topic = TOPIC_BY_ID[wsForm.topicId];
-          const list = SUBTOPICS[wsForm.topicId] || [];
-          const subs = (wsForm.subs || []).filter((k) => list.some((s) => s.key === k));
-          const scope = subs.length && subs.length < list.length
-            ? subs.map((k) => list.find((s) => s.key === k).name).join(", ")
-            : (topic ? topic.name : "");
-          const docTitle = wsForm.title.trim() || `${topic ? topic.name : "Maths"} — Worksheet`;
+          const active = TOPICS
+            .map((t) => ({ t, cfg: wsForm.perTopic[t.id] }))
+            .filter(({ cfg }) => cfg && (parseInt(cfg.count, 10) || 0) > 0);
+          const scope = active.length === 1 ? active[0].t.name
+            : active.length > 1 ? `${active.length} topics` : "";
+          const docTitle = wsForm.title.trim() || (active.length === 1 ? `${active[0].t.name} — Worksheet` : "Maths — Worksheet");
           return (
             <div>
               <button onClick={() => setScreen("dashboard")} style={back}><ArrowLeft size={14} /> back</button>
               <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Worksheet generator</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
-                Generate a set of practice questions to print or save as a PDF — full answer key on the last page. Not tied to any class, so it&rsquo;s ready for a test, a cover lesson, or homework on paper.
+                Generate a set of practice questions to print, save as a PDF, or save as a Word document — full answer key on the last page. Not tied to any class, so it&rsquo;s ready for a test, a cover lesson, or homework on paper. Mix as many topics as you like: fill in a count next to each one you want.
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
+              <div style={{ marginBottom: 18, padding: 14, borderRadius: 12, background: "var(--card)", border: "1px solid var(--grid)" }}>
                 <input value={wsForm.title} onChange={(e) => setWsForm((f) => ({ ...f, title: e.target.value }))}
                   placeholder="Worksheet title (e.g. Standard Form — Test 1)"
-                  style={{ ...inp, padding: "8px 10px", width: "100%", maxWidth: 340, boxSizing: "border-box" }} />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <select value={wsForm.topicId} onChange={(e) => setWsForm((f) => ({ ...f, topicId: e.target.value, subs: [] }))} style={{ ...inp, padding: "8px 8px", maxWidth: 190 }}>
-                    {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <input type="number" min={1} max={100} value={wsForm.count} onChange={(e) => setWsForm((f) => ({ ...f, count: e.target.value }))} style={{ ...inp, width: 56, padding: "8px 6px" }} />
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>questions</span>
+                  style={{ ...inp, padding: "8px 10px", width: "100%", maxWidth: 340, boxSizing: "border-box", marginBottom: 12 }} />
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {TOPICS.map((t) => {
+                    const cfg = wsForm.perTopic[t.id] || { count: "", subs: [] };
+                    const subList = SUBTOPICS[t.id] || [];
+                    const expanded = wsExpandedTopic === t.id;
+                    const subsChosen = (cfg.subs || []).filter((k) => subList.some((s) => s.key === k));
+                    const subLabel = subList.length === 0 ? null
+                      : subsChosen.length === 0 || subsChosen.length === subList.length ? "General"
+                        : `${subsChosen.length} subtopic${subsChosen.length === 1 ? "" : "s"}`;
+                    return (
+                      <div key={t.id} style={{ border: "1px solid var(--grid)", borderRadius: 8, overflow: "hidden", background: "var(--paper)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px" }}>
+                          <button
+                            onClick={() => subList.length && setWsExpandedTopic(expanded ? null : t.id)}
+                            style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, textAlign: "left", background: "none", border: "none", padding: 0, cursor: subList.length ? "pointer" : "default", color: "var(--ink)", fontSize: 12.5 }}
+                          >
+                            <span style={{ flexShrink: 0 }}>{t.icon}</span>
+                            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                            {subLabel && <span style={{ fontSize: 10.5, color: "var(--muted)", flexShrink: 0 }}>{subLabel} {expanded ? "▾" : "▸"}</span>}
+                          </button>
+                          <input
+                            type="number" min={0} max={100} value={cfg.count}
+                            placeholder="0"
+                            onChange={(e) => setWsForm((f) => ({ ...f, perTopic: { ...f.perTopic, [t.id]: { ...(f.perTopic[t.id] || { count: "", subs: [] }), count: e.target.value } } }))}
+                            style={{ ...inp, width: 44, padding: "5px 4px", textAlign: "center", flexShrink: 0 }}
+                          />
+                        </div>
+                        {expanded && subList.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "0 8px 8px 26px" }}>
+                            {subList.map((s) => {
+                              const on = subsChosen.includes(s.key);
+                              return (
+                                <button key={s.key} onClick={() => setWsForm((f) => {
+                                  const prev = f.perTopic[t.id] || { count: "", subs: [] };
+                                  const c = prev.subs || [];
+                                  const nextSubs = c.includes(s.key) ? c.filter((k) => k !== s.key) : [...c, s.key];
+                                  return { ...f, perTopic: { ...f.perTopic, [t.id]: { ...prev, subs: nextSubs } } };
+                                })} style={{
+                                  fontSize: 10.5, fontWeight: 600, padding: "4px 9px", borderRadius: 999, cursor: "pointer",
+                                  border: `1px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: on ? "var(--blue)" : "var(--card)", color: on ? "var(--on-accent)" : "var(--muted)",
+                                }}>{s.name}</button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                {list.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    {list.map((s) => {
-                      const on = subs.includes(s.key);
-                      return (
-                        <button key={s.key} onClick={() => setWsForm((f) => {
-                          const c = f.subs || [];
-                          return { ...f, subs: c.includes(s.key) ? c.filter((k) => k !== s.key) : [...c, s.key] };
-                        })} style={{
-                          fontSize: 11, fontWeight: 600, padding: "5px 10px", borderRadius: 999, cursor: "pointer",
-                          border: `1px solid ${on ? "var(--blue)" : "var(--grid)"}`, background: on ? "var(--blue)" : "var(--card)", color: on ? "var(--on-accent)" : "var(--muted)",
-                        }}>{s.name}</button>
-                      );
-                    })}
-                    <div style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>Leave none selected (or select all) for a general mix across the whole topic.</div>
-                  </div>
-                )}
-                <button onClick={doGenerateWorksheet} style={{ ...prim, alignSelf: "flex-start", marginTop: 4 }}>{wsQuestions ? "🔁 Regenerate" : "Generate"}</button>
+
+                <button onClick={doGenerateWorksheet} disabled={!active.length} style={{ ...prim, marginTop: 12, opacity: active.length ? 1 : 0.5 }}>
+                  {wsQuestions ? "🔁 Regenerate" : "Generate"}{active.length ? ` (${active.reduce((s, { cfg }) => s + (parseInt(cfg.count, 10) || 0), 0)} questions)` : ""}
+                </button>
               </div>
 
               {wsQuestions && wsQuestions.length > 0 && (<>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
                   <button onClick={() => { try { window.print(); } catch (e) { /* ignore */ } }} style={prim}>🖨 Print / Save as PDF</button>
+                  <button onClick={() => doExportWorksheetDoc(docTitle, wsQuestions)} style={ghost}>📄 Save as Word</button>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{wsQuestions.length} questions · {scope} · answers on the last page</span>
                 </div>
 
@@ -16584,7 +16695,11 @@ export default function MathsUnlockedBN() {
                     rest of the app via the body:has() rule below so the
                     existing bare window.print() on the class page (which
                     has no .mub-worksheet-print in its DOM) still works
-                    unchanged. */}
+                    unchanged. Deliberately plain block/float layout, not
+                    flexbox or CSS columns — Chrome's print engine has been
+                    seen to silently drop content out of flex items marked
+                    page-break-inside:avoid, and multi-column print layouts
+                    are similarly unreliable across devices. */}
                 <div className="mub-worksheet-print">
                   <div className="mub-ws-page">
                     <div className="mub-ws-title">{docTitle}</div>
@@ -16596,25 +16711,21 @@ export default function MathsUnlockedBN() {
                     <div className="mub-ws-instr">Answer all questions. Show your working in the space provided. Topic: {scope} · Total marks: {wsQuestions.length}</div>
                     {wsQuestions.map((q, i) => (
                       <div key={i} className="mub-ws-q">
-                        <div className="mub-ws-row">
-                          <span className="mub-ws-qnum">{i + 1}.</span>
-                          <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
-                          <span className="mub-ws-marks">[1]</span>
-                        </div>
+                        <span className="mub-ws-qnum">{i + 1}.</span>
+                        <span className="mub-ws-marks">[1]</span>
+                        <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
                         <div className="mub-ws-space" />
                       </div>
                     ))}
                   </div>
                   <div className="mub-ws-page mub-ws-answers">
                     <div className="mub-ws-title">Answers — {docTitle}</div>
-                    <div className="mub-ws-alist">
-                      {wsQuestions.map((q, i) => (
-                        <div key={i} className="mub-ws-arow">
-                          <span className="mub-ws-qnum">{i + 1}.</span>
-                          <MathText text={q.answer} />
-                        </div>
-                      ))}
-                    </div>
+                    {wsQuestions.map((q, i) => (
+                      <div key={i} className="mub-ws-arow">
+                        <span className="mub-ws-qnum">{i + 1}.</span>
+                        <span className="mub-ws-atext"><MathText text={q.answer} /></span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </>)}
