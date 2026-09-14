@@ -11032,6 +11032,9 @@ export default function MathsUnlockedBN() {
   const [pinResetBusy, setPinResetBusy] = useState(false);
   const [pinResetMsg, setPinResetMsg] = useState(null); // { uid, ok, text }
   const [customQuestions, setCustomQuestions] = useState({});
+  // Question Bank has two tabs — the worksheet generator (default) and
+  // the existing per-topic custom-question editor.
+  const [qbTab, setQbTab] = useState("worksheet");
   const [qbTopicId, setQbTopicId] = useState(TOPICS[0].id);
   const [qbForm, setQbForm] = useState({ prompt: "", answer: "", hint: "", steps: "" });
   const [qbEditingId, setQbEditingId] = useState(null);
@@ -11110,8 +11113,8 @@ export default function MathsUnlockedBN() {
   const [subPickerOpen, setSubPickerOpen] = useState(false);
   // Teacher worksheet generator: standalone practice/test sheets, not tied
   // to a class — see doGenerateWorksheet (near pickQuestion) and the
-  // "worksheet" screen for the printable layout. Can mix several topics
-  // in one sheet: perTopic[topicId] = { count, subs }.
+  // Question Bank screen's "worksheet" tab for the printable layout. Can
+  // mix several topics in one sheet: perTopic[topicId] = { count, subs }.
   const [wsForm, setWsForm] = useState({ title: "", perTopic: {} });
   const [wsExpandedTopic, setWsExpandedTopic] = useState(null);
   const [wsQuestions, setWsQuestions] = useState(null);
@@ -11202,8 +11205,8 @@ export default function MathsUnlockedBN() {
   // straight from state has no such race.
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.classList.toggle("mub-has-worksheet-print", screen === "worksheet" && !!wsQuestions && wsQuestions.length > 0);
-  }, [screen, wsQuestions]);
+    document.body.classList.toggle("mub-has-worksheet-print", screen === "questions" && qbTab === "worksheet" && !!wsQuestions && wsQuestions.length > 0);
+  }, [screen, qbTab, wsQuestions]);
 
   // Whether today's Daily Challenge is still outstanding (drives the red
   // dots on Special Modes). Re-checked on the dashboard, and re-fetched
@@ -11475,9 +11478,6 @@ export default function MathsUnlockedBN() {
       setScreen(profile.name ? "dashboard" : "login");
     }
     if (!teacherActive && (screen === "classes" || screen === "classDetail")) {
-      setScreen(profile.name ? "dashboard" : "login");
-    }
-    if (!(teacherActive || (teacherAccount && teacherAccount.admin)) && screen === "worksheet") {
       setScreen(profile.name ? "dashboard" : "login");
     }
     if (screen === "assignments" && !(assignments.length || studentClasses.some((c) => !c.archived))) {
@@ -11820,7 +11820,7 @@ export default function MathsUnlockedBN() {
 
   // Teacher worksheet generator: a standalone set of practice/test
   // questions, independent of any class — printed with a full answer key
-  // on the last page (see the "worksheet" screen). Reuses the same
+  // on the last page (see Question Bank's "worksheet" tab). Reuses the same
   // question engine as homework (pickQuestion), just without a student
   // profile or an assignment row behind it. Can mix questions from
   // several topics (wsForm.perTopic), each with its own subtopic filter.
@@ -13660,11 +13660,6 @@ ${aBlocks}
   // Cycle the sort: Recent → Name → Level → Recent
   const cycleAdminSort = () => setAdminSort((s) => (s === "active" ? "name" : s === "name" ? "level" : "active"));
 
-  /* ---- teacher: worksheet generator (standalone, no class) ---- */
-  function openWorksheet() {
-    setScreen("worksheet");
-  }
-
   /* ---- teacher: classes ---- */
   async function openClasses() {
     setActiveClass(null);
@@ -14138,6 +14133,7 @@ ${aBlocks}
 
   function openQuestionBank() {
     setScreen("questions");
+    setQbTab("worksheet");
     setQbPreview(TOPIC_BY_ID[qbTopicId].generate());
   }
 
@@ -14253,7 +14249,7 @@ ${aBlocks}
         }
         /* Teacher worksheet generator — printable exam-paper layout.
            Rendered through a React portal straight onto <body> (see
-           createPortal in the "worksheet" screen), NOT left nested inside
+           createPortal in Question Bank's "worksheet" tab), NOT left nested inside
            the app's own root div. An earlier version isolated it with a
            visibility:hidden + position:absolute overlay instead, while
            leaving the whole app in normal flow (just invisible) — Chrome's
@@ -14376,11 +14372,6 @@ ${aBlocks}
             {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "classes" && screen !== "classDetail" && (
               <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
                 🎓 Classes
-              </button>
-            )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && (teacherActive || (teacherAccount && teacherAccount.admin)) && screen !== "worksheet" && (
-              <button onClick={openWorksheet} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
-                📝 Worksheets
               </button>
             )}
             {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "admin" && (
@@ -15754,7 +15745,22 @@ ${aBlocks}
             <button onClick={() => setScreen(profile.name ? "dashboard" : "login")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
               <ArrowLeft size={14} /> back
             </button>
-            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Question Bank</div>
+            <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Question Bank</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+              {[["worksheet", "Worksheet Generator"], ["custom", "Custom Questions"]].map(([k, label]) => (
+                <button key={k} onClick={() => setQbTab(k)} style={{
+                  flex: 1, fontSize: 12.5, fontWeight: 700, padding: "8px 10px", borderRadius: 10, cursor: "pointer",
+                  color: qbTab === k ? "var(--on-accent)" : "var(--muted)",
+                  background: qbTab === k ? "var(--blue)" : "var(--card)",
+                  border: `1.5px solid ${qbTab === k ? "var(--blue)" : "var(--grid)"}`,
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {screen === "questions" && qbTab === "custom" && (
+          <div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
               Each topic writes questions from a formula (see the live example below) — that's still where most questions come from. Custom questions you add here get mixed in alongside them, roughly half the time.
             </div>
@@ -16755,9 +16761,8 @@ ${aBlocks}
           );
         })()}
 
-        {/* TEACHER — WORKSHEET GENERATOR (standalone, no class) */}
-        {screen === "worksheet" && (() => {
-          const back = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 };
+        {/* TEACHER — WORKSHEET GENERATOR (Question Bank tab) */}
+        {screen === "questions" && qbTab === "worksheet" && (() => {
           const prim = { fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
           const ghost = { fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" };
           const inp = { fontSize: 13, border: "1px solid var(--grid)", borderRadius: 8, boxSizing: "border-box", background: "var(--card)", color: "var(--ink)" };
@@ -16769,8 +16774,6 @@ ${aBlocks}
           const docTitle = wsForm.title.trim() || (active.length === 1 ? `${active[0].t.name} — Worksheet` : "Maths — Worksheet");
           return (
             <div>
-              <button onClick={() => setScreen("dashboard")} style={back}><ArrowLeft size={14} /> back</button>
-              <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Worksheet generator</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
                 Generate a set of practice questions to print, save as a PDF, or save as a Word document — full answer key on the last page. Not tied to any class, so it&rsquo;s ready for a test, a cover lesson, or homework on paper. Mix as many topics as you like: fill in a count next to each one you want.
               </div>
