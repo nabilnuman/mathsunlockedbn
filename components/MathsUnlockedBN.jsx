@@ -11848,9 +11848,9 @@ export default function MathsUnlockedBN() {
       return `
       <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
       <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>
-      <p style="margin:0 0 16pt 26pt;">
-        <span style="float:right;font-size:9pt;color:#333;">[1]</span>
-        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
+      <p style="margin:0 0 16pt 26pt;text-align:right;">
+        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:260pt;max-width:75%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
+        <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
       </p>`;
     }).join("");
     const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
@@ -14264,15 +14264,18 @@ export default function MathsUnlockedBN() {
         .mub-ws-space { height: 28pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
         /* The final answer line — "x = ......... [1]" (or a plain blank
            when the prompt doesn't clearly name what's being found; see
-           wsAnswerParts). Not flexbox: this sits inside .mub-ws-q, which
-           is itself page-break-inside:avoid, and that combination is
-           exactly what silently dropped content earlier — floats only. */
-        .mub-ws-answerline { margin: 10pt 0 0 22pt; }
-        .mub-ws-answerline::after { content: ""; display: table; clear: both; }
-        .mub-ws-marks { float: right; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; margin-left: 8pt; }
+           wsAnswerParts) — sat right before the next question, reading as
+           its bottom boundary. text-align:right, not float or flex: a
+           float left the dotted line and the [marks] badge visibly
+           split apart instead of reading as one line, and this sits
+           inside .mub-ws-q (page-break-inside:avoid), where flex is what
+           silently dropped content earlier. Plain inline content grouped
+           by text-align has neither problem. */
+        .mub-ws-answerline { margin: 10pt 22pt 0 22pt; text-align: right; }
         .mub-ws-alabel { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; }
-        .mub-ws-dots { display: inline-block; width: 220pt; max-width: 55%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
+        .mub-ws-dots { display: inline-block; width: 260pt; max-width: 75%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
         .mub-ws-unit { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; margin-left: 4pt; }
+        .mub-ws-marks { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; margin-left: 8pt; }
         .mub-ws-answers { page-break-before: always; }
         .mub-ws-arow { margin-bottom: 8pt; page-break-inside: avoid; }
         .mub-ws-arow::after { content: ""; display: table; clear: both; }
@@ -16844,10 +16847,10 @@ export default function MathsUnlockedBN() {
                             )}
                             <div className="mub-ws-space" />
                             <div className="mub-ws-answerline">
-                              <span className="mub-ws-marks">[1]</span>
                               {label && <span className="mub-ws-alabel">{label} = </span>}
                               <span className="mub-ws-dots" />
                               {unit && <span className="mub-ws-unit">{unit}</span>}
+                              <span className="mub-ws-marks">[1]</span>
                             </div>
                           </div>
                         );
