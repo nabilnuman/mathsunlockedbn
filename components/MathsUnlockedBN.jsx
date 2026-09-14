@@ -11847,8 +11847,8 @@ export default function MathsUnlockedBN() {
       const { label, unit } = wsAnswerParts(q);
       return `
       <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
-      <p style="margin:6pt 26pt 0 26pt;line-height:1;text-align:right;">
-        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
+      <p style="margin:14pt 26pt 0 26pt;line-height:1;text-align:right;">
+        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:165pt;max-width:41%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
         <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
       </p>
       <p style="margin:0 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:9pt;">&nbsp;</p>`;
@@ -14277,9 +14277,9 @@ export default function MathsUnlockedBN() {
            inside .mub-ws-q (page-break-inside:avoid), where flex is what
            silently dropped content earlier. Plain inline content grouped
            by text-align has neither problem. */
-        .mub-ws-answerline { margin: 10pt 22pt 0 22pt; text-align: right; line-height: 1; }
+        .mub-ws-answerline { margin: 18pt 22pt 0 22pt; text-align: right; line-height: 1; }
         .mub-ws-alabel { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; }
-        .mub-ws-dots { display: inline-block; width: 220pt; max-width: 55%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
+        .mub-ws-dots { display: inline-block; width: 165pt; max-width: 41%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
         .mub-ws-unit { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; margin-left: 4pt; }
         .mub-ws-marks { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; margin-left: 8pt; }
         .mub-ws-answers { page-break-before: always; }
