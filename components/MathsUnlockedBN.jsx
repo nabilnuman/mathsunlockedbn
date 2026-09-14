@@ -11863,33 +11863,40 @@ export default function MathsUnlockedBN() {
   // same leniency, so that file simply failed to open on a phone. RTF is
   // a real, fully-specified text-based format every Word app (desktop or
   // mobile) reads directly.
-  function doExportWorksheetDoc(docTitle, qs) {
+  function doExportWorksheetDoc(docTitle, scope, qs) {
     if (typeof window === "undefined" || !qs || !qs.length) return;
     // A run of non-breaking spaces under \ul — a plain space run risks
-    // being trimmed by a less careful RTF reader, \~ won't be.
+    // being trimmed by a less careful RTF reader, \~ won't be. ~2.8pt per
+    // char at 10pt Arial, so 60 of them is roughly the PDF's 165pt line.
     const blank = (n) => "\\~".repeat(n);
+    const LINE = 60;
+    // A short, empty, bottom-bordered paragraph — \brdrdot for the
+    // dotted "working space" line under the answer line, \brdrs (solid)
+    // for the divider under the instructions line. \pard resets so the
+    // border doesn't bleed into whatever paragraph follows.
+    const rule = (style, spaceAfterTwips) => `\\pard\\brdrb${style}\\brdrw10\\brsp20\\fs2\\~\\par\\pard\\sa${spaceAfterTwips}\\par`;
     const qBlocks = qs.map((q, i) => {
       const { label, unit } = wsAnswerParts(q);
       const labelTxt = label ? `${rtfEscape(label)} = ` : "";
       const unitTxt = unit ? ` ${rtfEscape(unit)}` : "";
-      return `{\\b ${i + 1}.}\\tab ${mathToRtf(q.prompt)}\\par
-\\par
-\\qr ${labelTxt}{\\ul ${blank(18)}}\\ulnone${unitTxt}${blank(2)}{\\fs16\\cf1 [1]}\\par
-\\ql\\par`;
+      return `\\pard\\sa60 {\\b ${i + 1}.}\\tab ${mathToRtf(q.prompt)}\\par
+\\pard\\sa200\\par
+\\qr ${labelTxt}{\\ul ${blank(LINE)}}\\ulnone${unitTxt}${blank(2)}{\\fs18\\cf1 [1]}\\par
+\\ql${rule("\\brdrdot", 260)}`;
     }).join("\n");
     const aBlocks = qs.map((q, i) => `{\\b ${i + 1}.} ${mathToRtf(q.answer)}\\par`).join("\n");
     const rtf = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033
 {\\fonttbl{\\f0\\fswiss Arial;}}
 {\\colortbl;\\red51\\green51\\blue51;}
 \\f0\\fs21
-{\\b\\fs28 ${rtfEscape(docTitle)}\\par}
-\\fs20 Name: ${blank(20)}${blank(4)}Class: ${blank(12)}${blank(4)}Date: ${blank(12)}\\par
-\\fs19 Answer all questions. Show your working in the space provided. Total marks: ${qs.length}\\par
-\\par
+{\\b\\fs26 ${rtfEscape(docTitle)}\\par}
+\\pard\\sa160\\fs20 Name: {\\ul ${blank(24)}}\\ulnone${blank(4)}Class: {\\ul ${blank(14)}}\\ulnone${blank(4)}Date: {\\ul ${blank(14)}}\\ulnone\\par
+\\pard\\fs19 Answer all questions. Show your working in the space provided. Topic: ${rtfEscape(scope || "")} \\u183? Total marks: ${qs.length}\\par
+${rule("\\brdrs", 280)}
 ${qBlocks}
 \\page
-{\\b\\fs28 Answers \\endash ${rtfEscape(docTitle)}\\par}
-\\fs20
+{\\b\\fs26 Answers \\emdash ${rtfEscape(docTitle)}\\par}
+\\pard\\sa120\\fs20
 ${aBlocks}
 }`;
     const blob = new Blob([rtf], { type: "application/rtf" });
@@ -16818,7 +16825,7 @@ ${aBlocks}
               {wsQuestions && wsQuestions.length > 0 && (<>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
                   <button onClick={printWorksheet} style={prim}>🖨 Print / Save as PDF</button>
-                  <button onClick={() => doExportWorksheetDoc(docTitle, wsQuestions)} style={ghost}>📄 Save as Word</button>
+                  <button onClick={() => doExportWorksheetDoc(docTitle, scope, wsQuestions)} style={ghost}>📄 Save as Word</button>
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>{wsQuestions.length} questions · {scope} · answers on the last page</span>
                 </div>
 
