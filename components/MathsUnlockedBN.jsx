@@ -11303,6 +11303,19 @@ export default function MathsUnlockedBN() {
     })();
   }, [ready, profile.name, authUid, teacherAccount]);
 
+  // Notification deep link: once signed in, jump straight to the Daily
+  // Challenge instead of leaving them on the dashboard — see the ?open=
+  // handling above and app/api/cron/reminders' "Daily Challenge is live"
+  // push.
+  useEffect(() => {
+    if (!ready || !profile.name || !authUid || teacherAccount) return;
+    let open = null;
+    try { open = window.localStorage.getItem("mub_pendingopen"); } catch (e) { /* ignore */ }
+    if (open !== "daily") return;
+    try { window.localStorage.removeItem("mub_pendingopen"); } catch (e) { /* ignore */ }
+    startDaily();
+  }, [ready, profile.name, authUid, teacherAccount]);
+
   // Daily Challenge live timer.
   useEffect(() => {
     if (screen !== "daily" || dailyDone != null || !dailyStart) return;
@@ -11446,6 +11459,18 @@ export default function MathsUnlockedBN() {
           } catch (e) { /* ignore */ }
         } else {
           setPendingJoin(window.localStorage.getItem("mub_pendingjoin") || null);
+        }
+        // Notification deep link: ?open=daily — the "Daily Challenge is
+        // live" push (see app/api/cron/reminders) — remember it and jump
+        // straight there once signed in (a separate effect below acts on
+        // it), instead of just landing on the dashboard.
+        if (params.get("open") === "daily") {
+          window.localStorage.setItem("mub_pendingopen", "daily");
+          try {
+            params.delete("open");
+            const q = params.toString();
+            window.history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + window.location.hash);
+          } catch (e) { /* ignore */ }
         }
         // One-tap re-login: prefill the form from a saved "remember me" login.
         const remembered = readRememberedLogin();

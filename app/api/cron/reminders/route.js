@@ -198,7 +198,7 @@ export async function GET(req) {
       dailyJob.set(uid, {
         title: "Today's Daily Challenge is live",
         body: "One question, same for everyone. Set the time to beat.",
-        url: "/",
+        url: "/?open=daily",
         tag: "daily-live",
       });
     }
