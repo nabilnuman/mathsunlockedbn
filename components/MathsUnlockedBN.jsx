@@ -9753,6 +9753,7 @@ function weeklyFocusId(wk = weekKey()) {
   return pool[_hashStr("mub-focus::" + wk) % pool.length];
 }
 const FOCUS_XP_MULT = 2;
+const MIXED_XP_MULT = 1.5; // Mixed Review answers score 50% more XP
 
 // Average LIFETIME-BEST rank index across every topic the student has
 // ever started — the one number a "Grade X" summary (and the weekly
@@ -12589,7 +12590,7 @@ ${aBlocks}
         units += procs; // every nth doubled
         if (!perkPlus(n, "momentum")) n.perkProg = { ...(n.perkProg || {}), momentum: ((n.perkProg && n.perkProg.momentum) || 0) + procs };
       }
-      const gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
+      const gain = units * ((n.boostUntil || 0) > Date.now() ? 2 : 1); // Blitz: 1 XP per correct answer, not the normal CORRECT_XP rate
       n.bonusExp = (n.bonusExp || 0) + gain;
       bumpWeek(n, gain);
     }
@@ -13561,6 +13562,8 @@ ${aBlocks}
       // Weekly focus — this week's spotlight topic scores double.
       const focusHit = scoredId === weeklyFocusId();
       if (focusHit) gain *= FOCUS_XP_MULT;
+      // Mixed Review — scores 50% more than practicing a topic directly.
+      if (activeTopic.id === MIXED_TOPIC.id) gain = Math.round(gain * MIXED_XP_MULT);
       next.bonusExp = (next.bonusExp || 0) + gain;
       // Second Wind re-arms once the streak is rebuilt to the threshold.
       if (perks.includes("secondwind") && (next.streak || 0) >= swMin) d.secondWindUsed = false;
