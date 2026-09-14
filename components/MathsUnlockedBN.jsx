@@ -12590,7 +12590,7 @@ ${aBlocks}
         units += procs; // every nth doubled
         if (!perkPlus(n, "momentum")) n.perkProg = { ...(n.perkProg || {}), momentum: ((n.perkProg && n.perkProg.momentum) || 0) + procs };
       }
-      const gain = units * ((n.boostUntil || 0) > Date.now() ? 2 : 1); // Blitz: 1 XP per correct answer, not the normal CORRECT_XP rate
+      const gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
       n.bonusExp = (n.bonusExp || 0) + gain;
       bumpWeek(n, gain);
     }
