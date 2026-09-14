@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users, Calculator } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
@@ -14115,7 +14116,7 @@ export default function MathsUnlockedBN() {
   if (!ready) return <div style={{ ...vars, minHeight: "100dvh", background: "var(--page-bg)" }} />;
 
   return (
-    <div style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", background: "var(--page-bg)", minHeight: "100dvh", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div id="mub-app-root" style={{ ...vars, fontFamily: "Inter, sans-serif", color: "var(--ink)", background: "var(--page-bg)", minHeight: "100dvh", display: "flex", flexDirection: "column", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400;500;600;700&family=STIX+Two+Math&display=swap');
         @keyframes calcCaret { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
@@ -14131,18 +14132,25 @@ export default function MathsUnlockedBN() {
           background-color: var(--paper);
         }
         /* Teacher worksheet generator — printable exam-paper layout.
-           Hidden on screen (the app shows its own compact preview list
-           instead); shown only inside @media print, and only isolated
-           from the rest of the app when .mub-worksheet-print is actually
-           in the DOM — so the older bare window.print() on the class
-           roster page (no such element) keeps printing as before. */
+           Rendered through a React portal straight onto <body> (see
+           createPortal in the "worksheet" screen), NOT left nested inside
+           the app's own root div. An earlier version isolated it with a
+           visibility:hidden + position:absolute overlay instead, while
+           leaving the whole app in normal flow (just invisible) — Chrome's
+           print pagination sizes the document from normal-flow content,
+           so the absolutely-positioned overlay's true (much taller)
+           height was never accounted for and got cut off partway through,
+           with the forced-new-page answer key past the cutoff never
+           appearing at all. Hiding the whole app and letting this print
+           block sit in normal flow as a body-level sibling fixes that —
+           its own height now genuinely drives pagination. Still gated on
+           .mub-worksheet-print actually being in the DOM, so the older
+           bare window.print() on the class roster page (no such element)
+           keeps printing as before. */
         .mub-worksheet-print { display: none; }
         @media print {
           .mub-worksheet-print { display: block; }
-          body:has(.mub-worksheet-print) * { visibility: hidden; }
-          body:has(.mub-worksheet-print) .mub-worksheet-print,
-          body:has(.mub-worksheet-print) .mub-worksheet-print * { visibility: visible; }
-          .mub-worksheet-print { position: absolute; left: 0; top: 0; width: 100%; }
+          body:has(.mub-worksheet-print) #mub-app-root { display: none; }
           @page { margin: 16mm 14mm; }
         }
         /* Deliberately plain block/float layout below, not flexbox or CSS
@@ -16691,43 +16699,47 @@ export default function MathsUnlockedBN() {
                   ))}
                 </div>
 
-                {/* Print-only document — hidden on screen, isolated from the
-                    rest of the app via the body:has() rule below so the
-                    existing bare window.print() on the class page (which
-                    has no .mub-worksheet-print in its DOM) still works
-                    unchanged. Deliberately plain block/float layout, not
-                    flexbox or CSS columns — Chrome's print engine has been
-                    seen to silently drop content out of flex items marked
-                    page-break-inside:avoid, and multi-column print layouts
-                    are similarly unreliable across devices. */}
-                <div className="mub-worksheet-print">
-                  <div className="mub-ws-page">
-                    <div className="mub-ws-title">{docTitle}</div>
-                    <div className="mub-ws-meta">
-                      <span>Name: ________________________</span>
-                      <span>Class: ______________</span>
-                      <span>Date: ______________</span>
+                {/* Print-only document — hidden on screen, portalled onto
+                    <body> (not left nested in the app's root div) so it's
+                    the only normal-flow content left once #mub-app-root is
+                    hidden for print (see the CSS above) — that's what lets
+                    its true full height drive print pagination instead of
+                    getting cut off. Deliberately plain block/float layout,
+                    not flexbox or CSS columns — Chrome's print engine has
+                    been seen to silently drop content out of flex items
+                    marked page-break-inside:avoid, and multi-column print
+                    layouts are similarly unreliable across devices. */}
+                {typeof document !== "undefined" && createPortal(
+                  <div className="mub-worksheet-print">
+                    <div className="mub-ws-page">
+                      <div className="mub-ws-title">{docTitle}</div>
+                      <div className="mub-ws-meta">
+                        <span>Name: ________________________</span>
+                        <span>Class: ______________</span>
+                        <span>Date: ______________</span>
+                      </div>
+                      <div className="mub-ws-instr">Answer all questions. Show your working in the space provided. Topic: {scope} · Total marks: {wsQuestions.length}</div>
+                      {wsQuestions.map((q, i) => (
+                        <div key={i} className="mub-ws-q">
+                          <span className="mub-ws-qnum">{i + 1}.</span>
+                          <span className="mub-ws-marks">[1]</span>
+                          <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
+                          <div className="mub-ws-space" />
+                        </div>
+                      ))}
                     </div>
-                    <div className="mub-ws-instr">Answer all questions. Show your working in the space provided. Topic: {scope} · Total marks: {wsQuestions.length}</div>
-                    {wsQuestions.map((q, i) => (
-                      <div key={i} className="mub-ws-q">
-                        <span className="mub-ws-qnum">{i + 1}.</span>
-                        <span className="mub-ws-marks">[1]</span>
-                        <span className="mub-ws-qtext"><MathText text={q.prompt} /></span>
-                        <div className="mub-ws-space" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mub-ws-page mub-ws-answers">
-                    <div className="mub-ws-title">Answers — {docTitle}</div>
-                    {wsQuestions.map((q, i) => (
-                      <div key={i} className="mub-ws-arow">
-                        <span className="mub-ws-qnum">{i + 1}.</span>
-                        <span className="mub-ws-atext"><MathText text={q.answer} /></span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                    <div className="mub-ws-page mub-ws-answers">
+                      <div className="mub-ws-title">Answers — {docTitle}</div>
+                      {wsQuestions.map((q, i) => (
+                        <div key={i} className="mub-ws-arow">
+                          <span className="mub-ws-qnum">{i + 1}.</span>
+                          <span className="mub-ws-atext"><MathText text={q.answer} /></span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>,
+                  document.body
+                )}
               </>)}
             </div>
           );
