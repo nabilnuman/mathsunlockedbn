@@ -11851,7 +11851,7 @@ export default function MathsUnlockedBN() {
         ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
         <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
       </p>
-      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>`;
+      <p style="margin:1pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>`;
     }).join("");
     const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
     const html = `<!DOCTYPE html>
@@ -14261,7 +14261,7 @@ export default function MathsUnlockedBN() {
         .mub-ws-qtext { display: block; margin: 0 0 0 22pt; font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; line-height: 1.5; }
         .mub-ws-figure { clear: both; margin: 4pt 0 0 22pt; max-width: 220pt; }
         .mub-ws-figure svg { max-width: 100%; height: auto; display: block; }
-        .mub-ws-space { height: 28pt; margin: 6pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
+        .mub-ws-space { height: 28pt; margin: 1pt 0 0 22pt; border-bottom: 0.5pt dotted #999; clear: both; }
         /* The final answer line — "x = ......... [1]" (or a plain blank
            when the prompt doesn't clearly name what's being found; see
            wsAnswerParts) — sat right before the next question, reading as
