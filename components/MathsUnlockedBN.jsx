@@ -11874,7 +11874,12 @@ export default function MathsUnlockedBN() {
     // dotted "working space" line under the answer line, \brdrs (solid)
     // for the divider under the instructions line. \pard resets so the
     // border doesn't bleed into whatever paragraph follows.
-    const rule = (style, spaceAfterTwips) => `\\pard\\brdrb${style}\\brdrw10\\brsp20\\fs2\\~\\par\\pard\\sa${spaceAfterTwips}\\par`;
+    // \fs2 must stay scoped inside its own {...} group — \pard only resets
+    // paragraph properties (alignment, borders, spacing), not character
+    // ones like font size, so an unscoped \fs2 here would shrink every
+    // question after the first rule() call to 1pt for the rest of the
+    // document (which is exactly what shipped last time).
+    const rule = (style, spaceAfterTwips) => `\\pard\\brdrb${style}\\brdrw10\\brsp20{\\fs2\\~}\\par\\pard\\sa${spaceAfterTwips}\\par`;
     const qBlocks = qs.map((q, i) => {
       const { label, unit } = wsAnswerParts(q);
       const labelTxt = label ? `${rtfEscape(label)} = ` : "";
@@ -11885,19 +11890,27 @@ export default function MathsUnlockedBN() {
 \\ql${rule("\\brdrdot", 260)}`;
     }).join("\n");
     const aBlocks = qs.map((q, i) => `{\\b ${i + 1}.} ${mathToRtf(q.answer)}\\par`).join("\n");
+    // Every \fs change below is scoped inside its own {...} group rather
+    // than left to persist ambiently — \pard only resets paragraph
+    // properties (alignment/borders/spacing), never character ones like
+    // font size, so an unscoped \fs here would carry over into whatever
+    // text follows it for the rest of the document. \f0\fs21 at the top
+    // is the one deliberate exception: that's the intended base size for
+    // the question text itself, which never overrides its own font size.
     const rtf = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033
 {\\fonttbl{\\f0\\fswiss Arial;}}
 {\\colortbl;\\red51\\green51\\blue51;}
 \\f0\\fs21
 {\\b\\fs26 ${rtfEscape(docTitle)}\\par}
-\\pard\\sa160\\fs20 Name: {\\ul ${blank(24)}}\\ulnone${blank(4)}Class: {\\ul ${blank(14)}}\\ulnone${blank(4)}Date: {\\ul ${blank(14)}}\\ulnone\\par
-\\pard\\fs19 Answer all questions. Show your working in the space provided. Topic: ${rtfEscape(scope || "")} \\u183? Total marks: ${qs.length}\\par
+\\pard\\sa160{\\fs20 Name: {\\ul ${blank(24)}}\\ulnone${blank(4)}Class: {\\ul ${blank(14)}}\\ulnone${blank(4)}Date: {\\ul ${blank(14)}}\\ulnone\\par}
+\\pard{\\fs19 Answer all questions. Show your working in the space provided. Topic: ${rtfEscape(scope || "")} \\u183? Total marks: ${qs.length}\\par}
 ${rule("\\brdrs", 280)}
 ${qBlocks}
 \\page
 {\\b\\fs26 Answers \\emdash ${rtfEscape(docTitle)}\\par}
-\\pard\\sa120\\fs20
+\\pard\\sa120{\\fs20
 ${aBlocks}
+}
 }`;
     const blob = new Blob([rtf], { type: "application/rtf" });
     const url = URL.createObjectURL(blob);
