@@ -11847,11 +11847,11 @@ export default function MathsUnlockedBN() {
       const { label, unit } = wsAnswerParts(q);
       return `
       <p style="margin:0;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.prompt)}</p>
-      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>
-      <p style="margin:0 0 16pt 26pt;text-align:right;">
-        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:260pt;max-width:75%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
+      <p style="margin:6pt 26pt 0 26pt;text-align:right;">
+        ${label ? `${esc(label)} = ` : ""}<span style="display:inline-block;width:220pt;max-width:55%;border-bottom:1pt solid #000;">&nbsp;</span>${unit ? ` ${esc(unit)}` : ""}
         <span style="font-size:9pt;color:#333;margin-left:8pt;">[1]</span>
-      </p>`;
+      </p>
+      <p style="margin:6pt 0 16pt 26pt;border-bottom:0.5pt dotted #999;height:30pt;">&nbsp;</p>`;
     }).join("");
     const aRows = qs.map((q, i) => `<p style="margin:0 0 6pt;"><b>${i + 1}.</b>&nbsp;&nbsp;${mathToPlainHtml(q.answer)}</p>`).join("");
     const html = `<!DOCTYPE html>
@@ -14273,7 +14273,7 @@ export default function MathsUnlockedBN() {
            by text-align has neither problem. */
         .mub-ws-answerline { margin: 10pt 22pt 0 22pt; text-align: right; }
         .mub-ws-alabel { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; }
-        .mub-ws-dots { display: inline-block; width: 260pt; max-width: 75%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
+        .mub-ws-dots { display: inline-block; width: 220pt; max-width: 55%; height: 0; border-bottom: 1pt solid #000; vertical-align: -2pt; }
         .mub-ws-unit { font-family: 'Cambria Math', 'STIX Two Math', Arial, sans-serif; font-size: 11pt; margin-left: 4pt; }
         .mub-ws-marks { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #333; white-space: nowrap; margin-left: 8pt; }
         .mub-ws-answers { page-break-before: always; }
@@ -16845,13 +16845,13 @@ export default function MathsUnlockedBN() {
                             {(q.graph || q.motion || q.histogram || q.scatter || q.table || q.figure || q.tri || q.circle || q.parallel || q.triParallel || q.isoLine || q.straightLine || q.bearing || q.solid || q.vec || q.transform) && (
                               <div className="mub-ws-figure"><QuestionFigure q={q} /></div>
                             )}
-                            <div className="mub-ws-space" />
                             <div className="mub-ws-answerline">
                               {label && <span className="mub-ws-alabel">{label} = </span>}
                               <span className="mub-ws-dots" />
                               {unit && <span className="mub-ws-unit">{unit}</span>}
                               <span className="mub-ws-marks">[1]</span>
                             </div>
+                            <div className="mub-ws-space" />
                           </div>
                         );
                       })}
