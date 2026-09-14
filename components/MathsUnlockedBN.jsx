@@ -14206,8 +14206,13 @@ export default function MathsUnlockedBN() {
            hiding it; and not a class toggled around window.print() either
            — afterprint's timing wasn't reliable enough on Android to
            guarantee the class was still there when the print snapshot
-           was actually taken). See the useEffect on wsQuestions/screen. */
-        @media print { .mub-has-worksheet-print #mub-app-root { display: none; } }
+           was actually taken). See the useEffect on wsQuestions/screen.
+           !important because #mub-app-root's display:flex is set as an
+           inline style (the root div's own style prop) — inline styles
+           beat any stylesheet selector regardless of specificity, so
+           without !important this rule could never have won even when
+           the class and the selector were both working correctly. */
+        @media print { .mub-has-worksheet-print #mub-app-root { display: none !important; } }
         .mub-worksheet-print { display: none; }
         @media print {
           .mub-worksheet-print { display: block; }
