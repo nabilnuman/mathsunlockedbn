@@ -15,7 +15,7 @@ import {
   loadAssignments, createAssignment, deleteAssignment, setAssignmentArchived, classLicensed,
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
-  submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers, adminEngagementMetrics,
+  submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers, adminEngagementMetrics, adminDailyActive,
   getParentLinkFor,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
@@ -887,6 +887,46 @@ function ScatterGraph({ points, xLabel, yLabel }) {
       ))}
       <text x={ml + pw / 2} y={Hh - 2} fontSize="8" textAnchor="middle" fill="var(--muted)">{xLabel}</text>
       <text x={9} y={mt + ph / 2} fontSize="7.5" textAnchor="middle" fill="var(--muted)" transform={`rotate(-90 9 ${mt + ph / 2})`}>{yLabel}</text>
+    </svg>
+  );
+}
+
+// Daily-active-students line chart for Admin -> Metrics — same spirit as
+// a "players over time" graph, built from get_daily_active_students()
+// (profile.dayHistory, a rolling ~35-day window). No chart library.
+function DailyActiveChart({ days }) {
+  const W = 640, H = 220, padL = 30, padR = 10, padT = 14, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const n = days.length;
+  const maxCount = Math.max(1, ...days.map((d) => d.count));
+  const x = (i) => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const y = (v) => padT + innerH - (v / maxCount) * innerH;
+  const pathD = days.map((d, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(d.count).toFixed(1)}`).join(" ");
+  const baseY = (padT + innerH).toFixed(1);
+  const areaD = `${pathD} L ${x(n - 1).toFixed(1)} ${baseY} L ${x(0).toFixed(1)} ${baseY} Z`;
+  const peakIdx = days.reduce((best, d, i) => (d.count > days[best].count ? i : best), 0);
+  const labelCount = Math.min(5, n);
+  const labelIdxs = Array.from(new Set(Array.from({ length: labelCount }, (_, k) => Math.round((k / Math.max(1, labelCount - 1)) * (n - 1)))));
+  const fmt = (iso) => {
+    const d = new Date(`${iso}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? iso : `${d.toLocaleDateString(undefined, { month: "short" })} ${d.getDate()}`;
+  };
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Daily active students over time" style={{ display: "block" }}>
+      {[0, 0.5, 1].map((f, i) => {
+        const gy = padT + innerH * (1 - f);
+        return (<g key={i}>
+          <line x1={padL} y1={gy} x2={W - padR} y2={gy} stroke="var(--grid)" strokeWidth="1" />
+          <text x={padL - 5} y={gy + 3} fontSize="9" textAnchor="end" fill="var(--muted)">{Math.round(maxCount * f)}</text>
+        </g>);
+      })}
+      <path d={areaD} fill="var(--blue)" opacity="0.12" stroke="none" />
+      <path d={pathD} fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(peakIdx)} cy={y(days[peakIdx].count)} r="3.2" fill="var(--blue)" />
+      <circle cx={x(n - 1)} cy={y(days[n - 1].count)} r="3.2" fill="var(--blue)" stroke="var(--card)" strokeWidth="1.5" />
+      {labelIdxs.map((idx) => (
+        <text key={idx} x={x(idx)} y={H - 6} fontSize="9" textAnchor="middle" fill="var(--muted)">{fmt(days[idx].day)}</text>
+      ))}
     </svg>
   );
 }
@@ -11027,6 +11067,7 @@ export default function MathsUnlockedBN() {
   const [adminTab, setAdminTab] = useState("students"); // "students" | "teachers"
   const [adminTeacherRows, setAdminTeacherRows] = useState(null); // admin_teachers(); null = not loaded
   const [engagementMetrics, setEngagementMetrics] = useState(null); // get_engagement_metrics(); null = not loaded
+  const [dailyActive, setDailyActive] = useState(null); // adminDailyActive(); null = not loaded
   const [adminSort, setAdminSort] = useState("active"); // "active" | "name" | "level"
   const [pinResetVal, setPinResetVal] = useState("");
   const [pinResetBusy, setPinResetBusy] = useState(false);
@@ -11474,8 +11515,19 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (!ready) return;
     const adminOk = teacherActive && teacherAccount && teacherAccount.admin;
-    if (!adminOk && (screen === "admin" || screen === "questions" || screen === "weeklygfx" || screen === "mathle")) {
+    if (!adminOk && (screen === "admin" || screen === "weeklygfx" || screen === "mathle")) {
       setScreen(profile.name ? "dashboard" : "login");
+    }
+    // Question Bank itself is open to any licensed teacher (its worksheet
+    // tab is a teacher-wide tool); the "Custom Questions" tab inside it
+    // stays admin-only — bounce anyone who isn't admin back to the
+    // worksheet tab rather than leaving them on a tab whose content they
+    // can't see.
+    if (!teacherActive && screen === "questions") {
+      setScreen(profile.name ? "dashboard" : "login");
+    }
+    if (!adminOk && screen === "questions" && qbTab === "custom") {
+      setQbTab("worksheet");
     }
     if (!teacherActive && (screen === "classes" || screen === "classDetail")) {
       setScreen(profile.name ? "dashboard" : "login");
@@ -11486,7 +11538,7 @@ export default function MathsUnlockedBN() {
     if (screen === "lesson" && (!profile.name || !LESSONS[lessonId])) {
       setScreen(profile.name ? "dashboard" : "login");
     }
-  }, [teacherMode, teacherAccount, teacherActive, ready, screen, profile.name, assignments.length, studentClasses, lessonId]);
+  }, [teacherMode, teacherAccount, teacherActive, ready, screen, qbTab, profile.name, assignments.length, studentClasses, lessonId]);
 
   useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
 
@@ -13652,6 +13704,10 @@ ${aBlocks}
     catch (e) { setEngagementMetrics(null); }
     setAdminLoading(false);
   }
+  async function loadDailyActive() {
+    try { setDailyActive(await adminDailyActive()); }
+    catch (e) { setDailyActive(null); }
+  }
   function openAdmin() {
     setScreen("admin");
     setAdminTab("students");
@@ -14379,7 +14435,7 @@ ${aBlocks}
                 Admin view
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "questions" && (
+            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
@@ -15541,14 +15597,14 @@ ${aBlocks}
             </button>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>Admin</div>
-              <button onClick={() => (adminTab === "students" ? loadStudents() : adminTab === "teachers" ? loadAdminTeachers() : loadEngagementMetrics())} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={() => (adminTab === "students" ? loadStudents() : adminTab === "teachers" ? loadAdminTeachers() : (loadEngagementMetrics(), loadDailyActive()))} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                 <RotateCcw size={12} /> refresh
               </button>
             </div>
 
             <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
               {[["students", `Students${students.length ? ` (${students.length})` : ""}`], ["teachers", `Teachers${adminTeacherRows ? ` (${adminTeacherRows.length})` : ""}`], ["metrics", "Metrics"]].map(([k, label]) => (
-                <button key={k} onClick={() => { setAdminTab(k); if (k === "teachers" && adminTeacherRows === null) loadAdminTeachers(); if (k === "metrics" && engagementMetrics === null) loadEngagementMetrics(); }} style={{
+                <button key={k} onClick={() => { setAdminTab(k); if (k === "teachers" && adminTeacherRows === null) loadAdminTeachers(); if (k === "metrics" && engagementMetrics === null) loadEngagementMetrics(); if (k === "metrics" && dailyActive === null) loadDailyActive(); }} style={{
                   flex: 1, fontSize: 12.5, fontWeight: 700, padding: "8px 10px", borderRadius: 10, cursor: "pointer",
                   color: adminTab === k ? "var(--on-accent)" : "var(--muted)",
                   background: adminTab === k ? "var(--blue)" : "var(--card)",
@@ -15701,6 +15757,42 @@ ${aBlocks}
                   {engagementMetrics.error}
                 </div>
               )}
+              {dailyActive && dailyActive.error && (
+                <div style={{ fontSize: 13, color: "var(--red)", background: "var(--paper)", border: "1px solid var(--red)", borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+                  {dailyActive.error}
+                </div>
+              )}
+              {dailyActive && !dailyActive.error && (() => {
+                const rows = dailyActive.days || [];
+                if (!rows.length) {
+                  return <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>Not enough data yet for a daily chart — check back after a few days.</div>;
+                }
+                const today = rows[rows.length - 1];
+                const peak = rows.reduce((b, d) => (d.count > b.count ? d : b), rows[0]);
+                const fmtDay = (iso) => {
+                  const d = new Date(`${iso}T00:00:00`);
+                  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                };
+                return (
+                  <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Daily active students</div>
+                    <div style={{ display: "flex", gap: 24, marginBottom: 10, flexWrap: "wrap" }}>
+                      <div>
+                        <div className="mub-display" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink)" }}>{today.count}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>today ({fmtDay(today.day)})</div>
+                      </div>
+                      <div>
+                        <div className="mub-display" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink)" }}>{peak.count}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted)" }}>peak day ({fmtDay(peak.day)})</div>
+                      </div>
+                    </div>
+                    <DailyActiveChart days={rows} />
+                    <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 6 }}>
+                      Last {rows.length} day{rows.length === 1 ? "" : "s"} · counts real students who earned XP that day
+                    </div>
+                  </div>
+                );
+              })()}
               {engagementMetrics && !engagementMetrics.error && (() => {
                 const m = engagementMetrics;
                 const card = (label, value, sub) => (
@@ -15747,7 +15839,7 @@ ${aBlocks}
             </button>
             <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Question Bank</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
-              {[["worksheet", "Worksheet Generator"], ["custom", "Custom Questions"]].map(([k, label]) => (
+              {[["worksheet", "Worksheet Generator"], ...(devUnlocked ? [["custom", "Custom Questions"]] : [])].map(([k, label]) => (
                 <button key={k} onClick={() => setQbTab(k)} style={{
                   flex: 1, fontSize: 12.5, fontWeight: 700, padding: "8px 10px", borderRadius: 10, cursor: "pointer",
                   color: qbTab === k ? "var(--on-accent)" : "var(--muted)",
@@ -15759,7 +15851,7 @@ ${aBlocks}
           </div>
         )}
 
-        {screen === "questions" && qbTab === "custom" && (
+        {screen === "questions" && qbTab === "custom" && devUnlocked && (
           <div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
               Each topic writes questions from a formula (see the live example below) — that's still where most questions come from. Custom questions you add here get mixed in alongside them, roughly half the time.

@@ -1057,3 +1057,53 @@ as $$
 $$;
 revoke all on function public.get_engagement_metrics() from public, anon;
 grant execute on function public.get_engagement_metrics() to authenticated;
+
+-- ============================================================
+--  17. DAILY ACTIVE STUDENTS
+--     A day-by-day count of distinct students who earned XP that day —
+--     the "players right now" style graph on the Admin -> Metrics tab.
+--     Sourced from profile.dayHistory, a rolling ~35-day
+--     {of, xp, avgRankIdx} history kept inside each student's own
+--     profile JSON (see bumpWeek in MathsUnlockedBN.jsx) plus the
+--     still-open profile.day bucket for today, since dayHistory only
+--     gets today's entry once tomorrow rolls it over. kv_store keeps
+--     only the latest snapshot per student, so this can only ever see
+--     the last ~35 days, and only as far back as 2026-09-12 when
+--     day-tracking shipped — there is no way to recover anything older.
+-- ============================================================
+create or replace function public.get_daily_active_students()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with profiles as (
+    select scope, value::jsonb as v
+    from kv_store
+    where key = 'profile'
+      and value is not null and value <> ''
+      and (value::jsonb) ? 'name'
+      and coalesce((value::jsonb ->> 'name'), '') <> ''
+      and scope not in (select uid::text from teachers)
+      and coalesce((value::jsonb ->> 'teacherSignup')::boolean, false) = false
+  ),
+  days as (
+    select p.scope, (h ->> 'of') as of, coalesce((h ->> 'xp')::numeric, 0) as xp
+    from profiles p, jsonb_array_elements(coalesce(p.v -> 'dayHistory', '[]'::jsonb)) h
+    union all
+    select p.scope, (p.v -> 'day' ->> 'of') as of, coalesce((p.v -> 'day' ->> 'xp')::numeric, 0) as xp
+    from profiles p
+    where p.v -> 'day' ->> 'of' is not null
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('day', of, 'count', cnt) order by of), '[]'::jsonb)
+  from (
+    select of, count(distinct scope) as cnt
+    from days
+    where xp > 0
+    group by of
+  ) t
+  where exists (select 1 from teachers where uid = auth.uid() and admin)
+$$;
+revoke all on function public.get_daily_active_students() from public, anon;
+grant execute on function public.get_daily_active_students() to authenticated;
