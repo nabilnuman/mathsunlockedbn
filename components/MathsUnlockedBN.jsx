@@ -9574,6 +9574,7 @@ function assignmentProgress(profile, a) {
     running: !!run,
     attempts: rec ? (rec.attempts || 0) : 0,
     log: rec && Array.isArray(rec.log) ? rec.log : null, // best attempt's per-question breakdown
+    submittedAt: rec && rec.submittedAt ? rec.submittedAt : null, // when their latest attempt was submitted
     overdue: a.due_at && Date.now() > new Date(a.due_at).getTime(),
   };
 }
@@ -13630,7 +13631,7 @@ ${aBlocks}
         const best = Math.max(prev ?? -1, gotRight);
         // Keep the question-by-question breakdown of the best attempt.
         const keepLog = prev == null || gotRight >= prev ? log : prevRec.log || null;
-        next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: (prevRec.attempts || 0) + 1, log: keepLog } };
+        next.hw = { ...(next.hw || {}), [run.assignmentId]: { best, attempts: (prevRec.attempts || 0) + 1, log: keepLog, submittedAt: Date.now() } };
         next.hwRun = null;
         hwComplete = { assignmentId: run.assignmentId, topicId: run.topicId, count: run.count, score: gotRight, best, improved: gotRight > (prev ?? -1), first: prev === undefined || prev === null };
         if (hwComplete.first) notifyPush("hwdone", run.assignmentId); // teacher's first-completion ping
@@ -16770,7 +16771,12 @@ ${aBlocks}
                       <div style={{ borderTop: "1px solid var(--grid)", background: "var(--paper)", padding: "8px 10px" }}>
                         {rosterRows.length === 0 && <div style={{ color: "var(--muted)" }}>No students in this class yet.</div>}
                         {[
-                          ["Submitted", submitted, "var(--green)", (p) => `${p.best}/${p.total}${p.attempts > 1 ? ` · ${p.attempts} tries` : ""}`],
+                          ["Submitted", submitted, "var(--green)", (p) => {
+                            const when = p.submittedAt
+                              ? ` · ${new Date(p.submittedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}, ${new Date(p.submittedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+                              : "";
+                            return `${p.best}/${p.total}${p.attempts > 1 ? ` · ${p.attempts} tries` : ""}${when}`;
+                          }],
                           ["In progress", started, "var(--amber)", (p) => p.running ? `Q ${p.inRun}/${p.total}` : "started"],
                           ["Not started", notStarted, "var(--muted)", () => "—"],
                         ].map(([label, list, col, fmt]) => list.length > 0 && (
