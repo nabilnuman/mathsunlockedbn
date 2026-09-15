@@ -14619,7 +14619,12 @@ ${aBlocks}
           return (
             <div>
               <div style={{ maxWidth: 640, margin: "28px auto 0", textAlign: "center" }}>
-                <img src="/logo.png" alt="MathsUnlocked" style={{ height: 76, width: "auto", margin: "0 auto 20px", display: "block" }} />
+                <div style={{
+                  width: 104, height: 104, borderRadius: "50%", overflow: "hidden", margin: "0 auto 20px",
+                  border: "1px solid var(--grid)", boxShadow: "0 4px 14px var(--shadow-soft)",
+                }}>
+                  <img src="/icon-192.png" alt="MathsUnlocked" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                </div>
                 <div className="mub-display" style={{ fontSize: "clamp(24px, 5vw, 34px)", fontWeight: 700, lineHeight: 1.2, marginBottom: 12, textWrap: "balance" }}>
                   Maths practice that actually keeps you coming back
                 </div>
