@@ -14626,10 +14626,10 @@ ${aBlocks}
                   <img src="/icon-192.png" alt="MathsUnlocked" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 </div>
                 <div className="mub-display" style={{ fontSize: "clamp(24px, 5vw, 34px)", fontWeight: 700, lineHeight: 1.2, marginBottom: 12, textWrap: "balance" }}>
-                  Maths practice that actually keeps you coming back
+                  From zero to exam hero<br />Level up yourself
                 </div>
                 <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 24, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
-                  30 GCE-style topics, ranks to climb from bronze to S+, and a Daily Challenge every student in Brunei can compare their time on. Free for students — no ads, no catch.
+                  30 Year 9-11 topics, ranks to climb from bronze to S+, and a Daily Challenge every student in Brunei can compare their time on. Free for students — no ads, no catch.
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 10 }}>
                   <button onClick={goStart} style={btnPrim}>Get started — it&rsquo;s free</button>
