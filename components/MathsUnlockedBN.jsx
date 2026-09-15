@@ -8656,8 +8656,21 @@ const CARD_BGS = {
   gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#F6E7BF,#EAD29A)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
                bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
+  // --- Proposed level-gated backgrounds, admin-preview only (StyleModal)
+  //     until approved and wired into the real per-level unlock system ---
+  chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px" },
+  notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)" },
+  coral:      { name: "Coral",      bg: "linear-gradient(135deg,#F9C9A8,#F2A0B6)" },
+  origami:    { name: "Origami",    bg: "linear-gradient(135deg,#DDE6F7,#C6DCEE)" },
+  neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
+  terracotta: { name: "Terracotta", bg: "linear-gradient(135deg,#E6A882,#C97A5A)", img: "radial-gradient(rgba(0,0,0,.08) 1.4px,transparent 1.6px)", size: "12px 12px" },
+  nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)" },
+  marble:     { name: "Marble",     bg: "linear-gradient(135deg,#F3F2EF,#DCDAD3)" },
+  circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
+  prism:      { name: "Prism",      dark: true, bg: "linear-gradient(115deg,#FF4DE1,#7FE0FF 50%,#FFD27F)" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
+const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "coral", "origami", "neongrid", "terracotta", "nebula", "marble", "circuit", "prism"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
@@ -9158,7 +9171,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 }
 
 /* Sound pack / title / name style / card background picker. */
-function StyleModal({ profile, onChange, onClose, previewPack }) {
+function StyleModal({ profile, onChange, onClose, previewPack, isAdmin }) {
   const prestige = profile.prestige || 0;
   const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
@@ -9239,6 +9252,28 @@ function StyleModal({ profile, onChange, onClose, previewPack }) {
           );
         })}
       </div>
+
+      {isAdmin && (
+        <>
+          <Head>Card background · admin preview (not yet released)</Head>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {PREVIEW_CARD_BG_IDS.map((id) => {
+              const b = CARD_BGS[id];
+              const on = (profile.cardBg || "graph") === id;
+              return (
+                <div key={id} style={{ width: 66 }}>
+                  <button type="button" onClick={() => onChange(() => ({ cardBg: id }))} style={{
+                    width: 66, height: 44, borderRadius: 8, cursor: "pointer", padding: 0,
+                    border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
+                    ...cardBgStyle(b, true),
+                  }} />
+                  <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{b.name}</div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </EditSheet>
   );
 }
@@ -17963,7 +17998,7 @@ ${aBlocks}
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
-      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} />}
+      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} isAdmin={isAdmin} />}
       {stepPracticeOpen && question && <StepPracticeModal question={question} onClose={() => setStepPracticeOpen(false)} playCorrect={playCorrect} playWrong={playWrong} />}
       {writePad && screen === "daily" && dailyQ && (
         <WritePad
