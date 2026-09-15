@@ -17455,6 +17455,28 @@ ${aBlocks}
                   <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--green)", minWidth: 54, textAlign: "right" }}>★ {blitzScore}</div>
                 </div>
 
+                {/* Per-answer XP, shown for the same ~340ms flash as the
+                    button's green/red colour — mirrors the main quiz
+                    loop's bonus tags rather than only totalling XP once
+                    at finishBlitz. Computed the same way finishBlitz
+                    computes it (blitzCorrect.current is already bumped
+                    by the time this renders), so what flashes here always
+                    sums to the same total awarded at the end. */}
+                {blitzPick && blitzPick.correct && (() => {
+                  const perks = (profile.perks || []).filter((p) => PERKS[p]);
+                  const nth = perkPlus(profile, "momentum") ? 4 : 5;
+                  const momHit = perks.includes("momentum") && blitzCorrect.current % nth === 0;
+                  const boosted = (profile.boostUntil || 0) > Date.now();
+                  let xp = CORRECT_XP;
+                  if (momHit) xp *= 2;
+                  if (boosted) xp *= 2;
+                  return (
+                    <div className="mub-stamp" style={{ fontSize: 12.5, fontWeight: 800, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
+                      +{xp} XP{momHit ? " · 🔗 Momentum ×2" : ""}{boosted ? " · ⚡ Boost ×2" : ""}
+                    </div>
+                  );
+                })()}
+
                 <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderLeft: "4px solid var(--blue)", borderRadius: 10, padding: "16px 16px 18px" }}>
                   <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}><MathText text={blitzQ.prompt} /></div>
 
