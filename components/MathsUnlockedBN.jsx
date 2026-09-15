@@ -8010,28 +8010,42 @@ function rankDisplay(highestRankIdx) {
 
 /* ---------------------------------------------------------
    Levelling (Mastery Challenge). XP comes from three sources:
-   grade ratchet-ups (ungraded→F … S→S+), +2 for every correct
+   grade ratchet-ups (ungraded→F … S→S+), +100 for every correct
    answer, and claimed daily tasks / milestones (pooled in
-   profile.bonusExp). Level 20 costs 8,500 XP: 15 topics at A
-   + 15 at S is 7,350 from ranks, and the ~550–750 correct
+   profile.bonusExp). Level 50 costs 510,000 XP: 15 topics at A
+   + 15 at S is 367,500 from ranks, and the ~1,400 correct
    answers it takes to get there add roughly the rest, landing
-   on the cap. Full S+ mastery (11,700 from ranks) sits past
+   on the cap. Full S+ mastery (585,000 from ranks) sits past
    the cap as the "Mathematics Unlocked" achievement + prestige
-   fuel. XP keeps accruing past Level 20 — invisibly on the bar,
+   fuel. XP keeps accruing past Level 50 — invisibly on the bar,
    but it still feeds the weekly school leaderboard.
+
+   Rescaled 2026-09 — every XP number here is 50× its original
+   value (so the smallest single award, one correct answer, is
+   100 rather than 2 — purely cosmetic, changes no ratio), and the
+   level-50 cap total is a further 20% above a clean 50× scale-up
+   (425,000 → 510,000) — that part *does* make the cap harder to
+   reach in absolute terms, on top of there now being 50 rungs to
+   climb instead of 20. See migrateLevelScaleV2 for how an existing
+   player's stored bonusExp gets carried across to the new scale
+   the first time their profile loads post-rescale.
 --------------------------------------------------------- */
-const LEVEL_CAP = 20;
-const CORRECT_XP = 2;                 // XP for every correct answer
+const LEVEL_CAP = 50;
+const CORRECT_XP = 100;               // XP for every correct answer
+const XP_SCALE = 50;                  // the 2026-09 rescale factor — use this (not CORRECT_XP) to scale a flat old-era bonus number, since it's a coincidence that CORRECT_XP's own old value (2) happened to divide evenly into some of them
 // XP for entering each rank: F, E, D, C, B, A, A*, S, S+
-const RANK_STEP_EXP = [10, 20, 25, 35, 40, 50, 60, 70, 80];
+const RANK_STEP_EXP = [500, 1000, 1250, 1750, 2000, 2500, 3000, 3500, 4000];
 // RANK_CUM_EXP[k] = XP a topic is worth at rank index k
-//   → [10, 30, 55, 90, 130, 180, 240, 310, 390]
+//   → [500, 1500, 2750, 4500, 6500, 9000, 12000, 15500, 19500]
 const RANK_CUM_EXP = RANK_STEP_EXP.reduce((acc, v) => [...acc, (acc[acc.length - 1] || 0) + v], []);
 // LEVEL_CUM_EXP[i] = total XP required to be level (i + 1). Per-level cost
-// climbs 10, 60, 110, 160, 200, 250 … 880 — all multiples of 10, summing to 8,500.
+// climbs smoothly (230, 660, 1080, 1510 … 20,580), summing to 510,000.
 const LEVEL_CUM_EXP = [
-  0, 10, 70, 180, 340, 540, 790, 1090, 1440, 1840,
-  2290, 2790, 3330, 3920, 4560, 5250, 5990, 6780, 7620, 8500,
+  0, 230, 890, 1970, 3480, 5410, 7760, 10540, 13740, 17370,
+  21420, 25890, 30790, 36110, 41850, 48020, 54610, 61630, 69070, 76940,
+  85220, 93940, 103070, 112630, 122620, 133030, 143860, 155110, 166790, 178900,
+  191430, 204380, 217750, 231550, 245780, 260420, 275490, 290990, 306910, 323250,
+  340020, 357210, 374830, 392860, 411330, 430210, 449520, 469260, 489420, 510000,
 ];
 
 function totalExp(profile) {
@@ -8048,6 +8062,38 @@ function levelFromExp(exp) {
     if (exp >= LEVEL_CUM_EXP[i]) level = i + 1; else break;
   }
   return Math.min(level, LEVEL_CAP);
+}
+// One-time migration (2026-09 XP rescale): the level cap moved from 20 to
+// 50, so "level 20" should become "level 50" for an existing player, not
+// wherever a raw x50-plus-20% multiply happens to land them. Rank-XP
+// needs no migration — it's computed live from profile.topics, so it
+// already reflects the new (bigger) RANK_CUM_EXP table the moment this
+// code ships. Only profile.bonusExp is a literal stored number from the
+// old scale, so it's the only thing this touches.
+//
+// Maps by overall progress FRACTION through the whole old curve (0 at
+// level 1 / 0 XP, 1 at the old cap / 8,500 XP) onto that same fraction
+// of the new curve's total range (0..510,000) — not a per-level
+// round-and-relookup, which has a nasty edge case: round(1 * 2.5) is 3,
+// not 1, so a brand-new player with 0 XP would land on new level 3 with
+// XP invented from nothing. The fraction approach has no such case —
+// 0 always maps to 0, 1 always maps to 1. Guarded by profile.xpScaleV2
+// so it only ever runs once per profile.
+const OLD_LEVEL_CAP_TOTAL = 8500;
+const OLD_RANK_CUM_EXP = [10, 30, 55, 90, 130, 180, 240, 310, 390];
+function migrateLevelScaleV2(profile) {
+  if (!profile || !profile.name || profile.xpScaleV2) return profile;
+  const topics = profile.topics || {};
+  const oldRankXP = TOPICS.reduce((sum, t) => {
+    const k = (topics[t.id] || {}).highestRank ?? -1;
+    return sum + (k >= 0 ? OLD_RANK_CUM_EXP[Math.min(k, OLD_RANK_CUM_EXP.length - 1)] : 0);
+  }, 0);
+  const oldTotal = oldRankXP + (profile.bonusExp || 0);
+  const frac = Math.max(0, Math.min(1, oldTotal / OLD_LEVEL_CAP_TOTAL));
+  const newTotalTarget = Math.round(frac * LEVEL_CUM_EXP[LEVEL_CUM_EXP.length - 1]);
+  const newRankXP = totalExp({ ...profile, bonusExp: 0 }); // rank-only, already on the new scale
+  const newBonus = Math.max(0, newTotalTarget - newRankXP);
+  return { ...profile, bonusExp: newBonus, xpScaleV2: true };
 }
 // A level-gated unlock stays yours after prestige: prestige only happens
 // at the level cap, so a prestiged player has passed every level.
@@ -8086,7 +8132,7 @@ function LevelBar({ profile, onPrestige, onOpenUnlocks }) {
         </div>
       </div>
       <div style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0, fontWeight: 600 }}>
-        {capped ? (prestige >= PRESTIGE_CAP ? "MAX PRESTIGE" : "MAX · Level 20") : `${into} / ${need} XP`}
+        {capped ? (prestige >= PRESTIGE_CAP ? "MAX PRESTIGE" : `MAX · Level ${LEVEL_CAP}`) : `${into} / ${need} XP`}
       </div>
       {prestigeSlot && (belowC.length === 0 ? (
         <button onClick={onPrestige} style={{ fontSize: 11, fontWeight: 700, color: "var(--on-accent)", background: "var(--amber)", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", flexShrink: 0 }}>
@@ -8105,10 +8151,10 @@ function LevelBar({ profile, onPrestige, onOpenUnlocks }) {
    prestige titles on top. The student picks which unlocked one to show
    (profile.title); it falls back to the highest one earned by level. */
 const TITLES = [
-  { level: 1, name: "Novice" }, { level: 3, name: "Learner" }, { level: 5, name: "Student" },
-  { level: 7, name: "Apprentice" }, { level: 9, name: "Practitioner" }, { level: 11, name: "Analyst" },
-  { level: 13, name: "Scholar" }, { level: 15, name: "Specialist" }, { level: 17, name: "Expert" },
-  { level: 19, name: "Virtuoso" }, { level: 20, name: "Maths Master" },
+  { level: 1, name: "Novice" }, { level: 8, name: "Learner" }, { level: 11, name: "Student" },
+  { level: 15, name: "Apprentice" }, { level: 21, name: "Practitioner" }, { level: 26, name: "Analyst" },
+  { level: 31, name: "Scholar" }, { level: 36, name: "Specialist" }, { level: 41, name: "Expert" },
+  { level: 46, name: "Virtuoso" }, { level: 49, name: "Maths Master" },
 ];
 const PRESTIGE_TITLES = [
   { prestige: 1, name: "Veteran" }, { prestige: 3, name: "Champion" },
@@ -8330,67 +8376,76 @@ const FRAMES = {
 const FRAME_IDS = Object.keys(FRAMES);
 
 /* ---- per-level unlock schedule -------------------------------------
-   One source of truth for what each level 1..20 grants. Cosmetic and
+   One source of truth for what each level 1..50 grants. Cosmetic and
    tool gates check levelFromExp(totalExp(profile)) >= the level here.
    Skeleton Keys / XP Boosts are granted in creditLevelUps(); they're
-   listed in unlocksAtLevel() only for the reveal + Unlocks screen. */
+   listed in unlocksAtLevel() only for the reveal + Unlocks screen.
+
+   Rescaled 2026-09 alongside the level cap (20 -> 50): the tool gates
+   (SKETCH_LV/WRITE_LV/CALC_LV below) deliberately kept their original
+   levels, but everything else here was decluttered rather than just
+   multiplied by 2.5 — a plain x2.5 stretch left ~27 of the 50 levels
+   with nothing at all (59 reward events spread thin over more room).
+   Instead every non-level-1 reward was sorted by its old level and
+   redistributed one-per-level (occasionally two) across levels 5..50,
+   so every level in that range grants something. */
 const AVATAR_LV = {
-  grad: 1, star: 1, brain: 2, owl: 3, bolt: 4, fox: 5, ghost: 6, cat: 7,
-  rocket: 8, flower: 9, panda: 10, tiger: 11, crown: 13, wizard: 14,
-  alien: 16, ninja: 17, dragon: 18, robot: 20,
+  grad: 1, star: 1, brain: 5, owl: 6, bolt: 9, fox: 10, ghost: 13, cat: 14,
+  rocket: 17, flower: 19, panda: 23, tiger: 24, crown: 30, wizard: 32,
+  alien: 37, ninja: 40, dragon: 42, robot: 48,
 };
 const FRAME_LV = {
-  plain: 1, blue: 3, green: 6, dashed: 9, rose: 11, violet: 14,
-  gold: 15, double: 17, glow: 19,
+  plain: 1, blue: 7, green: 14, dashed: 20, rose: 25, violet: 32,
+  gold: 34, double: 41, glow: 44,
 };
 const SOUND_PACKS = {
   default: { name: "Classic", lv: 1 },
   arcade: { name: "Arcade", lv: 99, ach: "konami" }, // secret — Konami code only
-  chime: { name: "Chime", lv: 10 },
-  retro: { name: "Retro", lv: 15 },
-  bell: { name: "Bell", lv: 19 },
+  chime: { name: "Chime", lv: 23 },
+  retro: { name: "Retro", lv: 35 },
+  bell: { name: "Bell", lv: 45 },
 };
 // Equippable perks (2 slots). Applied in submitAnswer; Momentum also in Blitz.
 // Each perk can be levelled up by using it. `up` is the target for the
 // hidden progress counter (profile.perkProg[id]); once reached the perk
 // switches to `upDesc` and shows a "+" next to its name.
 const PERKS = {
-  steadyhand: { name: "Steady Hand", icon: "✍️", lv: 5,
-    desc: "Handwritten answers give +1 XP",
+  steadyhand: { name: "Steady Hand", icon: "✍️", lv: 12,
+    desc: "Handwritten answers give +50 XP",
     up: 25, upHow: "25 correct handwritten answers",
-    upDesc: "Handwritten answers give +2 XP" },
-  compound: { name: "Compound Interest", icon: "📈", lv: 7,
-    desc: "Longer streaks pay more XP (+1 per 4 in a row, up to +6)",
+    upDesc: "Handwritten answers give +100 XP" },
+  compound: { name: "Compound Interest", icon: "📈", lv: 16,
+    desc: "Longer streaks pay more XP (+50 per 4 in a row, up to +300)",
     up: 50, upHow: "50 correct answers on a 10+ streak (while equipped)",
-    upDesc: "Bigger streak bonus: +1 per 3 in a row, up to +9" },
-  resourceful: { name: "Resourceful", icon: "🪙", lv: 9,
+    upDesc: "Bigger streak bonus: +50 per 3 in a row, up to +450" },
+  resourceful: { name: "Resourceful", icon: "🪙", lv: 22,
     desc: "Every 15th correct answer grants a Hint coin",
     up: 20, upHow: "it grants 20 Hint coins",
     upDesc: "Every 10th correct answer grants a Hint coin" },
-  momentum: { name: "Momentum", icon: "🔗", lv: 11,
+  momentum: { name: "Momentum", icon: "🔗", lv: 27,
     desc: "Every 5th correct in a row scores double base XP",
     up: 20, upHow: "the streak bonus procs 20 times",
     upDesc: "Every 4th correct in a row scores double base XP" },
-  specialist: { name: "Specialist", icon: "🎯", lv: 12,
-    desc: "Correct answers in a topic you've taken to rank A give +1 XP",
+  specialist: { name: "Specialist", icon: "🎯", lv: 28,
+    desc: "Correct answers in a topic you've taken to rank A give +50 XP",
     up: 40, upHow: "40 correct answers in an A-rank topic",
-    upDesc: "+2 XP, and from rank B up" },
-  quick: { name: "Quick Study", icon: "⚡", lv: 14,
-    desc: "Answer correctly in under 8 seconds for +2 XP",
+    upDesc: "+100 XP, and from rank B up" },
+  quick: { name: "Quick Study", icon: "⚡", lv: 33,
+    desc: "Answer correctly in under 8 seconds for +100 XP",
     up: 30, upHow: "the speed bonus procs 30 times",
-    upDesc: "Answer correctly in under 10 seconds for +3 XP" },
-  secondwind: { name: "Second Wind", icon: "💨", lv: 16,
+    upDesc: "Answer correctly in under 10 seconds for +150 XP" },
+  secondwind: { name: "Second Wind", icon: "💨", lv: 38,
     desc: "Breaking a streak of 15+ keeps half of it (re-arms once you rebuild to 15)",
     up: 10, upHow: "it saves a streak 10 times",
     upDesc: "From a streak of 10+, keeps two-thirds" },
-  forgive: { name: "Error Correction", icon: "🛟", lv: 18,
+  forgive: { name: "Error Correction", icon: "🛟", lv: 43,
     desc: "Once a day, a slip doesn't break your streak",
     up: 12, upHow: "a slip is forgiven 12 times",
     upDesc: "Your first two slips each day are forgiven" },
-  marathoner: { name: "Marathoner", icon: "🏃", lv: 19,
-    desc: "Every 25 questions in a day → +15 XP",
+  marathoner: { name: "Marathoner", icon: "🏃", lv: 47,
+    desc: "Every 25 questions in a day → +750 XP",
     up: 10, upHow: "the bonus fires 10 times",
-    upDesc: "Every 20 questions in a day → +15 XP" },
+    upDesc: "Every 20 questions in a day → +750 XP" },
 };
 const PERK_IDS = Object.keys(PERKS);
 const perkProgOf = (p, id) => ((p && p.perkProg && p.perkProg[id]) || 0);
@@ -8409,7 +8464,7 @@ const perkSlots = (profile) => {
 const SKETCH_LV = 2;
 const WRITE_LV = 3;
 const CALC_LV = 4;
-const SHIELD_LEVELS = [6, 13]; // levels that grant a Streak Shield
+const SHIELD_LEVELS = [15, 33]; // levels that grant a Streak Shield
 
 // Calculator colour schemes. The calculator itself unlocks at CALC_LV;
 // "classic" is the free default, the rest are level-gated re-skins.
@@ -8427,28 +8482,28 @@ export const CALC_SKINS = {
       delInk: "#ffffff", titleInk: "#e9e9e9", errInk: "#8a3b1e" },
   },
   rose: {
-    name: "Rosé", lv: 8,
+    name: "Rosé", lv: 20,
     P: { body: "#d7b3bf", face: "#6f4a55", screen: "#e7e8de", ink: "#38282e",
       key: "#f6ecef", keyInk: "#4a343c", fn: "#c49aa7", fnInk: "#3c262c",
       op: "#c9899b", opInk: "#3a2126", eq: "#7fbf9a", del: "#efe4d7",
       delInk: "#6f4a55", titleInk: "#5c3a45", errInk: "#9a3b4e" },
   },
   arctic: {
-    name: "Arctic", lv: 12,
+    name: "Arctic", lv: 30,
     P: { body: "#eef0f2", face: "#b6bcc5", screen: "#cdd7c6", ink: "#20261c",
       key: "#dfe3e8", keyInk: "#1c2530", fn: "#eceef1", fnInk: "#2b2f36",
       op: "#c6ccd4", opInk: "#1c1c1c", eq: "#8cc63f", del: "#8cc63f",
       delInk: "#ffffff", titleInk: "#3a4048", errInk: "#b0472a" },
   },
   midnight: {
-    name: "Midnight", lv: 16,
+    name: "Midnight", lv: 40,
     P: { body: "#2c3a52", face: "#0e1620", screen: "#aab4ac", ink: "#1a2216",
       key: "#565f70", keyInk: "#f4f4f4", fn: "#3c4a63", fnInk: "#e6e9ef",
       op: "#7c8698", opInk: "#12161c", eq: "#5bb469", del: "#cf4230",
       delInk: "#ffffff", titleInk: "#dfe3ea", errInk: "#e08a5a" },
   },
   royal: {
-    name: "Royal", lv: 20,
+    name: "Royal", lv: 50,
     P: { body: "#f7e017", face: "#111111", screen: "#f4f4ec", ink: "#1c1c1c",
       key: "#f5f5f2", keyInk: "#141414", fn: "#1b1b1b", fnInk: "#f4f4f4",
       op: "#111111", opInk: "#f7e017", eq: "#cf1126", del: "#cf1126",
@@ -8476,7 +8531,7 @@ const calcSkinLabel = (skin) =>
 
 const avatarLevel = (id) => AVATAR_LV[id] || 1;
 const frameLevel = (id) => FRAME_LV[id] || 1;
-const bannerSlots = (lv) => (lv < 2 ? 0 : lv < 8 ? 1 : lv < 12 ? 2 : lv < 16 ? 3 : lv < 20 ? 4 : 5);
+const bannerSlots = (lv) => (lv < 5 ? 0 : lv < 18 ? 1 : lv < 29 ? 2 : lv < 39 ? 3 : lv < 50 ? 4 : 5);
 const BANNER_MAX = 5; // hard ceiling; the live cap is bannerSlots(level)
 
 // Human-readable unlocks landing exactly at level L.
@@ -9051,7 +9106,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
   return (
     <EditSheet title={`Banner · ${banner.length}/${slots}`} onClose={onClose}>
       {slots === 0 ? (
-        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Banner slots unlock at Level 2. Keep going!</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Banner slots unlock at Level 5. Keep going!</div>
       ) : (<>
         <Head>Badges</Head>
         {earned.length === 0 ? (
@@ -11515,7 +11570,10 @@ export default function MathsUnlockedBN() {
           setAuthUid(user.id);
           const res = await storage.get("profile");
           if (res && res.value) {
-            setProfile(JSON.parse(res.value));
+            const loaded = JSON.parse(res.value);
+            const migrated = migrateLevelScaleV2(loaded);
+            if (migrated.xpScaleV2 && !loaded.xpScaleV2) await saveProfile(migrated);
+            else setProfile(migrated);
             setScreen("dashboard");
           }
           await loadCustomQuestions(); // shared reads need a session
@@ -12785,6 +12843,7 @@ ${aBlocks}
       // Same for achievements — an existing account shouldn't light up for
       // everything it already earned before this feature existed.
       if (!Array.isArray(prof.seenAch)) prof.seenAch = [...(prof.achievements || [])];
+      prof = migrateLevelScaleV2(prof);
       await saveProfile(prof);
       if (rememberMe) writeRememberedLogin(nm, pin); else clearRememberedLogin();
       loadCustomQuestions(); // shared reads need a session
@@ -12829,6 +12888,7 @@ ${aBlocks}
         if (!Array.isArray(prof.seenAch)) prof.seenAch = [...(prof.achievements || [])];
         prof.teacherSignup = true;
         if (school) prof.school = school;
+        prof = migrateLevelScaleV2(prof);
         await saveProfile(prof);
         if (rememberMe) writeRememberedLogin(nm, pin); else clearRememberedLogin();
       }
@@ -12894,7 +12954,7 @@ ${aBlocks}
         setAuthUid(user.id);
         try {
           const r = await storage.get("profile");
-          if (r && r.value) { const p = JSON.parse(r.value); p.pin = resetPin; setProfile(p); }
+          if (r && r.value) { const p = migrateLevelScaleV2(JSON.parse(r.value)); p.pin = resetPin; setProfile(p); }
         } catch (e) { /* ignore */ }
         await loadCustomQuestions();
       }
@@ -13458,6 +13518,7 @@ ${aBlocks}
     const forgivenHere = (d.forgiven || []).length; // Error Correction is now a per-DAY budget, not per-topic
     const swMin = plus("secondwind") ? 10 : 15;
     let secondWindKept = null; // set if Second Wind saved the streak this answer
+    let xpBonuses = []; // { label } for every bonus that boosted this answer's XP — shown in the feedback UI, not just tallied server-side
 
     // Wrong, holding a Streak Shield, and the Error Correction perk didn't
     // already cover it — pause and offer to spend the shield before the
@@ -13474,7 +13535,12 @@ ${aBlocks}
     next.bestDayAnswers = Math.max(next.bestDayAnswers || 0, d.answered);
     // Marathoner perk — a flat XP bonus every N questions in a day.
     const marN = plus("marathoner") ? 20 : 25;
-    if (perks.includes("marathoner") && d.answered % marN === 0) { next.bonusExp = (next.bonusExp || 0) + 15; bumpPerk("marathoner"); }
+    if (perks.includes("marathoner") && d.answered % marN === 0) {
+      const marB = 15 * XP_SCALE;
+      next.bonusExp = (next.bonusExp || 0) + marB;
+      bumpPerk("marathoner");
+      xpBonuses.push({ label: `🏃 Marathoner +${marB}` });
+    }
 
     // Error Correction perk: the first slip (two, once upgraded) in each
     // topic per day is forgiven — streak / rank history / consec-wrong stay.
@@ -13555,26 +13621,27 @@ ${aBlocks}
       const boosted = (profile.boostUntil || 0) > Date.now();
       let base = CORRECT_XP;
       const momN = plus("momentum") ? 4 : 5;
-      if (perks.includes("momentum") && (next.streak || 0) % momN === 0) { base *= 2; bumpPerk("momentum"); }
-      if (boosted) base *= 2;
+      if (perks.includes("momentum") && (next.streak || 0) % momN === 0) { base *= 2; bumpPerk("momentum"); xpBonuses.push({ label: "🔗 Momentum ×2" }); }
+      if (boosted) { base *= 2; xpBonuses.push({ label: "⚡ Boost ×2" }); }
       let gain = base;
       if (perks.includes("compound")) {
         const step = plus("compound") ? 3 : 4, cap = plus("compound") ? 9 : 6;
-        gain += Math.min(cap, Math.floor((next.streak || 0) / step));
+        const proc = Math.min(cap, Math.floor((next.streak || 0) / step)) * XP_SCALE;
+        if (proc > 0) { gain += proc; xpBonuses.push({ label: `📈 Compound Interest +${proc}` }); }
         if ((next.streak || 0) > 10) bumpPerk("compound");
       }
-      const qsT = plus("quick") ? 10 : 8, qsB = plus("quick") ? 3 : 2;
-      if (perks.includes("quick") && elapsed < qsT) { gain += qsB; bumpPerk("quick"); }
+      const qsT = plus("quick") ? 10 : 8, qsB = (plus("quick") ? 3 : 2) * XP_SCALE;
+      if (perks.includes("quick") && elapsed < qsT) { gain += qsB; bumpPerk("quick"); xpBonuses.push({ label: `⚡ Quick Study +${qsB}` }); }
       // Steady Hand — bonus for a handwritten answer.
-      if (perks.includes("steadyhand") && viaWrite) { gain += plus("steadyhand") ? 2 : 1; bumpPerk("steadyhand"); }
+      if (perks.includes("steadyhand") && viaWrite) { const b = (plus("steadyhand") ? 2 : 1) * XP_SCALE; gain += b; bumpPerk("steadyhand"); xpBonuses.push({ label: `✍️ Steady Hand +${b}` }); }
       // Specialist — bonus in a topic already at rank A (rank B once upgraded).
       const specMin = plus("specialist") ? RANK_ORDER.indexOf("B") : RANK_ORDER.indexOf("A");
-      if (perks.includes("specialist") && rankBefore >= specMin) { gain += plus("specialist") ? 2 : 1; bumpPerk("specialist"); }
+      if (perks.includes("specialist") && rankBefore >= specMin) { const b = (plus("specialist") ? 2 : 1) * XP_SCALE; gain += b; bumpPerk("specialist"); xpBonuses.push({ label: `🎯 Specialist +${b}` }); }
       // Weekly focus — this week's spotlight topic scores double.
       const focusHit = scoredId === weeklyFocusId();
-      if (focusHit) gain *= FOCUS_XP_MULT;
+      if (focusHit) { gain *= FOCUS_XP_MULT; xpBonuses.push({ label: "★ Weekly Focus ×2" }); }
       // Mixed Review — scores 50% more than practicing a topic directly.
-      if (activeTopic.id === MIXED_TOPIC.id) gain = Math.round(gain * MIXED_XP_MULT);
+      if (activeTopic.id === MIXED_TOPIC.id) { gain = Math.round(gain * MIXED_XP_MULT); xpBonuses.push({ label: "🎲 Mixed Review ×1.5" }); }
       next.bonusExp = (next.bonusExp || 0) + gain;
       // Second Wind re-arms once the streak is rebuilt to the threshold.
       if (perks.includes("secondwind") && (next.streak || 0) >= swMin) d.secondWindUsed = false;
@@ -13599,7 +13666,6 @@ ${aBlocks}
     const leveledTo = creditLevelUps(next, expBefore);
     const keysWon = (next.keys || 0) - (profile.keys || 0);
     const boostsWon = (next.boosts || 0) - (profile.boosts || 0);
-    const xpDoubled = (profile.boostUntil || 0) > Date.now();
 
     if (correct && scoredId === "circles") next.gotCircle = true; // "What Goes Around Comes Around"
 
@@ -13668,7 +13734,7 @@ ${aBlocks}
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpDoubled, focusHit: correct && scoredId === weeklyFocusId(), rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept, structResults, marksEarned: question.structured ? structMarksEarned : undefined });
+    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpBonuses, rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept, structResults, marksEarned: question.structured ? structMarksEarned : undefined });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -14989,7 +15055,7 @@ ${aBlocks}
                       const b = { fontSize: 12, fontWeight: 600, color: "var(--ink)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" };
                       return (
                         <>
-                          <button onClick={devMaxAll} style={b}>Max all topics → S+ (Level 20)</button>
+                          <button onClick={devMaxAll} style={b}>Max all topics → S+ (Level {LEVEL_CAP})</button>
                           <button onClick={devCAll} style={b}>Get C in every topic</button>
                           <button onClick={() => devAddKeys(3)} style={b}>+3 Skeleton Keys</button>
                           <button onClick={() => saveProfile({ ...profile, boosts: (profile.boosts || 0) + 1 })} style={b}>+1 XP Boost</button>
@@ -16610,9 +16676,18 @@ ${aBlocks}
                   )}
                   {feedback.expGain > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600, marginBottom: 4, textAlign: "center" }}>
-                        +{feedback.expGain} XP{feedback.xpDoubled && feedback.correct ? <span style={{ color: "var(--green)", fontWeight: 700 }}> · ⚡×2</span> : ""}{feedback.focusHit ? <span style={{ color: "var(--amber)", fontWeight: 700 }}> · ★ focus ×2</span> : ""}
+                      <div style={{ fontSize: 13, color: "var(--ink)", fontWeight: 700, marginBottom: 4, textAlign: "center" }}>
+                        +{feedback.expGain} XP
                       </div>
+                      {feedback.xpBonuses && feedback.xpBonuses.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center", marginBottom: 6 }}>
+                          {feedback.xpBonuses.map((b, i) => (
+                            <span key={i} style={{ fontSize: 10.5, fontWeight: 700, color: "var(--green)", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 999, padding: "2px 8px" }}>
+                              {b.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <LevelBar profile={profile} />
                     </div>
                   )}
