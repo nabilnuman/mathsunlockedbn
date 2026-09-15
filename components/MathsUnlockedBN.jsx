@@ -7243,7 +7243,7 @@ const LESSONS = {
   },
 };
 const LESSON_IDS = Object.keys(LESSONS);
-const LESSON_XP = 40;
+const LESSON_XP = 2000; // 2026-09 rescale: was 40 — ×50 (the XP_SCALE factor defined further down; this constant loads before it, so it's inlined here rather than referencing it)
 const LESSON_QUIZ_COUNT = 4;
 const strHash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
 
@@ -9660,9 +9660,12 @@ function lockedReason(topic) {
    task adds to profile.bonusExp. A separate one-time list
    ("first-time bonuses") nudges feature discovery.
 --------------------------------------------------------- */
-const DAILY_XP = { showup: 5, task: 40 };  // show-up is deliberately tiny — can't reach Level 2 alone
-const MILESTONE_XP = 50;
-const DAILY_SOLVE_XP = 50;  // for clearing the Daily Challenge (once a day)
+// 2026-09 rescale missed these four — they were still the pre-rescale flat
+// numbers (5/40/50/50) while everything else went ×XP_SCALE, so claiming a
+// mission was worth a rounding error next to a correct answer's +100.
+const DAILY_XP = { showup: 5 * XP_SCALE, task: 40 * XP_SCALE };  // show-up is deliberately tiny — can't reach Level 2 alone
+const MILESTONE_XP = 50 * XP_SCALE;
+const DAILY_SOLVE_XP = 50 * XP_SCALE;  // for clearing the Daily Challenge (once a day)
 
 function todayKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -9735,7 +9738,7 @@ function dailyChallenge(dayKey) {
    for now (Special Modes → Mathle, gated on isAdmin). ------------- */
 const MATHLE_LEN = 8;
 const MATHLE_ROWS = 6;
-const MATHLE_XP = 30;
+const MATHLE_XP = 30 * XP_SCALE; // 2026-09 rescale missed this too
 const MATHLE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "−", "×", "÷", "="];
 
 // LHS value as a non-negative integer, or null.
