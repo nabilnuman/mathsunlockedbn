@@ -8201,7 +8201,13 @@ function PrestigeBadge({ prestige, size = 20 }) {
   );
 }
 function leaderboardScore(profile) {
-  return (profile.prestige || 0) * 20 + levelFromExp(totalExp(profile));
+  // Each prestige tier is meant to be worth one full climb to the level
+  // cap (so it outranks anyone still on their first climb, however high
+  // their level) — this used a hardcoded 20, the level cap before the
+  // 2026-09 rescale to 50, which quietly undervalued prestige by more
+  // than half once the cap moved. Track LEVEL_CAP instead of a literal
+  // so this can't go stale again the next time the cap changes.
+  return (profile.prestige || 0) * LEVEL_CAP + levelFromExp(totalExp(profile));
 }
 
 /* Brunei secondary schools for the registration picker, grouped by
