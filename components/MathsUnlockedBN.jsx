@@ -11116,11 +11116,13 @@ export default function MathsUnlockedBN() {
   const [blitzLeft, setBlitzLeft] = useState(BLITZ_SECONDS);
   const [blitzQ, setBlitzQ] = useState(null);
   const [blitzPick, setBlitzPick] = useState(null);     // { value, correct } while the pick flashes
+  const [blitzXpFlash, setBlitzXpFlash] = useState(null); // { xp, momHit, boosted } — outlives blitzPick so it's still readable into the next question
   const [blitzResult, setBlitzResult] = useState(null); // { score, best, newBest, unlocked }
   const [blitzBoard, setBlitzBoard] = useState(null);   // [{ uid, name, best, prestige }] ranked by Blitz best
   const blitzDeadline = useRef(0);
   const blitzCorrect = useRef(0);
   const blitzAdvance = useRef(null);
+  const blitzXpFlashTimer = useRef(null);
   const blitzDone = useRef(false);
   // Async PvP: while a challenge run is live this holds
   // { mode:"create"|"play", id, opponentUid, opponentName, opponentScore, questions, idx };
@@ -12611,6 +12613,8 @@ ${aBlocks}
     setBlitzScore(0);
     setBlitzLeft(BLITZ_SECONDS);
     setBlitzPick(null);
+    clearTimeout(blitzXpFlashTimer.current);
+    setBlitzXpFlash(null);
     setChallengeResult(null);
     const ch = challengeRef.current;
     if (ch) { ch.idx = 0; setBlitzQ(ch.questions[0]); }
@@ -12630,8 +12634,21 @@ ${aBlocks}
     }
   }
   function scoreBlitz(isCorrect) {
-    if (isCorrect) { blitzCorrect.current += 1; setBlitzScore((s) => s + 1); playCorrect(); }
-    else playWrong();
+    if (isCorrect) {
+      blitzCorrect.current += 1;
+      setBlitzScore((s) => s + 1);
+      playCorrect();
+      const perks = (profile.perks || []).filter((p) => PERKS[p]);
+      const nth = perkPlus(profile, "momentum") ? 4 : 5;
+      const momHit = perks.includes("momentum") && blitzCorrect.current % nth === 0;
+      const boosted = (profile.boostUntil || 0) > Date.now();
+      let xp = CORRECT_XP;
+      if (momHit) xp *= 2;
+      if (boosted) xp *= 2;
+      setBlitzXpFlash({ xp, momHit, boosted });
+      clearTimeout(blitzXpFlashTimer.current);
+      blitzXpFlashTimer.current = setTimeout(() => setBlitzXpFlash(null), 900);
+    } else playWrong();
     blitzAdvance.current = setTimeout(() => { if (Date.now() < blitzDeadline.current) nextBlitzQ(); }, 340);
   }
   function answerBlitz(value) {
@@ -12708,6 +12725,8 @@ ${aBlocks}
   function leaveBlitz() {
     if (!blitzDone.current && blitzPhase === "playing") finishBlitz();
     clearTimeout(blitzAdvance.current);
+    clearTimeout(blitzXpFlashTimer.current);
+    setBlitzXpFlash(null);
     const wasChallenge = !!challengeRef.current;
     challengeRef.current = null;
     setChallengeResult(null);
@@ -14505,6 +14524,8 @@ ${aBlocks}
         @keyframes celCrown { 0% { transform: translateY(-160px) rotate(-24deg); opacity: 0; } 62% { transform: translateY(10px) rotate(7deg); opacity: 1; } 82% { transform: translateY(-5px) rotate(-4deg); } 100% { transform: translateY(0) rotate(0); opacity: 1; } }
         @media (prefers-reduced-motion: reduce) { .mub-cel * { animation-duration: 0.01ms !important; } }
         .mub-stamp { animation: stampIn 0.4s ease-out; }
+        @keyframes xpPop { 0% { transform: scale(1.4); opacity: 0; } 60% { transform: scale(0.95); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        .mub-xp-pop { animation: xpPop 0.3s ease-out; }
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
         .mub-rankpop { animation: rankPop 0.55s cubic-bezier(.2,.9,.3,1.25), rankGlow 0.7s ease-out 0.2s; }
         .mub-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
@@ -17461,28 +17482,6 @@ ${aBlocks}
                   <div className="mub-display" style={{ fontSize: 15, fontWeight: 700, color: "var(--green)", minWidth: 54, textAlign: "right" }}>★ {blitzScore}</div>
                 </div>
 
-                {/* Per-answer XP, shown for the same ~340ms flash as the
-                    button's green/red colour — mirrors the main quiz
-                    loop's bonus tags rather than only totalling XP once
-                    at finishBlitz. Computed the same way finishBlitz
-                    computes it (blitzCorrect.current is already bumped
-                    by the time this renders), so what flashes here always
-                    sums to the same total awarded at the end. */}
-                {blitzPick && blitzPick.correct && (() => {
-                  const perks = (profile.perks || []).filter((p) => PERKS[p]);
-                  const nth = perkPlus(profile, "momentum") ? 4 : 5;
-                  const momHit = perks.includes("momentum") && blitzCorrect.current % nth === 0;
-                  const boosted = (profile.boostUntil || 0) > Date.now();
-                  let xp = CORRECT_XP;
-                  if (momHit) xp *= 2;
-                  if (boosted) xp *= 2;
-                  return (
-                    <div className="mub-stamp" style={{ fontSize: 12.5, fontWeight: 800, color: "var(--green)", textAlign: "center", marginBottom: 8 }}>
-                      +{xp} XP{momHit ? " · 🔗 Momentum ×2" : ""}{boosted ? " · ⚡ Boost ×2" : ""}
-                    </div>
-                  );
-                })()}
-
                 <div style={{ background: "var(--card)", border: "1px solid var(--grid)", borderLeft: "4px solid var(--blue)", borderRadius: 10, padding: "16px 16px 18px" }}>
                   <div className="mub-mono" style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}><MathText text={blitzQ.prompt} /></div>
 
@@ -17517,6 +17516,15 @@ ${aBlocks}
                     );
                   })()}
                 </div>
+
+                {/* Per-answer XP. Outlives blitzPick's ~340ms flash (via its
+                    own timer) so it's still on screen into the next
+                    question rather than vanishing the instant it loads. */}
+                {blitzXpFlash && (
+                  <div className="mub-xp-pop" style={{ fontSize: 13, fontWeight: 800, color: "var(--green)", textAlign: "center", marginTop: 10 }}>
+                    +{blitzXpFlash.xp} XP{blitzXpFlash.momHit ? " · 🔗 Momentum ×2" : ""}{blitzXpFlash.boosted ? " · ⚡ Boost ×2" : ""}
+                  </div>
+                )}
               </div>
             )}
 
