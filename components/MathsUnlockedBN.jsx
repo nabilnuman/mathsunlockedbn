@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users, Calculator } from "lucide-react";
+import { ArrowLeft, Check, X as XIcon, Trophy, RotateCcw, Pencil, Settings, ClipboardCheck, Instagram, Facebook, Users, Calculator, Zap, GraduationCap, BarChart3 } from "lucide-react";
 import { storage } from "../lib/storage";
 import {
   signInOrRegister, signOut, currentUser, getLeaderboard, getParentView,
@@ -10928,7 +10928,11 @@ const appearanceName = (id) => (id === "light" ? "Light" : id === "dark" ? "Dark
 export default function MathsUnlockedBN() {
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState(emptyProfile());
-  const [screen, setScreen] = useState("login");
+  // Default to the marketing landing screen — a cold, no-context visitor
+  // sees it first. The init effect below bumps straight to "login" for
+  // anyone who arrives with actual context (a remembered login, a class
+  // invite), since the landing page has nothing useful to add for them.
+  const [screen, setScreen] = useState("landing");
   const [nameInput, setNameInput] = useState("");
   const [schoolInput, setSchoolInput] = useState(SOLO_SCHOOL);
   const [schoolQuery, setSchoolQuery] = useState("");
@@ -11451,17 +11455,19 @@ export default function MathsUnlockedBN() {
         // Class invite link: ?join=<code> — remember it and join once the
         // student is signed in (a separate effect below acts on it).
         const jc = (params.get("join") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+        let pendingJoinCode = null;
         if (jc.length === 6) {
           window.localStorage.setItem("mub_pendingjoin", jc);
-          setPendingJoin(jc);
+          pendingJoinCode = jc;
           try {
             params.delete("join");
             const q = params.toString();
             window.history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : "") + window.location.hash);
           } catch (e) { /* ignore */ }
         } else {
-          setPendingJoin(window.localStorage.getItem("mub_pendingjoin") || null);
+          pendingJoinCode = window.localStorage.getItem("mub_pendingjoin") || null;
         }
+        setPendingJoin(pendingJoinCode);
         // Notification deep link: ?open=daily — the "Daily Challenge is
         // live" push (see app/api/cron/reminders) — remember it and jump
         // straight there once signed in (a separate effect below acts on
@@ -11482,6 +11488,10 @@ export default function MathsUnlockedBN() {
           setRememberMe(true);
           setPrefilledLogin(true);
         }
+        // Skip the landing page for anyone who arrives with real context —
+        // a remembered login or an active class invite — straight to the
+        // actual sign-in form instead.
+        if (remembered || pendingJoinCode) setScreen("login");
       } catch (e) { /* defaults are fine */ }
 
       // Parent Link: ?p=<token> shows a read-only view of one student,
@@ -14438,7 +14448,7 @@ ${aBlocks}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px 14px", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 10px", minWidth: 0 }}>
             {(() => {
-              const home = profile.name && screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent";
+              const home = profile.name && screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent";
               return (
                 <img
                   src="/logo-mark.png" alt="MathsUnlocked"
@@ -14452,28 +14462,28 @@ ${aBlocks}
             <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: "6px 14px" }}>
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && screen !== "leaderboard" && (
+            {screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && screen !== "leaderboard" && (
               <button onClick={openLeaderboard} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Leaderboard
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "classes" && screen !== "classDetail" && (
+            {screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "classes" && screen !== "classDetail" && (
               <button onClick={openClasses} style={{ fontSize: 12, color: "var(--blue)", fontWeight: 700, background: "none", border: "none", cursor: "pointer" }}>
                 🎓 Classes
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "admin" && (
+            {screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && devUnlocked && screen !== "admin" && (
               <button onClick={openAdmin} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Admin view
               </button>
             )}
-            {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "questions" && (
+            {screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" && teacherActive && screen !== "questions" && (
               <button onClick={openQuestionBank} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
                 Question bank
               </button>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              {screen !== "login" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" ? (<>
+              {screen !== "login" && screen !== "landing" && screen !== "onboarding" && screen !== "teacherSignup" && screen !== "teacherActivate" && screen !== "parent" ? (<>
                 <button onClick={openFriends} aria-label="Friends" title="Friends" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
@@ -14590,6 +14600,68 @@ ${aBlocks}
             </button>
           </div>
         )}
+
+        {/* LANDING — the first thing a cold, no-context visitor sees; see
+            the init effect for who gets bumped straight past it to "login"
+            instead (a remembered login, an active class invite). */}
+        {screen === "landing" && (() => {
+          const goStart = () => setScreen("login");
+          const goTeacher = () => { setTSignErr(""); setTSignName(""); setTSignPin(""); setTSignEmail(""); setSchoolInput(SOLO_SCHOOL); setSchoolQuery(""); setScreen("teacherSignup"); };
+          const btnPrim = { padding: "13px 22px", background: "var(--green)", color: "var(--on-accent)", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer" };
+          const btnGhost = { padding: "13px 22px", background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer" };
+          const cardSty = { background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: "18px 18px 16px" };
+          const values = [
+            { icon: <GraduationCap size={20} />, title: "30 topics, properly sequenced", body: "From Arithmetic through to Trigonometry and Vectors — each one unlocks once its prerequisites reach a solid grade, so you're never stuck on something you're not ready for." },
+            { icon: <Trophy size={20} />, title: "Rank up, not just score", body: "Every topic has its own ladder — bronze up to S+ — built from your real accuracy over time, with streaks, perks and prestige once you've mastered it." },
+            { icon: <Zap size={20} />, title: "Daily Challenge & Blitz", body: "One shared question a day, same for every student — set the time to beat. Or challenge a friend directly to a head-to-head Blitz round." },
+            { icon: <Calculator size={20} />, title: "Full working, not just an answer box", body: "A built-in scientific calculator, a rough-working pad, and step-by-step hints when you're stuck — getting it wrong is how you learn, not where you quit." },
+          ];
+          return (
+            <div>
+              <div style={{ maxWidth: 640, margin: "28px auto 0", textAlign: "center" }}>
+                <img src="/logo.png" alt="MathsUnlocked" style={{ height: 76, width: "auto", margin: "0 auto 20px", display: "block" }} />
+                <div className="mub-display" style={{ fontSize: "clamp(24px, 5vw, 34px)", fontWeight: 700, lineHeight: 1.2, marginBottom: 12, textWrap: "balance" }}>
+                  Maths practice that actually keeps you coming back
+                </div>
+                <div style={{ fontSize: 14.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 24, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
+                  30 GCE-style topics, ranks to climb from bronze to S+, and a Daily Challenge every student in Brunei can compare their time on. Free for students — no ads, no catch.
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                  <button onClick={goStart} style={btnPrim}>Get started — it&rsquo;s free</button>
+                  <button onClick={goTeacher} style={btnGhost}>I&rsquo;m a teacher</button>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                  Already have an account? &ldquo;Get started&rdquo; takes you to the same sign-in — just enter your name and PIN.
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, maxWidth: 900, margin: "40px auto 0" }}>
+                {values.map((v, i) => (
+                  <div key={i} style={cardSty}>
+                    <div style={{ width: 36, height: 36, borderRadius: 9, background: "var(--paper)", border: "1px solid var(--grid)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--blue)", marginBottom: 10 }}>
+                      {v.icon}
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{v.title}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55 }}>{v.body}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ maxWidth: 900, margin: "20px auto 30px", background: "var(--paper)", border: "1px solid var(--grid)", borderRadius: 14, padding: "20px 22px", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ width: 42, height: 42, borderRadius: 10, background: "var(--card)", border: "1px solid var(--grid)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--green)", flexShrink: 0 }}>
+                  <BarChart3 size={22} />
+                </div>
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 4 }}>Free tools for your class, too</div>
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55 }}>
+                    Create a class, share one join code, and set homework in seconds. See who&rsquo;s actually done it, print or export a worksheet with an answer key in one click, and check real engagement numbers instead of guessing.
+                  </div>
+                </div>
+                <button onClick={goTeacher} style={{ ...btnGhost, flexShrink: 0, padding: "10px 16px", fontSize: 13.5 }}>Set up my class</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {screen === "login" && (
           <div style={{ maxWidth: 380, margin: "40px auto", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 28, boxShadow: "0 6px 20px var(--shadow-soft)" }}>
