@@ -9870,6 +9870,14 @@ function weakestTopicId(profile) {
   }
   return worst.id;
 }
+// Rolling proficiency from the last (up to) 20 attempts at a topic — 0..1,
+// null if never attempted. Feeds a future "Face Your Fears" mode that
+// weights toward a student's actual weak spots rather than just rank.
+function topicProficiency(profile, topicId) {
+  const recent = ((profile.topics || {})[topicId] || {}).recent20 || [];
+  if (!recent.length) return null;
+  return recent.reduce((a, b) => a + b, 0) / recent.length;
+}
 
 const SHOWUP_TASK = { id: "showup", label: "Open the app today", goal: 1, progress: () => 1 };
 const DAILY_POOL = [
@@ -11239,6 +11247,11 @@ export default function MathsUnlockedBN() {
   const [fbInbox, setFbInbox] = useState(null); // admin: null=unloaded, []=loaded
   const [fbInboxOpen, setFbInboxOpen] = useState(false); // admin: View feedback modal
   const [fbLatestAt, setFbLatestAt] = useState(null); // newest feedback created_at (for the red dot)
+  const [sfbOpen, setSfbOpen] = useState(false);   // optional feedback prompt, shown once after a student's first S rank
+  const [sfbStars, setSfbStars] = useState(0);
+  const [sfbText, setSfbText] = useState("");
+  const [sfbBusy, setSfbBusy] = useState(false);
+  const [sfbDone, setSfbDone] = useState(false);
   const [groupOpen, setGroupOpen] = useState(null); // dashboard: which of the 5 topic groups is expanded
   const [modesOpen, setModesOpen] = useState(false); // dashboard: Special Modes overlay
   // Guided lessons (Special Modes → Learn)
@@ -11806,6 +11819,34 @@ export default function MathsUnlockedBN() {
     playCoins();
     if (lv) setTimeout(() => playJingle(true), 280);
     flash(`+${MILESTONE_XP} XP${lv ? ` · Level ${lv}!` : ""}`);
+  }
+  function claimAllMissions() {
+    const n = JSON.parse(JSON.stringify(profile));
+    const d = ensureDay(n);
+    const before = totalExp(n);
+    let any = false;
+    (d.tasks || []).forEach((taskId) => {
+      if (d.claimed[taskId]) return;
+      const task = TASK_BY_ID[taskId];
+      if (!task || !taskDone(task, d)) return;
+      d.claimed[taskId] = true;
+      n.bonusExp = (n.bonusExp || 0) + (taskId === "showup" ? DAILY_XP.showup : DAILY_XP.task);
+      any = true;
+    });
+    MILESTONES.forEach((m) => {
+      if ((n.milestones || {})[m.id] !== "ready") return;
+      n.milestones[m.id] = "claimed";
+      n.bonusExp = (n.bonusExp || 0) + MILESTONE_XP;
+      any = true;
+    });
+    if (!any) return;
+    const gain = totalExp(n) - before;
+    bumpWeek(n, gain);
+    const lv = creditLevelUps(n, before);
+    saveProfile(n);
+    playCoins();
+    if (lv) setTimeout(() => playJingle(true), 280);
+    flash(`+${gain} XP${lv ? ` · Level ${lv}!` : ""}`);
   }
 
   // Quick sun/moon toggle: always flips to the plain light/dark pair,
@@ -12673,6 +12714,7 @@ ${aBlocks}
     const newBest = sc > (n.blitzBest || 0);
     if (newBest) n.blitzBest = sc;
     const before = totalExp(n);
+    let gain = 0;
     if (sc > 0) {
       const perks = (n.perks || []).filter((p) => PERKS[p]);
       let units = sc;
@@ -12682,13 +12724,13 @@ ${aBlocks}
         units += procs; // every nth doubled
         if (!perkPlus(n, "momentum")) n.perkProg = { ...(n.perkProg || {}), momentum: ((n.perkProg && n.perkProg.momentum) || 0) + procs };
       }
-      const gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
+      gain = units * CORRECT_XP * ((n.boostUntil || 0) > Date.now() ? 2 : 1);
       n.bonusExp = (n.bonusExp || 0) + gain;
       bumpWeek(n, gain);
     }
     creditLevelUps(n, before);
     const unlocked = awardAchievements(n);
-    setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked });
+    setBlitzResult({ score: sc, best: n.blitzBest || 0, newBest, unlocked, xpGained: gain });
     if (unlocked.length) playJingle(true);
     saveProfile(n);
     if (newBest) loadBlitzBoard();
@@ -13531,6 +13573,7 @@ ${aBlocks}
     const scoredId = question.topicId || activeTopic.id; // Mixed Review scores the source topic
     const rankBefore = ((profile.topics || {})[scoredId] || {}).highestRank ?? -1;
     const hadSPlusBefore = TOPICS.some((tp) => topicRankAtLeast(profile, tp.id, "S+"));
+    const hadSBefore = TOPICS.some((tp) => topicRankAtLeast(profile, tp.id, "S"));
     const next = JSON.parse(JSON.stringify(profile));
     const d = ensureDay(next);
     const perks = (profile.perks || []).filter((p) => PERKS[p]);
@@ -13575,6 +13618,11 @@ ${aBlocks}
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     if (!forgiven) {
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
+      // Wider rolling window than `history` (which drives the visible rank
+      // and is capped at 10 to stay responsive) — kept for a future "Face
+      // Your Fears" mode that weights questions toward genuinely weak
+      // topics. Not surfaced anywhere yet.
+      t.recent20 = [...(t.recent20 || []), correct ? 1 : 0].slice(-20);
       t.streak = correct ? (t.streak || 0) + 1 : 0;
       t.bestStreak = Math.max(t.bestStreak || 0, t.streak); // this run's best
       // Lifetime per-topic best — survives prestige (feeds the Top Streaks board).
@@ -13591,6 +13639,12 @@ ${aBlocks}
     const rankedUp = t.highestRank > rankBefore
       ? { to: RANK_ORDER[t.highestRank], topic: question.topicName || activeTopic.name }
       : null;
+
+    // First time this student has ever reached S (or jumped straight past
+    // it to S+) in any topic — a good moment to ask how it's going. Fires
+    // once ever, gated on a profile flag so it never repeats.
+    const firstSEver = rankedUp && RANK_ORDER.indexOf(rankedUp.to) >= RANK_ORDER.indexOf("S") && !hadSBefore && !next.sFeedbackAsked;
+    if (firstSEver) next.sFeedbackAsked = true;
 
     // Reaching A, then S, then S+ in normal topic practice (not Mixed
     // Review or a homework run): offer to move on to a new topic. Once
@@ -13766,6 +13820,7 @@ ${aBlocks}
     if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
     else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
     if (rankJumpTopic) setRankJump({ topicId: rankJumpTopic, rank: rankJumpRank });
+    if (firstSEver) setTimeout(() => { setSfbStars(0); setSfbText(""); setSfbDone(false); setSfbOpen(true); }, 2200);
   }
 
   function doPrestige() {
@@ -14005,6 +14060,19 @@ ${aBlocks}
     });
     setFbBusy(false);
     if (res.ok) setFbDone(true);
+    else flash(res.error ? `Couldn't send: ${res.error}` : "Couldn't send — try again.");
+  }
+  async function submitSFeedback() {
+    if (sfbBusy) return;
+    setSfbBusy(true);
+    const res = await sendFeedback({
+      name: profile.name || null,
+      message: sfbText.trim() || "(first S rank — no comment left)",
+      rating: sfbStars || null,
+      context: { version: APP_VERSION, trigger: "first_s_rank" },
+    });
+    setSfbBusy(false);
+    if (res.ok) setSfbDone(true);
     else flash(res.error ? `Couldn't send: ${res.error}` : "Couldn't send — try again.");
   }
   async function loadFeedbackInbox() {
@@ -17534,6 +17602,9 @@ ${aBlocks}
                 <div className="mub-display" style={{ fontSize: 20, fontWeight: 700, margin: "4px 0 14px" }}>Time&rsquo;s up!</div>
                 <div className="mub-display" style={{ fontSize: 48, fontWeight: 800, color: "var(--blue)", lineHeight: 1 }}>{blitzResult.score}</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>correct in {BLITZ_SECONDS}s</div>
+                {blitzResult.xpGained > 0 && (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", marginTop: 6 }}>+{blitzResult.xpGained} XP earned</div>
+                )}
 
                 {challengeResult ? (
                   challengeBusy ? (
@@ -18170,7 +18241,7 @@ ${aBlocks}
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Mixed Review {mixedOpen ? "" : `🔒 Level ${MIXED_UNLOCK_LEVEL}`}</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {mixedOpen ? "Random questions from every topic you've unlocked — answers still count toward each topic." : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
+                      {mixedOpen ? `Random questions from every topic you've unlocked — answers still count toward each topic and earn ${MIXED_XP_MULT}× XP.` : `Unlocks at Level ${MIXED_UNLOCK_LEVEL}.`}
                     </span>
                   </span>
                 </button>
@@ -18457,6 +18528,14 @@ ${aBlocks}
                   Nothing to claim right now — keep practising and check back.
                 </div>
               )}
+
+              {missionClaims > 1 && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                  <button onClick={claimAllMissions} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                    Claim all
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -18595,6 +18674,49 @@ ${aBlocks}
                   <button onClick={() => setFeedbackOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Cancel</button>
                   <button onClick={doSendFeedback} disabled={fbBusy || !fbText.trim()} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: fbBusy || !fbText.trim() ? 0.6 : 1 }}>
                     {fbBusy ? "Sending…" : "Send"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {sfbOpen && (
+        <div onClick={() => setSfbOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 85 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 16, padding: 22, maxWidth: 400, width: "100%", boxShadow: "0 10px 40px var(--shadow)" }}>
+            {sfbDone ? (
+              <>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Thanks! 🙏</div>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                  Your feedback was sent. It really helps during the beta.
+                </div>
+                <button onClick={() => setSfbOpen(false)} style={{ width: "100%", fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "10px 14px", cursor: "pointer" }}>Close</button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 28, marginBottom: 4 }}>🌟</div>
+                <div className="mub-display" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Your first S rank!</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
+                  Nice work — that's genuine mastery. Got a minute to say how it's going so far? Totally optional.
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} onClick={() => setSfbStars(sfbStars === n ? 0 : n)} aria-label={`${n} stars`}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 24, lineHeight: 1, padding: 0, filter: n <= sfbStars ? "none" : "grayscale(1) opacity(0.35)" }}>⭐</button>
+                  ))}
+                </div>
+                <textarea
+                  value={sfbText}
+                  onChange={(e) => setSfbText(e.target.value.slice(0, 2000))}
+                  placeholder="Anything you love, or anything that's bugging you? (optional)"
+                  rows={4}
+                  style={{ width: "100%", boxSizing: "border-box", marginBottom: 14, padding: "10px 12px", border: "1px solid var(--grid)", borderRadius: 8, fontSize: 13, fontFamily: "Inter, sans-serif", background: "var(--card)", color: "var(--ink)", resize: "vertical" }}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setSfbOpen(false)} style={{ flex: "0 0 auto", fontSize: 13, color: "var(--muted)", background: "none", border: "1px solid var(--grid)", borderRadius: 8, padding: "9px 14px", cursor: "pointer" }}>Skip</button>
+                  <button onClick={submitSFeedback} disabled={sfbBusy || (!sfbStars && !sfbText.trim())} style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--green)", border: "none", borderRadius: 8, padding: "9px 14px", cursor: "pointer", opacity: sfbBusy || (!sfbStars && !sfbText.trim()) ? 0.6 : 1 }}>
+                    {sfbBusy ? "Sending…" : "Send"}
                   </button>
                 </div>
               </>
