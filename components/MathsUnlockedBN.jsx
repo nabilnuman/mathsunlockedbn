@@ -8673,20 +8673,27 @@ function camoSvg(freq, seed, octaves, colors) {
   const stretch = "0.833 0.833 0.833 0 -0.742";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="${stretch} ${stretch} ${stretch} 0 0 0 1 0" result="g"/><feComponentTransfer in="g">${chans}</feComponentTransfer></filter><rect width="220" height="220" filter="url(#n)"/></svg>`;
 }
-// A warped, marbled swirl: a repeating diagonal colour band (with a
-// thin accent line woven through it) distorted by feDisplacementMap
-// driven by low-frequency turbulence. `gradientUnits="userSpaceOnUse"`
-// matters — the default (objectBoundingBox) rescales the gradient to
-// whatever size the source rect happens to be, which here is
-// deliberately oversized (see below) so it stays wrong in a way
-// that's easy to miss (colours look fine, just the wrong ones visible).
-// The source rect itself is drawn 2x oversized and the filter region
-// widened to match — feDisplacementMap samples from *outside* the
-// source shape's own bounds, and a rect exactly the canvas size runs
-// out of pixels to pull from at the edges, showing up as transparent
-// (black) corners.
-function vortexSvg(freq, scale, seed, period) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" gradientTransform="rotate(35)" spreadMethod="repeat"><stop offset="0" stop-color="#3B2E8C"/><stop offset="0.40" stop-color="#2560A8"/><stop offset="0.44" stop-color="#C21F45"/><stop offset="0.48" stop-color="#2560A8"/><stop offset="0.75" stop-color="#1E8F6E"/><stop offset="0.90" stop-color="#2560A8"/><stop offset="0.94" stop-color="#C21F45"/><stop offset="1" stop-color="#3B2E8C"/></linearGradient><filter id="w" x="-100%" y="-100%" width="300%" height="300%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
+// Thin red curvy lines only (transparent everywhere else) — a
+// repeating diagonal gradient whose stops are opaque red for a narrow
+// band and fully transparent the rest of the way, distorted by
+// feDisplacementMap into wavy paths. Layered as `img` OVER a plain,
+// un-warped colour gradient (`bg`) so the two are independent, like
+// the reference: lines trace their own wavy path, the colour
+// underneath is just a smooth diagonal blend that doesn't follow
+// them. (Warping the filled colour bands themselves, the previous
+// approach, made the color regions warp in lockstep with the lines —
+// convincing at a glance but not what a real photo of this looks
+// like.) `gradientUnits="userSpaceOnUse"` matters — the default
+// (objectBoundingBox) rescales the gradient to whatever size the
+// source rect happens to be, which here is deliberately oversized
+// (see below) so it stays wrong in a way that's easy to miss (colours
+// look fine, just the wrong ones visible). The source rect itself is
+// drawn 2x oversized and the filter region widened to match —
+// feDisplacementMap samples from *outside* the source shape's own
+// bounds, and a rect exactly the canvas size runs out of pixels to
+// pull from at the edges, showing up as transparent (black) corners.
+function vortexSvg(freq, scale, seed, period, bandHalf) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" gradientTransform="rotate(35)" spreadMethod="repeat"><stop offset="0" stop-color="#E01E3C" stop-opacity="0"/><stop offset="${0.5 - bandHalf - 0.02}" stop-color="#E01E3C" stop-opacity="0"/><stop offset="${0.5 - bandHalf}" stop-color="#E01E3C" stop-opacity="1"/><stop offset="${0.5 + bandHalf}" stop-color="#E01E3C" stop-opacity="1"/><stop offset="${0.5 + bandHalf + 0.02}" stop-color="#E01E3C" stop-opacity="0"/><stop offset="1" stop-color="#E01E3C" stop-opacity="0"/></linearGradient><filter id="w" x="-100%" y="-100%" width="300%" height="300%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
 }
 // Sparse, irregularly-placed bright flecks from noise thresholded on
 // alpha (rather than a repeating-radial-gradient lattice, which tiles
@@ -8768,7 +8775,8 @@ const CARD_BGS = {
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
                 img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
-  vortex:     { name: "Vortex",     dark: true, bg: "#3B2E8C", img: svgBg(vortexSvg("0.016", 100, 3, 60)), size: "cover" },
+  vortex:     { name: "Vortex",     dark: true, bg: "linear-gradient(115deg,#3B2E8C,#2560A8 45%,#1E8F6E 100%)",
+                img: svgBg(vortexSvg("0.016", 90, 3, 32, 0.020)), size: "cover" },
   crimson:    { name: "Crimson",    dark: true, bg: "#0D0604",
                 img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover" },
   navy:       { name: "Navy",       dark: true, bg: "#0A1830",
@@ -8799,7 +8807,16 @@ function cardBgStyle(b, swatch) {
     // gradient, fold it into the same backgroundImage list (as the last,
     // full-cover layer) instead of a separate `background` declaration.
     const isGradient = /gradient\(/.test(b.bg);
-    const s = { backgroundImage: isGradient ? `${b.img}, ${b.bg}` : b.img, backgroundSize: isGradient ? `${b.size}, cover` : b.size };
+    const s = {
+      backgroundImage: isGradient ? `${b.img}, ${b.bg}` : b.img,
+      backgroundSize: isGradient ? `${b.size}, cover` : b.size,
+      // Default background-position is top-left, not centered — fine for
+      // a tiling pattern, but a "cover"-sized single scene (Hollow's
+      // star, Vortex's swirl) needs its focal point centered regardless
+      // of the container's aspect ratio, or a short wide leaderboard row
+      // only ever shows the top sliver of a tall card-shaped image.
+      backgroundPosition: "center",
+    };
     if (!isGradient) s.backgroundColor = b.bg;
     return s;
   }
