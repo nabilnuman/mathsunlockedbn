@@ -7512,9 +7512,21 @@ const MOCK_EXAM_POOL = [
 ];
 function pickMockExamPool(n, pool = MOCK_EXAM_POOL) {
   const filtered = pool.filter((id) => TOPIC_BY_ID[id]);
-  const shuffled = [...filtered];
-  for (let i = shuffled.length - 1; i > 0; i--) { const j = randInt(0, i); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
-  return shuffled.slice(0, Math.min(n, shuffled.length));
+  if (!filtered.length) return [];
+  const shuffleOnce = () => {
+    const a = [...filtered];
+    for (let i = a.length - 1; i > 0; i--) { const j = randInt(0, i); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  // A real paper regularly needs more single questions than there are
+  // distinct topics (e.g. a 45-question non-calculator Paper 1 against a
+  // 20-ish-topic pool), so once one shuffled lap is exhausted, reshuffle
+  // and keep drawing rather than hard-capping at the pool size — this
+  // still guarantees no topic repeats until every other topic has had a
+  // turn, it just no longer caps the paper's length at the topic count.
+  let out = [];
+  while (out.length < n) out.push(...shuffleOnce());
+  return out.slice(0, n);
 }
 
 // A rough per-question mark value, shown as "[n marks]" — heuristic (this
@@ -7667,18 +7679,31 @@ function generateStructuredQuestion(templateIdx) {
   };
 }
 
-// Two papers, matching the real syllabus' own published shape (2 papers,
-// 100 marks each) — Paper 1 is all short single-part questions; Paper 2
-// mixes in structured multi-part ones, same as the real exam's balance.
+// Two papers, matching the real syllabus 4024's own published shape:
+// 100 marks each, Paper 1 non-calculator in 2 hours, Paper 2 calculator-
+// allowed in 2 hours 30 minutes. Question counts and mark totals here were
+// calibrated against a decade-plus of real past papers (2015–2025): Paper
+// 1 is almost entirely 1–3 mark single questions (~45 of them, since each
+// "single question" here plays the role of one real exam sub-part, and
+// real Paper 1 sittings run ~45 scored sub-parts for 100 marks); Paper 2
+// leans on a handful of big multi-part "structured" questions plus enough
+// single questions to fill the rest, mirroring how real Paper 2 questions
+// are a few large multi-step problems rather than many small ones.
+// singleCount can exceed MOCK_EXAM_POOL's topic count — pickMockExamPool
+// cycles through the pool again rather than truncating (see there).
+// marksForQuestion is only ever a heuristic (this app's questions were
+// never authored against a real mark scheme), so the raw total below is a
+// target, not a guarantee — the final score is always rescaled to /100
+// against whatever the actual generated total turns out to be.
 // excludeTopics / excludeSubs keep content that needs a calculator (or is
 // otherwise out of place) out of the non-calculator paper.
 const MOCK_PAPERS = {
   p1: {
-    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 20, structuredCount: 0,
+    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 45, structuredCount: 0,
     excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
     excludeSubs: { statistics: ["meantable"], similarity: ["volume"] }, // mean-from-table and cubing a scale factor need a calculator
   },
-  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 120, singleCount: 6, structuredCount: 5, excludeTopics: [], excludeSubs: {} },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, singleCount: 31, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
 };
 // Builds the paper's question queue. Structured templates are chosen as a
 // distinct slice (never the same template twice), and their topics are
@@ -18556,7 +18581,7 @@ ${aBlocks}
                         Mock Exam — {paper.name} <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
                       </span>
                       <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes / 60}h · {paper.singleCount + paper.structuredCount} questions
+                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {paper.singleCount + paper.structuredCount} questions
                         {paper.structuredCount ? `, ${paper.structuredCount} multi-part` : ""}.
                       </span>
                     </span>
