@@ -10620,7 +10620,12 @@ export function calcEval(raw, ans) {
     const v = expr();
     if (p !== toks.length) return { error: "Syntax ERROR" };
     if (typeof v !== "number" || Number.isNaN(v)) return { error: "Math ERROR" };
-    if (!isFinite(v)) return { error: "Math ERROR" };
+    // Divide-by-zero (and anything else that overflows to ±Infinity)
+    // shows the actual infinity symbol rather than the generic
+    // message — but it's still an `error` result, so equals() still
+    // refuses to set `ans` or add it to history, same as any other
+    // Math ERROR.
+    if (!isFinite(v)) return { error: v > 0 ? "∞" : "-∞" };
     return { value: v };
   } catch (e) { return { error: "Syntax ERROR" }; }
 }
