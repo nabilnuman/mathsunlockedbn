@@ -9048,7 +9048,12 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch })
       </div>
 
       <div style={{
-        background: cardBg.dark ? "rgba(9,12,20,0.55)" : "rgba(255,255,255,0.8)",
+        background: cardBg.dark ? "rgba(9,12,20,0.55)" : "rgba(255,255,255,0.32)",
+        // A flat opaque wash read as a plain white box stamped on top of
+        // the card, unrelated to it — blur instead, so the card's own
+        // colour still shows through (softened) rather than being hidden.
+        backdropFilter: cardBg.dark ? undefined : "blur(7px)",
+        WebkitBackdropFilter: cardBg.dark ? undefined : "blur(7px)",
         border: `1px solid ${cardBg.dark ? "rgba(255,255,255,0.16)" : "rgba(31,41,55,0.12)"}`,
         borderRadius: 12, padding: "10px 8px 6px",
       }}>
