@@ -8725,9 +8725,15 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
   vortex:     { name: "Vortex",     dark: true, bg: "#3B2E8C", img: svgBg(vortexSvg("0.016", 100, 3, 60)), size: "cover" },
+  crimson:    { name: "Crimson",    dark: true, bg: "#0D0604",
+                img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover" },
+  navy:       { name: "Navy",       dark: true, bg: "#0A1830",
+                img: svgBg(camoSvg("0.020", 15, 4, [[0x0a, 0x18, 0x30], [0x1e, 0x4d, 0x8c], [0x4a, 0x8f, 0xd4]])), size: "cover" },
+  fall:       { name: "Fall",       dark: true, bg: "#1A1006",
+                img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
-const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex"];
+const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
