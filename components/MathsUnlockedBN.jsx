@@ -8775,8 +8775,8 @@ const CARD_BGS = {
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
                 img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
-  vortex:     { name: "Vortex",     dark: true, bg: "linear-gradient(115deg,#3B2E8C,#2560A8 45%,#1E8F6E 100%)",
-                img: svgBg(vortexSvg("0.016", 90, 3, 32, 0.020)), size: "cover" },
+  vortex:     { name: "Vortex",     dark: true, bg: "linear-gradient(115deg,#3B2E8C,#123258 45%,#1E8F6E 100%)",
+                img: svgBg(vortexSvg("0.014", 60, 3, 22, 0.020)), size: "cover" },
   crimson:    { name: "Crimson",    dark: true, bg: "#0D0604",
                 img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover" },
   navy:       { name: "Navy",       dark: true, bg: "#0A1830",
@@ -8793,7 +8793,7 @@ const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongri
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
-function cardBgStyle(b, swatch) {
+function cardBgStyle(b, swatch, center) {
   if (b.grid) {
     return swatch
       ? { backgroundColor: "var(--paper)", backgroundImage: "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)", backgroundSize: "9px 9px" }
@@ -8810,13 +8810,15 @@ function cardBgStyle(b, swatch) {
     const s = {
       backgroundImage: isGradient ? `${b.img}, ${b.bg}` : b.img,
       backgroundSize: isGradient ? `${b.size}, cover` : b.size,
-      // Default background-position is top-left, not centered — fine for
-      // a tiling pattern, but a "cover"-sized single scene (Hollow's
-      // star, Vortex's swirl) needs its focal point centered regardless
-      // of the container's aspect ratio, or a short wide leaderboard row
-      // only ever shows the top sliver of a tall card-shaped image.
-      backgroundPosition: "center",
     };
+    // Centering is only for the leaderboard row: it's short and wide,
+    // so a "cover"-sized single scene (Hollow's star, Vortex's swirl)
+    // needs recentring there or a tall card-shaped image only ever
+    // shows its top sliver. The profile card is closer to the image's
+    // own proportions and looked right at the plain top-left default —
+    // centering it too pushed focal points like Hollow's star into a
+    // much more prominent, stretched-looking spot than intended.
+    if (center) s.backgroundPosition = "center";
     if (!isGradient) s.backgroundColor = b.bg;
     return s;
   }
@@ -8869,7 +8871,7 @@ function boardRowSkin(full, mine) {
     ? { background: "var(--card)" }
     : dark && !b.img
       ? { background: `linear-gradient(rgba(0,0,0,0.34), rgba(0,0,0,0.34)), ${b.bg}` }
-      : cardBgStyle(b);
+      : cardBgStyle(b, false, true);
   return {
     cls: undefined,
     style: {
