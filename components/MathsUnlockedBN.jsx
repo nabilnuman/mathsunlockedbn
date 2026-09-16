@@ -8716,21 +8716,36 @@ function tileSvg(cell, gap, colors, cols, rows, seed) {
 // gradient reused at different scales so the points/glow/core share
 // exactly one colour ramp instead of three hand-matched ones.
 function hollowSvg() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><radialGradient id="orb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="22%" stop-color="#E4CFFF"/><stop offset="55%" stop-color="#9B5CE0" stop-opacity="0.85"/><stop offset="100%" stop-color="#9B5CE0" stop-opacity="0"/></radialGradient></defs><g transform="translate(112,150)"><polygon points="0,-150 20,-20 150,0 20,20 0,150 -20,20 -150,0 -20,-20" fill="url(#orb)"/><polygon points="0,-95 11,-11 95,0 11,11 0,95 -11,11 -95,0 -11,-11" fill="url(#orb)" transform="rotate(45)"/><circle r="58" fill="url(#orb)"/><circle r="16" fill="#FFFFFF"/></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><radialGradient id="orb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="22%" stop-color="#E4CFFF"/><stop offset="55%" stop-color="#9B5CE0" stop-opacity="0.85"/><stop offset="100%" stop-color="#9B5CE0" stop-opacity="0"/></radialGradient></defs><g transform="translate(85,150)"><polygon points="0,-140 10,-10 140,0 10,10 0,140 -10,10 -140,0 -10,-10" fill="url(#orb)"/><polygon points="0,-85 6,-6 85,0 6,6 0,85 -6,6 -85,0 -6,-6" fill="url(#orb)" transform="rotate(45)"/><circle r="40" fill="url(#orb)"/><circle r="10" fill="#FFFFFF"/></g></svg>`;
+}
+// Soft blob-shaped clouds (not the old straight banded lines): fractal
+// noise stretched into the full 0..1 range (same sRGB trick as
+// camoSvg), thresholded to a single semi-transparent white band, then
+// blurred so the blob edges read as cloud, not a hard silhouette.
+function skyCloudsSvg(freq, seed, octaves) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="420"><filter id="b" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742" result="g"/><feComponentTransfer in="g" result="c"><feFuncR type="discrete" tableValues="1 1"/><feFuncG type="discrete" tableValues="1 1"/><feFuncB type="discrete" tableValues="1 1"/><feFuncA type="discrete" tableValues="0 0.55"/></feComponentTransfer><feGaussianBlur in="c" stdDeviation="9"/></filter><rect width="360" height="420" filter="url(#b)"/></svg>`;
+}
+// Aurora curtains — vertical colour bands (a horizontal-direction
+// repeating gradient, so the bands themselves run top-to-bottom) bent
+// into the wavy, curved-upward streaks real aurora curtains have via
+// feDisplacementMap — the same warp trick as vortexSvg, just fed a
+// striped gradient instead of a diagonal one.
+function auroraCurtainSvg(freq, scale, seed, period) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" spreadMethod="repeat"><stop offset="0" stop-color="#0A0E27"/><stop offset="0.22" stop-color="#123A6B"/><stop offset="0.38" stop-color="#1B5C4A"/><stop offset="0.5" stop-color="#4FCB8F"/><stop offset="0.62" stop-color="#1B5C4A"/><stop offset="0.78" stop-color="#123A6B"/><stop offset="1" stop-color="#0A0E27"/></linearGradient><filter id="w" x="-60%" y="-60%" width="220%" height="220%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="3" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
 }
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
   plain:     { name: "Clean",       bg: "var(--card)" },
   sky:       { name: "Sky",         bg: "linear-gradient(180deg,#2C9AD1 0%,#6FC1E8 30%,#BFE3F2 60%,#F3FAFC 100%)",
-               img: "repeating-linear-gradient(0deg,rgba(255,255,255,0) 0px,rgba(255,255,255,0) 35px,rgba(255,255,255,.35) 35px 55px,rgba(255,255,255,0) 55px 90px,rgba(255,255,255,.2) 90px 105px,rgba(255,255,255,0) 105px 150px)", size: "100% 150px" },
+               img: svgBg(skyCloudsSvg("0.010", 12, 3)), size: "cover" },
   dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
   blueprint: { name: "Blueprint",   bg: "#D8E6F2", img: "linear-gradient(rgba(18,51,90,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(18,51,90,.35) 1px,transparent 1px)", size: "18px 18px" },
   sunset:    { name: "Sunset",      bg: "linear-gradient(115deg,#F2977A,#F2CB4E 30%,#3D9DA6 55%,#4FA98C 75%,#2C7F72)" },
   slate:     { name: "Slate",       dark: true, bg: "#0A0A0A",
                img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
-  aurora:    { name: "Aurora",      dark: true, bg: "linear-gradient(180deg,#0A0E27 0%,#1B3A5C 25%,#2D6A4F 45%,#52B788 58%,#1B3A5C 78%,#0A0E27 100%)",
-               img: svgBg(starsSvg("0.9", 7)), size: "130px 130px" },
+  aurora:    { name: "Aurora",      dark: true, bg: "#0A0E27",
+               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraCurtainSvg("0.004 0.012", 60, 30, 140))}`, size: "130px 130px, cover" },
   gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
                bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
@@ -8744,7 +8759,7 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.014", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x9a, 0x94, 0x5c]])), size: "cover" },
   neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
   terracotta: { name: "Terracotta",
-                img: svgBg(tileSvg(70, 6, ["#C9836A", "#A9614A", "#8B4A3A", "#D9A98C", "#B8735A", "#96543F", "#E0B49A", "#7A4535"], 5, 5, 3)), bg: "#C9A98C", size: "350px 350px" },
+                img: svgBg(tileSvg(35, 3, ["#C9836A", "#A9614A", "#8B4A3A", "#D9A98C", "#B8735A", "#96543F", "#E0B49A", "#7A4535"], 5, 5, 3)), bg: "#C9A98C", size: "175px 175px" },
   nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
                 img: svgBg(starsSvg("0.9", 3)), size: "130px 130px" },
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
@@ -8924,8 +8939,12 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch })
   const cardBg = cardBgOf(profile);
   const nameSty = nameStyleOf(profile);
   const bannerCol = bannerColorOf(profile);
-  const sub = cardBg.dark ? "rgba(255,255,255,0.62)" : "var(--muted)";
-  const accent = cardBg.dark ? "#9FD0F5" : "var(--blue)";
+  // Fixed literal colours, not var(--muted)/var(--blue) — those resolve
+  // against the app's OWN light/dark theme, not this card's background,
+  // so a light card in a dark-themed app (or vice versa) would inherit
+  // the wrong-contrast text regardless of what the card itself needs.
+  const sub = cardBg.dark ? "rgba(255,255,255,0.62)" : "rgba(31,41,55,0.62)";
+  const accent = cardBg.dark ? "#9FD0F5" : "#3B6FA0";
   const achCount = (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
   const badges = bannerBadges(profile);
   const showBanner = badges.length > 0 || !!onEditBanner; // header slot: banner if there's one to show, else name
@@ -8989,12 +9008,12 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch })
    <>
     <div className={cardBg.grid ? "mub-grid" : undefined} style={{
       width: 360, maxWidth: "100%", border: "1px solid var(--grid)", borderRadius: 18, padding: 22,
-      color: cardBg.dark ? "#F2F5F8" : "var(--ink)",
+      color: cardBg.dark ? "#F2F5F8" : "#1F2937",
       ...cardBgStyle(cardBg),
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="mub-display" style={{ fontSize: 16, fontWeight: 700 }}>MathsUnlocked</span>
-        <span style={{ fontSize: 10, color: cardBg.dark ? "rgba(255,255,255,.6)" : "var(--muted)", fontWeight: 600 }}>BN · Mastery Challenge</span>
+        <span style={{ fontSize: 10, color: sub, fontWeight: 600 }}>BN · Mastery Challenge</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "20px 0 14px" }}>
