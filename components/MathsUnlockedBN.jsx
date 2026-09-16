@@ -8695,18 +8695,43 @@ function vortexSvg(freq, scale, seed, period) {
 function starsSvg(freq, seed) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="s"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 15 15 15 0 -30.5"/></filter><rect width="200" height="200" filter="url(#s)"/></svg>`;
 }
+// A tile mosaic (Terracotta) — unlike the noise-based patterns above,
+// real per-tile colour variation isn't a gradient, it's each tile
+// being a flatly different shade with a grout gap — so this just lays
+// out an explicit grid of rects. `seed` picks each cell's colour via
+// a hashed sine (cheap, deterministic, no Math.random) rather than
+// actual randomness, so the same seed always reproduces the same tile.
+function tileSvg(cell, gap, colors, cols, rows, seed) {
+  const w = cols * cell, h = rows * cell;
+  let rects = "";
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const n = Math.sin((r * cols + c) * 12.9898 + seed * 78.233) * 43758.5453;
+    const color = colors[Math.floor((n - Math.floor(n)) * colors.length)];
+    rects += `<rect x="${c * cell + gap / 2}" y="${r * cell + gap / 2}" width="${cell - gap}" height="${cell - gap}" rx="3" fill="${color}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="#C9A98C"/>${rects}</svg>`;
+}
+// Hollow — a duotone backdrop plus a glowing 8-point "shine" burst
+// (two overlapping 4-point stars + a soft core), all one radial
+// gradient reused at different scales so the points/glow/core share
+// exactly one colour ramp instead of three hand-matched ones.
+function hollowSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><radialGradient id="orb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="22%" stop-color="#E4CFFF"/><stop offset="55%" stop-color="#9B5CE0" stop-opacity="0.85"/><stop offset="100%" stop-color="#9B5CE0" stop-opacity="0"/></radialGradient></defs><g transform="translate(112,150)"><polygon points="0,-150 20,-20 150,0 20,20 0,150 -20,20 -150,0 -20,-20" fill="url(#orb)"/><polygon points="0,-95 11,-11 95,0 11,11 0,95 -11,11 -95,0 -11,-11" fill="url(#orb)" transform="rotate(45)"/><circle r="58" fill="url(#orb)"/><circle r="16" fill="#FFFFFF"/></g></svg>`;
+}
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
   plain:     { name: "Clean",       bg: "var(--card)" },
-  mint:      { name: "Mint",        bg: "linear-gradient(135deg,#CDEEDC,#A9E0C6)" },
-  sky:       { name: "Sky",         bg: "linear-gradient(135deg,#CFE2F6,#AFCDEF)" },
+  sky:       { name: "Sky",         bg: "linear-gradient(180deg,#2C9AD1 0%,#6FC1E8 30%,#BFE3F2 60%,#F3FAFC 100%)",
+               img: "repeating-linear-gradient(0deg,rgba(255,255,255,0) 0px,rgba(255,255,255,0) 35px,rgba(255,255,255,.35) 35px 55px,rgba(255,255,255,0) 55px 90px,rgba(255,255,255,.2) 90px 105px,rgba(255,255,255,0) 105px 150px)", size: "100% 150px" },
   dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
-  blueprint: { name: "Blueprint",   bg: "#12335A", img: "linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px)", size: "18px 18px", dark: true },
-  sunset:    { name: "Sunset",      bg: "linear-gradient(135deg,#FAD9BE,#F4B9C6)" },
-  slate:     { name: "Slate",       bg: "#2A3644", dark: true },
+  blueprint: { name: "Blueprint",   bg: "#D8E6F2", img: "linear-gradient(rgba(18,51,90,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(18,51,90,.35) 1px,transparent 1px)", size: "18px 18px" },
+  sunset:    { name: "Sunset",      bg: "linear-gradient(115deg,#F2977A,#F2CB4E 30%,#3D9DA6 55%,#4FA98C 75%,#2C7F72)" },
+  slate:     { name: "Slate",       dark: true, bg: "#0A0A0A",
+               img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
-  aurora:    { name: "Aurora",      bg: "linear-gradient(135deg,#D6D9F6,#BFE9E1)" },
-  gold:      { name: "Gold leaf",   bg: "linear-gradient(135deg,#F6E7BF,#EAD29A)" },
+  aurora:    { name: "Aurora",      dark: true, bg: "linear-gradient(180deg,#0A0E27 0%,#1B3A5C 25%,#2D6A4F 45%,#52B788 58%,#1B3A5C 78%,#0A0E27 100%)",
+               img: svgBg(starsSvg("0.9", 7)), size: "130px 130px" },
+  gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
                bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
   // --- Proposed level-gated backgrounds, admin-preview only (StyleModal)
@@ -8718,7 +8743,8 @@ const CARD_BGS = {
   camo:       { name: "Camo",       dark: true, bg: "#141709",
                 img: svgBg(camoSvg("0.014", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x9a, 0x94, 0x5c]])), size: "cover" },
   neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
-  terracotta: { name: "Terracotta", bg: "linear-gradient(135deg,#E6A882,#C97A5A)", img: "radial-gradient(rgba(0,0,0,.08) 1.4px,transparent 1.6px)", size: "12px 12px" },
+  terracotta: { name: "Terracotta",
+                img: svgBg(tileSvg(70, 6, ["#C9836A", "#A9614A", "#8B4A3A", "#D9A98C", "#B8735A", "#96543F", "#E0B49A", "#7A4535"], 5, 5, 3)), bg: "#C9A98C", size: "350px 350px" },
   nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
                 img: svgBg(starsSvg("0.9", 3)), size: "130px 130px" },
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
@@ -8731,9 +8757,13 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.020", 15, 4, [[0x0a, 0x18, 0x30], [0x1e, 0x4d, 0x8c], [0x4a, 0x8f, 0xd4]])), size: "cover" },
   fall:       { name: "Fall",       dark: true, bg: "#1A1006",
                 img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover" },
+  hollow:     { name: "Hollow",     dark: true, bg: "linear-gradient(90deg,#B0142F 0%,#3A1030 45%,#123A6B 100%)",
+                img: svgBg(hollowSvg()), size: "cover" },
+  strawberrymilkshake: { name: "Strawberry Milkshake",
+                img: svgBg(camoSvg("0.020", 70, 4, [[0xf5, 0xd9, 0xe0], [0xf2, 0xa8, 0xc0], [0xe8, 0x57, 0x8f], [0xc2, 0x35, 0x70]])), bg: "#F5D9E0", size: "cover" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
-const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall"];
+const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall", "hollow", "strawberrymilkshake"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
