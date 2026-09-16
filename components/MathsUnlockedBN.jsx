@@ -8660,17 +8660,24 @@ const CARD_BGS = {
   //     until approved and wired into the real per-level unlock system ---
   chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px" },
   notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)" },
-  coral:      { name: "Coral",      bg: "linear-gradient(135deg,#F9C9A8,#F2A0B6)" },
-  origami:    { name: "Origami",    bg: "linear-gradient(135deg,#DDE6F7,#C6DCEE)" },
+  tiger:      { name: "Tiger",      dark: true, bg: "#1B1006",
+                img: "repeating-linear-gradient(68deg,#D97917 0px,#D97917 26px,transparent 26px 34px,#D97917 34px 55px,transparent 55px 68px)" },
+  camo:       { name: "Camo",       dark: true, bg: "#5B5B3C",
+                img: "radial-gradient(ellipse 60px 40px at 20% 30%,#3C3A22 40%,transparent 41%), radial-gradient(ellipse 70px 50px at 70% 20%,#7A5230 40%,transparent 41%), radial-gradient(ellipse 55px 45px at 40% 70%,#2E2E1C 40%,transparent 41%), radial-gradient(ellipse 65px 40px at 85% 75%,#6B4423 40%,transparent 41%)",
+                size: "160px 160px, 160px 160px, 160px 160px, 160px 160px" },
   neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
   terracotta: { name: "Terracotta", bg: "linear-gradient(135deg,#E6A882,#C97A5A)", img: "radial-gradient(rgba(0,0,0,.08) 1.4px,transparent 1.6px)", size: "12px 12px" },
-  nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)" },
-  marble:     { name: "Marble",     bg: "linear-gradient(135deg,#F3F2EF,#DCDAD3)" },
+  nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
+                img: "radial-gradient(rgba(255,255,255,.9) 0.6px,transparent 1px), radial-gradient(rgba(255,255,255,.5) 0.8px,transparent 1.3px)",
+                size: "18px 18px, 34px 34px" },
+  stealth:    { name: "Stealth",    dark: true, bg: "#8E96A1",
+                img: "radial-gradient(ellipse 55px 38px at 25% 25%,#4C525C 40%,transparent 41%), radial-gradient(ellipse 65px 45px at 75% 15%,#B7BEC7 40%,transparent 41%), radial-gradient(ellipse 50px 40px at 45% 65%,#333941 40%,transparent 41%), radial-gradient(ellipse 60px 42px at 85% 70%,#A9B0B9 40%,transparent 41%)",
+                size: "150px 150px, 150px 150px, 150px 150px, 150px 150px" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
-  prism:      { name: "Prism",      dark: true, bg: "linear-gradient(115deg,#FF4DE1,#7FE0FF 50%,#FFD27F)" },
+  vortex:     { name: "Vortex",     dark: true, bg: "repeating-conic-gradient(from 0deg at 40% 50%,#3B2E8C,#2560A8 60deg,#1E8F6E 120deg,#C21F45 150deg,#3B2E8C 180deg)" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
-const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "coral", "origami", "neongrid", "terracotta", "nebula", "marble", "circuit", "prism"];
+const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
@@ -8680,9 +8687,19 @@ function cardBgStyle(b, swatch) {
       ? { backgroundColor: "var(--paper)", backgroundImage: "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)", backgroundSize: "9px 9px" }
       : {};
   }
-  const s = { background: b.bg };
-  if (b.img) { s.backgroundImage = b.img; s.backgroundSize = b.size; }
-  return s;
+  if (b.img) {
+    // `background` and `backgroundImage` both resolve to the same CSS
+    // sub-property — setting both on one style object means whichever is
+    // written second wins outright, silently dropping a gradient `bg`
+    // entirely rather than layering under the pattern. When `bg` is a
+    // gradient, fold it into the same backgroundImage list (as the last,
+    // full-cover layer) instead of a separate `background` declaration.
+    const isGradient = /gradient\(/.test(b.bg);
+    const s = { backgroundImage: isGradient ? `${b.img}, ${b.bg}` : b.img, backgroundSize: isGradient ? `${b.size}, cover` : b.size };
+    if (!isGradient) s.backgroundColor = b.bg;
+    return s;
+  }
+  return { background: b.bg };
 }
 // The weekly PNG graphics are plain SVG rasterised to canvas — no CSS custom
 // properties, no CSS background-image — so a CARD_BGS entry's `bg` string
