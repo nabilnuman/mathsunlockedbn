@@ -8692,8 +8692,21 @@ function camoSvg(freq, seed, octaves, colors) {
 // feDisplacementMap samples from *outside* the source shape's own
 // bounds, and a rect exactly the canvas size runs out of pixels to
 // pull from at the edges, showing up as transparent (black) corners.
-function vortexSvg(freq, scale, seed, period, bandHalf) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" gradientTransform="rotate(35)" spreadMethod="repeat"><stop offset="0" stop-color="#E01E3C" stop-opacity="0"/><stop offset="${0.5 - bandHalf - 0.02}" stop-color="#E01E3C" stop-opacity="0"/><stop offset="${0.5 - bandHalf}" stop-color="#E01E3C" stop-opacity="1"/><stop offset="${0.5 + bandHalf}" stop-color="#E01E3C" stop-opacity="1"/><stop offset="${0.5 + bandHalf + 0.02}" stop-color="#E01E3C" stop-opacity="0"/><stop offset="1" stop-color="#E01E3C" stop-opacity="0"/></linearGradient><filter id="w" x="-100%" y="-100%" width="300%" height="300%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
+// `lines` bands are spaced evenly within one repeat of `period`
+// (rather than just one centred band) so adding more lines doesn't
+// change where the existing ones fall — same seed/freq/period keeps
+// their paths identical, this only interleaves more between them.
+function vortexSvg(freq, scale, seed, period, bandHalf, lines) {
+  const stops = ['<stop offset="0" stop-color="#E01E3C" stop-opacity="0"/>'];
+  for (let i = 0; i < lines; i++) {
+    const c = (i + 0.5) / lines, gap = 0.02;
+    stops.push(`<stop offset="${(c - bandHalf - gap).toFixed(4)}" stop-color="#E01E3C" stop-opacity="0"/>`);
+    stops.push(`<stop offset="${(c - bandHalf).toFixed(4)}" stop-color="#E01E3C" stop-opacity="1"/>`);
+    stops.push(`<stop offset="${(c + bandHalf).toFixed(4)}" stop-color="#E01E3C" stop-opacity="1"/>`);
+    stops.push(`<stop offset="${(c + bandHalf + gap).toFixed(4)}" stop-color="#E01E3C" stop-opacity="0"/>`);
+  }
+  stops.push('<stop offset="1" stop-color="#E01E3C" stop-opacity="0"/>');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" gradientTransform="rotate(35)" spreadMethod="repeat">${stops.join("")}</linearGradient><filter id="w" x="-100%" y="-100%" width="300%" height="300%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
 }
 // Sparse, irregularly-placed bright flecks from noise thresholded on
 // alpha (rather than a repeating-radial-gradient lattice, which tiles
@@ -8776,7 +8789,7 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
   vortex:     { name: "Vortex",     dark: true, bg: "linear-gradient(115deg,#3B2E8C,#123258 45%,#1E8F6E 100%)",
-                img: svgBg(vortexSvg("0.014", 60, 3, 22, 0.020)), size: "cover" },
+                img: svgBg(vortexSvg("0.014", 68, 3, 22, 0.013, 3)), size: "cover" },
   crimson:    { name: "Crimson",    dark: true, bg: "#0D0604",
                 img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover" },
   navy:       { name: "Navy",       dark: true, bg: "#0A1830",
