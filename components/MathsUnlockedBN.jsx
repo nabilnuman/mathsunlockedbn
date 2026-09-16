@@ -8766,7 +8766,11 @@ function skyCloudsSvg(freq, seed, octaves) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="420"><filter id="b" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742" result="g"/><feComponentTransfer in="g" result="c"><feFuncR type="discrete" tableValues="1 1"/><feFuncG type="discrete" tableValues="1 1"/><feFuncB type="discrete" tableValues="1 1"/><feFuncA type="discrete" tableValues="0 0.55"/></feComponentTransfer><feGaussianBlur in="c" stdDeviation="9"/></filter><rect width="360" height="420" filter="url(#b)"/></svg>`;
 }
 const CARD_BGS = {
-  graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
+  // The grid lines are too faint to survive a light, blurred Mastery
+  // box (reads as a flat grey blob) — darkMastery opts that one panel
+  // into the same dark treatment Slate's camo uses, without changing
+  // the rest of the card (name/stats stay on the light paper as normal).
+  graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)", darkMastery: true },
   sky:       { name: "Sky",         bg: "linear-gradient(180deg,#2C9AD1 0%,#6FC1E8 30%,#BFE3F2 60%,#F3FAFC 100%)",
                img: svgBg(skyCloudsSvg("0.010", 12, 3)), size: "cover" },
   dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
@@ -9087,21 +9091,30 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch })
         {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
       </div>
 
+      {(() => {
+        // Just this panel opts into the dark treatment for backgrounds
+        // whose pattern is too faint to read through a light blurred
+        // box (see `darkMastery` on the graph-paper entry) — the rest
+        // of the card still follows cardBg.dark as normal.
+        const masteryDark = cardBg.dark || cardBg.darkMastery;
+        return (
       <div style={{
-        background: cardBg.dark ? "rgba(9,12,20,0.55)" : "rgba(255,255,255,0.32)",
+        background: masteryDark ? "rgba(9,12,20,0.55)" : "rgba(255,255,255,0.32)",
         // A flat opaque wash read as a plain white box stamped on top of
         // the card, unrelated to it — blur instead, so the card's own
         // colour still shows through (softened) rather than being hidden.
-        backdropFilter: cardBg.dark ? undefined : "blur(7px)",
-        WebkitBackdropFilter: cardBg.dark ? undefined : "blur(7px)",
-        border: `1px solid ${cardBg.dark ? "rgba(255,255,255,0.16)" : "rgba(31,41,55,0.12)"}`,
+        backdropFilter: masteryDark ? undefined : "blur(7px)",
+        WebkitBackdropFilter: masteryDark ? undefined : "blur(7px)",
+        border: `1px solid ${masteryDark ? "rgba(255,255,255,0.16)" : "rgba(31,41,55,0.12)"}`,
         borderRadius: 12, padding: "10px 8px 6px",
       }}>
-        <div style={{ fontSize: 10, color: cardBg.dark ? "rgba(255,255,255,0.7)" : sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+        <div style={{ fontSize: 10, color: masteryDark ? "rgba(255,255,255,0.7)" : sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
           Mastery
         </div>
-        <RadarChart profile={profile} dark={cardBg.dark} />
+        <RadarChart profile={profile} dark={masteryDark} />
       </div>
+        );
+      })()}
     </div>
     {badgeOverlay}
    </>
