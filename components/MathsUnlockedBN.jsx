@@ -7705,10 +7705,34 @@ const MOCK_PAPERS = {
   },
   p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, singleCount: 31, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
 };
+// A cluster can only bundle plain typed-answer questions — there's no
+// shared card layout for e.g. a draw-based or Venn-diagram part — so
+// generateClusterQuestion checks each candidate against this before using
+// it as a part.
+function isPlainAnswerQ(q) {
+  return !!q && !q.choices && !q.fields && !q.venn && !q.placeVenn && !q.region
+    && !q.drawGraph && !q.drawSolve && !q.drawTransform && !q.drawMirror
+    && !q.tapPoint && !q.buildHist && !q.vector;
+}
+// Measured empirically (30 samples/topic): these almost never generate a
+// plain typed-answer question (simultaneous 0/30, transformations 4/30,
+// sets 5/30, graphicalsolutions 8/30 — everything else was 57/30+), so
+// putting them in a cluster would just mean repeatedly failing
+// generateClusterQuestion's retry loop and quietly losing that topic's
+// marks when every retry comes back non-plain. Kept as standalone single
+// questions instead, where their normal (draw/Venn/graph) UI is used.
+const CLUSTER_UNSAFE_TOPICS = new Set(["simultaneous", "transformations", "sets", "graphicalsolutions"]);
 // Builds the paper's question queue. Structured templates are chosen as a
 // distinct slice (never the same template twice), and their topics are
 // then excluded from the single-question pool — so no topic appears twice
 // in one paper, whether as a single question or a structured one.
+//
+// Most of the (cluster-safe) single-topic pool is bundled into small
+// clusters (usually 2 topics, sometimes 1 or 3) so the paper reads as
+// roughly half its singleCount in numbered questions with sub-parts — the
+// way a real short-answer paper lays out "1 (a) ... (b) ..." — rather than
+// one flat list of singleCount atomic items. genMockItem turns a "cluster"
+// item into a single card with several parts (see generateClusterQuestion).
 function buildMockQueue(paper) {
   const idxs = STRUCTURED_TEMPLATES.map((_, i) => i);
   for (let i = idxs.length - 1; i > 0; i--) { const j = randInt(0, i); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
@@ -7716,7 +7740,19 @@ function buildMockQueue(paper) {
   const structTopics = new Set(structIdxs.map((i) => STRUCTURED_TEMPLATE_TOPIC[i]));
   const pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
   const topics = pickMockExamPool(paper.singleCount, pool);
-  const items = topics.map((id) => ({ type: "single", topicId: id }));
+  const clusterable = topics.filter((id) => !CLUSTER_UNSAFE_TOPICS.has(id));
+  const solo = topics.filter((id) => CLUSTER_UNSAFE_TOPICS.has(id));
+
+  const items = solo.map((id) => ({ type: "single", topicId: id }));
+  let i = 0;
+  while (i < clusterable.length) {
+    const remaining = clusterable.length - i;
+    const r = Math.random();
+    const size = remaining === 1 ? 1 : r < 0.12 ? 1 : r < 0.82 ? 2 : Math.min(3, remaining);
+    if (size === 1) items.push({ type: "single", topicId: clusterable[i] });
+    else items.push({ type: "cluster", topicIds: clusterable.slice(i, i + size) });
+    i += size;
+  }
   structIdxs.forEach((i) => items.push({ type: "structured", templateIdx: i }));
   for (let i = items.length - 1; i > 0; i--) { const j = randInt(0, i); [items[i], items[j]] = [items[j], items[i]]; }
   return items;
@@ -12430,16 +12466,61 @@ ${aBlocks}
   }
 
   // Mock Exam: turn one queue item (see buildMockQueue) into an actual
-  // question — a single-part question from its topic, or a fresh
+  // question — a single-part question from its topic, a bundle of a few
+  // single-topic questions sharing one card ("cluster"), or a fresh
   // structured multi-part one.
-  function genMockItem(item, paper) {
-    if (item.type === "structured") return generateStructuredQuestion(item.templateIdx);
-    const topic = TOPIC_BY_ID[item.topicId];
-    const excl = paper && (paper.excludeSubs || {})[item.topicId];
-    const subs = excl && excl.length && SUBTOPICS[item.topicId]
-      ? SUBTOPICS[item.topicId].map((s) => s.key).filter((k) => !excl.includes(k))
+  function genSingleFor(topicId, paper) {
+    const topic = TOPIC_BY_ID[topicId];
+    const excl = paper && (paper.excludeSubs || {})[topicId];
+    const subs = excl && excl.length && SUBTOPICS[topicId]
+      ? SUBTOPICS[topicId].map((s) => s.key).filter((k) => !excl.includes(k))
       : undefined;
     return freshQuestion(() => pickQuestion(topic, subs));
+  }
+  // Bundles 2-3 single-topic questions into one structured-style card, so
+  // the mock paper reads as roughly half its singleCount in numbered
+  // questions with sub-parts, the way a real short-answer paper lays out
+  // "1 (a) ... (b) ...". Only plain typed-answer questions can share the
+  // card (see isPlainAnswerQ), so each topic gets a few regeneration
+  // attempts to land one. buildMockQueue already keeps the topics that are
+  // almost never plain (CLUSTER_UNSAFE_TOPICS) out of clusters entirely,
+  // so a genuine failure here should be rare; if it still happens, that
+  // one topic is just left out of this card rather than retried forever —
+  // and if every topic in the cluster fails, the very first (non-plain)
+  // attempt is shown standalone instead of returning a broken question.
+  function generateClusterQuestion(topicIds, paper) {
+    const parts = [];
+    let fallback = null;
+    for (const topicId of topicIds) {
+      let picked = null;
+      for (let tries = 0; tries < 6; tries++) {
+        const cand = genSingleFor(topicId, paper);
+        if (isPlainAnswerQ(cand)) { picked = cand; break; }
+        if (!fallback) fallback = cand; // keep the first attempt in case every topic here fails
+      }
+      if (picked) {
+        parts.push({
+          label: `(${String.fromCharCode(97 + parts.length)})`,
+          prompt: picked.prompt, marks: marksForQuestion(picked), answer: picked.answer, check: picked.check,
+          steps: (picked.steps && picked.steps.length) ? picked.steps : (picked.hint ? [picked.hint] : ["Check your working carefully."]),
+        });
+      }
+    }
+    if (!parts.length) return fallback || genSingleFor(topicIds[0], paper); // never hand back a broken/empty question
+    const totalMarks = parts.reduce((s, p) => s + p.marks, 0);
+    const firstTopic = TOPIC_BY_ID[topicIds[0]];
+    return {
+      structured: true, totalMarks, steps: [],
+      prompt: parts.length > 1 ? `Answer ${parts.length === 2 ? "both parts" : "all parts"} below.` : parts[0].prompt,
+      topicId: topicIds[0], topicName: firstTopic.name, topicIcon: firstTopic.icon,
+      answer: parts.map((p) => `${p.label} ${p.answer}`).join("  "),
+      parts,
+    };
+  }
+  function genMockItem(item, paper) {
+    if (item.type === "structured") return generateStructuredQuestion(item.templateIdx);
+    if (item.type === "cluster") return generateClusterQuestion(item.topicIds, paper);
+    return genSingleFor(item.topicId, paper);
   }
 
   // Mixed Review: a random question from any topic the student has unlocked.
