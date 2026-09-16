@@ -8652,10 +8652,38 @@ const svgBg = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 // thresholds AND recolours in one step since the input is already the
 // same value on every channel. `freq` can be "x y" for elongated
 // (tiger-stripe) noise instead of round blotches.
+// Two things that aren't obvious and will silently wreck this if
+// touched: (1) fractalNoise's averaged-grayscale output only actually
+// occupies roughly the middle third of 0..1 (empirically sampled on a
+// canvas, not a spec guarantee), so `discrete`'s N *equal-width* bins
+// mostly land on the couple of bins straddling that middle band —
+// with only 2 colours that's still a usable ~50/50 split, but with 4
+// it starves the outer bands and everything reads as one muddy blur;
+// the 0.833/-0.742 coefficients below linearly restretch that real
+// range back out to fill 0..1 before banding. (2) SVG filters default
+// to operating in linearRGB, not the sRGB you're reading back off a
+// canvas or eyeballing on screen — `color-interpolation-filters`
+// forces sRGB so the numbers above actually mean what they say.
 function camoSvg(freq, seed, octaves, colors) {
   // tableValues are 0..1 fractions of channel intensity, not 0..255 bytes.
   const chans = ["R", "G", "B"].map((c, i) => `<feFunc${c} type="discrete" tableValues="${colors.map((rgb) => (rgb[i] / 255).toFixed(3)).join(" ")}"/>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0" result="g"/><feComponentTransfer in="g">${chans}</feComponentTransfer></filter><rect width="220" height="220" filter="url(#n)"/></svg>`;
+  const stretch = "0.833 0.833 0.833 0 -0.742";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="${stretch} ${stretch} ${stretch} 0 0 0 1 0" result="g"/><feComponentTransfer in="g">${chans}</feComponentTransfer></filter><rect width="220" height="220" filter="url(#n)"/></svg>`;
+}
+// A warped, marbled swirl: a repeating diagonal colour band (with a
+// thin accent line woven through it) distorted by feDisplacementMap
+// driven by low-frequency turbulence. `gradientUnits="userSpaceOnUse"`
+// matters — the default (objectBoundingBox) rescales the gradient to
+// whatever size the source rect happens to be, which here is
+// deliberately oversized (see below) so it stays wrong in a way
+// that's easy to miss (colours look fine, just the wrong ones visible).
+// The source rect itself is drawn 2x oversized and the filter region
+// widened to match — feDisplacementMap samples from *outside* the
+// source shape's own bounds, and a rect exactly the canvas size runs
+// out of pixels to pull from at the edges, showing up as transparent
+// (black) corners.
+function vortexSvg(freq, scale, seed, period) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" gradientTransform="rotate(35)" spreadMethod="repeat"><stop offset="0" stop-color="#3B2E8C"/><stop offset="0.40" stop-color="#2560A8"/><stop offset="0.44" stop-color="#C21F45"/><stop offset="0.48" stop-color="#2560A8"/><stop offset="0.75" stop-color="#1E8F6E"/><stop offset="0.90" stop-color="#2560A8"/><stop offset="0.94" stop-color="#C21F45"/><stop offset="1" stop-color="#3B2E8C"/></linearGradient><filter id="w" x="-100%" y="-100%" width="300%" height="300%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
 }
 // Sparse, irregularly-placed bright flecks from noise thresholded on
 // alpha (rather than a repeating-radial-gradient lattice, which tiles
@@ -8686,9 +8714,9 @@ const CARD_BGS = {
   chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px" },
   notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)" },
   tiger:      { name: "Tiger",      dark: true, bg: "#1A0F05",
-                img: svgBg(camoSvg("0.006 0.05", 11, 3, [[0x1a, 0x0f, 0x05], [0x9e, 0x4d, 0x0d], [0xe3, 0x73, 0x17]])), size: "cover" },
+                img: svgBg(camoSvg("0.020 0.045", 25, 4, [[0, 0, 0], [0xea, 0x66, 0x08]])), size: "cover" },
   camo:       { name: "Camo",       dark: true, bg: "#141709",
-                img: svgBg(camoSvg("0.022", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x8c, 0x8c, 0x5c]])), size: "cover" },
+                img: svgBg(camoSvg("0.014", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x9a, 0x94, 0x5c]])), size: "cover" },
   neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
   terracotta: { name: "Terracotta", bg: "linear-gradient(135deg,#E6A882,#C97A5A)", img: "radial-gradient(rgba(0,0,0,.08) 1.4px,transparent 1.6px)", size: "12px 12px" },
   nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
@@ -8696,7 +8724,7 @@ const CARD_BGS = {
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
                 img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
-  vortex:     { name: "Vortex",     dark: true, bg: "repeating-conic-gradient(from 0deg at 40% 50%,#3B2E8C,#2560A8 60deg,#1E8F6E 120deg,#C21F45 150deg,#3B2E8C 180deg)" },
+  vortex:     { name: "Vortex",     dark: true, bg: "#3B2E8C", img: svgBg(vortexSvg("0.016", 100, 3, 60)), size: "cover" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
 const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex"];
