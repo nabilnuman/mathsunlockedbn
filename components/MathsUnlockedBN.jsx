@@ -8719,7 +8719,7 @@ function tileSvg(cell, gap, colors, cols, rows, seed) {
 // gradient reused at different scales so the points/glow/core share
 // exactly one colour ramp instead of three hand-matched ones.
 function hollowSvg() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><radialGradient id="orb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="22%" stop-color="#E4CFFF"/><stop offset="55%" stop-color="#9B5CE0" stop-opacity="0.85"/><stop offset="100%" stop-color="#9B5CE0" stop-opacity="0"/></radialGradient></defs><g transform="translate(85,150)"><polygon points="0,-140 10,-10 140,0 10,10 0,140 -10,10 -140,0 -10,-10" fill="url(#orb)"/><polygon points="0,-85 6,-6 85,0 6,6 0,85 -6,6 -85,0 -6,-6" fill="url(#orb)" transform="rotate(45)"/><circle r="40" fill="url(#orb)"/><circle r="10" fill="#FFFFFF"/></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><radialGradient id="orb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="22%" stop-color="#E4CFFF"/><stop offset="55%" stop-color="#9B5CE0" stop-opacity="0.85"/><stop offset="100%" stop-color="#9B5CE0" stop-opacity="0"/></radialGradient></defs><g transform="translate(65,150)"><polygon points="0,-95 6,-6 95,0 6,6 0,95 -6,6 -95,0 -6,-6" fill="url(#orb)"/><polygon points="0,-58 4,-4 58,0 4,4 0,58 -4,4 -58,0 -4,-4" fill="url(#orb)" transform="rotate(45)"/><circle r="34" fill="url(#orb)"/><circle r="9" fill="#FFFFFF"/></g></svg>`;
 }
 // Soft blob-shaped clouds (not the old straight banded lines): fractal
 // noise stretched into the full 0..1 range (same sRGB trick as
