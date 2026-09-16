@@ -8334,11 +8334,14 @@ function RadarChart({ profile, dark }) {
   };
   const ring = (frac) => groups.map((_, i) => at(i, frac).join(",")).join(" ");
   const data = groups.map((g, i) => at(i, Math.max(0.02, g.v)).join(",")).join(" ");
-  // Contrast against whatever card background is behind us.
-  const web = dark ? "#FFFFFF" : "var(--muted)";
+  // Contrast against whatever card background is behind us — fixed
+  // literals, not var(--ink)/var(--muted)/var(--green), which resolve
+  // against the app's OWN theme rather than this card's own light/dark
+  // need (same bug class as ProfileCard's text colours).
+  const web = dark ? "#FFFFFF" : "#8A97A6";
   const webOp = dark ? 0.42 : 0.5;
-  const acc = dark ? "#8CEFC6" : "var(--green)";
-  const lab = dark ? "#F4F8F6" : "var(--ink)";
+  const acc = dark ? "#8CEFC6" : "#2F6B4F";
+  const lab = dark ? "#F4F8F6" : "#1F2937";
   return (
     <svg viewBox="-28 -6 296 232" width="100%" style={{ display: "block", maxWidth: 300, margin: "0 auto" }}>
       {[0.34, 0.67, 1].map((f, k) => <polygon key={k} points={ring(f)} fill="none" stroke={web} strokeOpacity={webOp} strokeWidth="1" />)}
@@ -9044,9 +9047,11 @@ function ProfileCard({ profile, onEditIcon, onEditBanner, newIcons, viewerAch })
         {stat("Badges", `${achCount}/${ACHIEVEMENTS.length}`)}
       </div>
 
-      <div style={cardBg.dark
-        ? { background: "rgba(9,12,20,0.55)", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 12, padding: "10px 8px 6px" }
-        : undefined}>
+      <div style={{
+        background: cardBg.dark ? "rgba(9,12,20,0.55)" : "rgba(255,255,255,0.8)",
+        border: `1px solid ${cardBg.dark ? "rgba(255,255,255,0.16)" : "rgba(31,41,55,0.12)"}`,
+        borderRadius: 12, padding: "10px 8px 6px",
+      }}>
         <div style={{ fontSize: 10, color: cardBg.dark ? "rgba(255,255,255,0.7)" : sub, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
           Mastery
         </div>
