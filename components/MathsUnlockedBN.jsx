@@ -8718,6 +8718,23 @@ function vortexSvg(freq, scale, seed, period, bandHalf, lines) {
 function starsSvg(freq, seed) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="s"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 15 15 15 0 -30.5"/></filter><rect width="200" height="200" filter="url(#s)"/></svg>`;
 }
+// Aurora curtains, take two: real aurora isn't a warped stripe, it's
+// vertical flame-like streaks that fade UP into a plain starry sky,
+// not colour banding across the whole card. `freq="x y"` with x >> y
+// stretches the noise into tall thin vertical streaks (low Y variation
+// = continuous top-to-bottom, higher X variation = many separate
+// streaks side by side) — same camoSvg discrete-threshold banding
+// technique for the teal/cyan colour steps, but the streak shape comes
+// from the frequency anisotropy, not from displacement-warping a
+// gradient. A `<mask>` driven by a plain vertical gradient (black up
+// top, white from `fadeStart` to `fadeEnd`) fades the whole thing out
+// above the aurora's actual band, so the top of the card stays clean
+// night sky for the stars layer.
+function auroraGlowSvg(freq, seed, octaves, colors, fadeStart, fadeEnd) {
+  const chans = ["R", "G", "B"].map((c, i) => `<feFunc${c} type="discrete" tableValues="${colors.map((rgb) => (rgb[i] / 255).toFixed(3)).join(" ")}"/>`).join("");
+  const stretch = "0.833 0.833 0.833 0 -0.742";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="420"><defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="black"/><stop offset="${fadeStart}" stop-color="black"/><stop offset="${fadeEnd}" stop-color="white"/><stop offset="1" stop-color="white"/></linearGradient><mask id="m"><rect width="300" height="420" fill="url(#mg)"/></mask><filter id="n" color-interpolation-filters="sRGB" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="${stretch} ${stretch} ${stretch} 0 0 0 1 0" result="g"/><feComponentTransfer in="g">${chans}</feComponentTransfer></filter></defs><rect width="300" height="420" filter="url(#n)" mask="url(#m)"/></svg>`;
+}
 // A tile mosaic (Terracotta) — unlike the noise-based patterns above,
 // real per-tile colour variation isn't a gradient, it's each tile
 // being a flatly different shade with a grout gap — so this just lays
@@ -8748,14 +8765,6 @@ function hollowSvg() {
 function skyCloudsSvg(freq, seed, octaves) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="420"><filter id="b" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742 0.833 0.833 0.833 0 -0.742" result="g"/><feComponentTransfer in="g" result="c"><feFuncR type="discrete" tableValues="1 1"/><feFuncG type="discrete" tableValues="1 1"/><feFuncB type="discrete" tableValues="1 1"/><feFuncA type="discrete" tableValues="0 0.55"/></feComponentTransfer><feGaussianBlur in="c" stdDeviation="9"/></filter><rect width="360" height="420" filter="url(#b)"/></svg>`;
 }
-// Aurora curtains — vertical colour bands (a horizontal-direction
-// repeating gradient, so the bands themselves run top-to-bottom) bent
-// into the wavy, curved-upward streaks real aurora curtains have via
-// feDisplacementMap — the same warp trick as vortexSvg, just fed a
-// striped gradient instead of a diagonal one.
-function auroraCurtainSvg(freq, scale, seed, period) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${period}" y2="0" spreadMethod="repeat"><stop offset="0" stop-color="#0A0E27"/><stop offset="0.22" stop-color="#123A6B"/><stop offset="0.38" stop-color="#1B5C4A"/><stop offset="0.5" stop-color="#4FCB8F"/><stop offset="0.62" stop-color="#1B5C4A"/><stop offset="0.78" stop-color="#123A6B"/><stop offset="1" stop-color="#0A0E27"/></linearGradient><filter id="w" x="-60%" y="-60%" width="220%" height="220%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="3" seed="${seed}" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter></defs><rect x="-150" y="-150" width="600" height="600" fill="url(#g)" filter="url(#w)"/></svg>`;
-}
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
   plain:     { name: "Clean",       bg: "var(--card)" },
@@ -8767,8 +8776,8 @@ const CARD_BGS = {
   slate:     { name: "Slate",       dark: true, bg: "#0A0A0A",
                img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
-  aurora:    { name: "Aurora",      dark: true, bg: "#0A0E27",
-               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraCurtainSvg("0.004 0.012", 60, 30, 140))}`, size: "130px 130px, cover" },
+  aurora:    { name: "Aurora",      dark: true, bg: "linear-gradient(180deg,#050912 0%,#0A1830 55%,#0B2440 100%)",
+               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.022 0.004", 11, 4, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.30, 0.55))}`, size: "130px 130px, cover" },
   gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
                bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
