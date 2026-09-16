@@ -8642,6 +8642,31 @@ const NAME_STYLE_IDS = Object.keys(NAME_STYLES);
 const nameStyleOf = (p) => (NAME_STYLES[(p && p.nameStyle)] || NAME_STYLES.plain).style;
 
 // Profile-card backgrounds. One unlocked per prestige (order = prestige needed).
+// Inline-SVG data URI for a background pattern too complex for a CSS
+// gradient (procedural camo, star noise) — no external asset, just an
+// encoded <svg>. Reused by cardBgStyle exactly like a normal `img`.
+const svgBg = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+// A real camo pattern isn't scattered shapes — it's fractal noise
+// (feTurbulence) collapsed to grayscale, then remapped to N flat colour
+// bands with feComponentTransfer's `discrete` tables, which both
+// thresholds AND recolours in one step since the input is already the
+// same value on every channel. `freq` can be "x y" for elongated
+// (tiger-stripe) noise instead of round blotches.
+function camoSvg(freq, seed, octaves, colors) {
+  // tableValues are 0..1 fractions of channel intensity, not 0..255 bytes.
+  const chans = ["R", "G", "B"].map((c, i) => `<feFunc${c} type="discrete" tableValues="${colors.map((rgb) => (rgb[i] / 255).toFixed(3)).join(" ")}"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0" result="g"/><feComponentTransfer in="g">${chans}</feComponentTransfer></filter><rect width="220" height="220" filter="url(#n)"/></svg>`;
+}
+// Sparse, irregularly-placed bright flecks from noise thresholded on
+// alpha (rather than a repeating-radial-gradient lattice, which tiles
+// too evenly to read as a starfield). The alpha formula's coefficient
+// and offset are tuned empirically against fractalNoise's real output
+// range (measured ~0.5-0.9, not the full 0..1 a naive guess assumes) —
+// sample pixel alpha on a canvas before touching these two numbers,
+// the relationship between them is not linear-obvious.
+function starsSvg(freq, seed) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="s"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="2" seed="${seed}" result="t"/><feColorMatrix in="t" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 15 15 15 0 -30.5"/></filter><rect width="200" height="200" filter="url(#s)"/></svg>`;
+}
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
   plain:     { name: "Clean",       bg: "var(--card)" },
@@ -8660,19 +8685,16 @@ const CARD_BGS = {
   //     until approved and wired into the real per-level unlock system ---
   chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px" },
   notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)" },
-  tiger:      { name: "Tiger",      dark: true, bg: "#1B1006",
-                img: "repeating-linear-gradient(68deg,#D97917 0px,#D97917 26px,transparent 26px 34px,#D97917 34px 55px,transparent 55px 68px)" },
-  camo:       { name: "Camo",       dark: true, bg: "#5B5B3C",
-                img: "radial-gradient(ellipse 60px 40px at 20% 30%,#3C3A22 40%,transparent 41%), radial-gradient(ellipse 70px 50px at 70% 20%,#7A5230 40%,transparent 41%), radial-gradient(ellipse 55px 45px at 40% 70%,#2E2E1C 40%,transparent 41%), radial-gradient(ellipse 65px 40px at 85% 75%,#6B4423 40%,transparent 41%)",
-                size: "160px 160px, 160px 160px, 160px 160px, 160px 160px" },
+  tiger:      { name: "Tiger",      dark: true, bg: "#1A0F05",
+                img: svgBg(camoSvg("0.006 0.05", 11, 3, [[0x1a, 0x0f, 0x05], [0x9e, 0x4d, 0x0d], [0xe3, 0x73, 0x17]])), size: "cover" },
+  camo:       { name: "Camo",       dark: true, bg: "#141709",
+                img: svgBg(camoSvg("0.022", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x8c, 0x8c, 0x5c]])), size: "cover" },
   neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
   terracotta: { name: "Terracotta", bg: "linear-gradient(135deg,#E6A882,#C97A5A)", img: "radial-gradient(rgba(0,0,0,.08) 1.4px,transparent 1.6px)", size: "12px 12px" },
   nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
-                img: "radial-gradient(rgba(255,255,255,.9) 0.6px,transparent 1px), radial-gradient(rgba(255,255,255,.5) 0.8px,transparent 1.3px)",
-                size: "18px 18px, 34px 34px" },
-  stealth:    { name: "Stealth",    dark: true, bg: "#8E96A1",
-                img: "radial-gradient(ellipse 55px 38px at 25% 25%,#4C525C 40%,transparent 41%), radial-gradient(ellipse 65px 45px at 75% 15%,#B7BEC7 40%,transparent 41%), radial-gradient(ellipse 50px 40px at 45% 65%,#333941 40%,transparent 41%), radial-gradient(ellipse 60px 42px at 85% 70%,#A9B0B9 40%,transparent 41%)",
-                size: "150px 150px, 150px 150px, 150px 150px, 150px 150px" },
+                img: svgBg(starsSvg("0.9", 3)), size: "130px 130px" },
+  stealth:    { name: "Stealth",    dark: true, bg: "#333941",
+                img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
   circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
   vortex:     { name: "Vortex",     dark: true, bg: "repeating-conic-gradient(from 0deg at 40% 50%,#3B2E8C,#2560A8 60deg,#1E8F6E 120deg,#C21F45 150deg,#3B2E8C 180deg)" },
 };
