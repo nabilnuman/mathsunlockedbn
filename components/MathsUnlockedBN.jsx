@@ -8767,7 +8767,6 @@ function skyCloudsSvg(freq, seed, octaves) {
 }
 const CARD_BGS = {
   graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)" },
-  plain:     { name: "Clean",       bg: "var(--card)" },
   sky:       { name: "Sky",         bg: "linear-gradient(180deg,#2C9AD1 0%,#6FC1E8 30%,#BFE3F2 60%,#F3FAFC 100%)",
                img: svgBg(skyCloudsSvg("0.010", 12, 3)), size: "cover" },
   dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
@@ -8807,11 +8806,11 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover" },
   hollow:     { name: "Hollow",     dark: true, bg: "linear-gradient(90deg,#B0142F 0%,#3A1030 45%,#123A6B 100%)",
                 img: svgBg(hollowSvg()), size: "cover" },
-  strawberrymilkshake: { name: "Strawberry Milkshake",
+  berryshake: { name: "Berryshake",
                 img: svgBg(camoSvg("0.020", 70, 4, [[0xf5, 0xd9, 0xe0], [0xf2, 0xa8, 0xc0], [0xe8, 0x57, 0x8f], [0xc2, 0x35, 0x70]])), bg: "#F5D9E0", size: "cover" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
-const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall", "hollow", "strawberrymilkshake"];
+const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall", "hollow", "berryshake"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
