@@ -7886,6 +7886,14 @@ const ACHIEVEMENTS = [
   { id: "konami", tier: "Bronze", name: "Konami Code", icon: "🕹",
     desc: "↑ ↑ ↓ ↓ ← → ← → on the calculator", secret: true, showName: true,
     check: (p) => !!p.konami },
+  { id: "honoredone", tier: "Bronze", name: "The Honored One", icon: "♾️", desc: "Attain Infinity",
+    check: (p) => !!p.honoredone },
+  { id: "steamedhams", tier: "Bronze", name: "Steamed Hams", icon: "🍔", desc: "???", secret: true,
+    // Revealed only when navigated to from Aurora's locked swatch (see
+    // StyleModal's "???" card backgrounds) — a themed clue instead of the
+    // usual generic "Secret — revealed when earned" placeholder.
+    teaserName: "What's in the kitchen?", hint: "Write your answer in any answer text box",
+    check: (p) => !!p.steamedhams },
 
   /* ---------------- Silver ---------------- */
   { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
@@ -8172,6 +8180,8 @@ function unlockedTitles(profile) {
     ...TITLES.filter((t) => lv >= t.level).map((t) => t.name),
     ...PRESTIGE_TITLES.filter((t) => pr >= t.prestige).map((t) => t.name),
     ...(profile.konami ? ["Gamer"] : []),   // secret — Konami code
+    ...(profile.honoredone ? ["The Honored One"] : []),
+    ...(profile.steamedhams ? ["The Principal"] : []), // secret — Steamed Hams
   ];
 }
 function titleFor(profile) {
@@ -8779,7 +8789,7 @@ const CARD_BGS = {
   slate:     { name: "Slate",       dark: true, bg: "#0A0A0A",
                img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
-  aurora:    { name: "Aurora",      dark: true, bg: "linear-gradient(180deg,#050912 0%,#0A1830 55%,#0B2440 100%)",
+  aurora:    { name: "Aurora",      ach: "steamedhams", dark: true, bg: "linear-gradient(180deg,#050912 0%,#0A1830 55%,#0B2440 100%)",
                img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.050 0.010", 11, 3, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.61, 0.85))}`, size: "130px 130px, cover" },
   gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
@@ -8808,7 +8818,7 @@ const CARD_BGS = {
                 img: svgBg(camoSvg("0.020", 15, 4, [[0x0a, 0x18, 0x30], [0x1e, 0x4d, 0x8c], [0x4a, 0x8f, 0xd4]])), size: "cover" },
   fall:       { name: "Fall",       dark: true, bg: "#1A1006",
                 img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover" },
-  hollow:     { name: "Hollow",     dark: true, bg: "linear-gradient(90deg,#B0142F 0%,#3A1030 45%,#123A6B 100%)",
+  hollow:     { name: "Hollow",     ach: "honoredone", dark: true, bg: "linear-gradient(90deg,#B0142F 0%,#3A1030 45%,#123A6B 100%)",
                 img: svgBg(hollowSvg()), size: "cover" },
   berryshake: { name: "Berryshake",
                 img: svgBg(camoSvg("0.020", 70, 4, [[0xf5, 0xd9, 0xe0], [0xf2, 0xa8, 0xc0], [0xe8, 0x57, 0x8f], [0xc2, 0x35, 0x70]])), bg: "#F5D9E0", size: "cover" },
@@ -9356,7 +9366,7 @@ function BannerPickerModal({ profile, onChange, onClose }) {
 }
 
 /* Sound pack / title / name style / card background picker. */
-function StyleModal({ profile, onChange, onClose, previewPack, isAdmin }) {
+function StyleModal({ profile, onChange, onClose, previewPack, isAdmin, onShowAchievement }) {
   const prestige = profile.prestige || 0;
   const hasAch = (id) => (profile.achievements || []).includes(id);
   const Head = ({ children }) => (
@@ -9424,15 +9434,22 @@ function StyleModal({ profile, onChange, onClose, previewPack, isAdmin }) {
           const b = CARD_BGS[id];
           const locked = b.ach ? !hasAch(b.ach) : prestige < i;
           const on = (profile.cardBg || "graph") === id;
+          // Prestige-locked swatches state their name (just not selectable
+          // yet). Secret, achievement-gated ones stay "???" — but are
+          // clickable through to that achievement's entry to see the clue.
+          const clickable = !locked || !!b.ach;
           return (
             <div key={id} style={{ width: 66 }}>
-              <button type="button" disabled={locked} onClick={() => !locked && onChange(() => ({ cardBg: id }))} style={{
-                width: 66, height: 44, borderRadius: 8, cursor: locked ? "default" : "pointer", padding: 0,
+              <button type="button" disabled={!clickable} onClick={() => {
+                if (!locked) { onChange(() => ({ cardBg: id })); return; }
+                if (b.ach) onShowAchievement && onShowAchievement(b.ach);
+              }} style={{
+                width: 66, height: 44, borderRadius: 8, cursor: clickable ? "pointer" : "default", padding: 0,
                 border: `2px solid ${on ? "var(--blue)" : "var(--grid)"}`,
                 ...cardBgStyle(b, true),
                 filter: locked ? "grayscale(1)" : "none", opacity: locked ? 0.45 : 1,
               }} />
-              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (b.ach ? "🔒" : `P${i}`) : b.name}</div>
+              <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (b.ach ? "???" : `${b.name} · P${i}`) : b.name}</div>
             </div>
           );
         })}
@@ -10748,7 +10765,7 @@ export function Calc({ onClose, sound, skin, onKonami, onError, initial, onPersi
     koRef.current = "";
     const s = st.s.trim(); if (!s) return;
     const r = calcEval(s, ans);
-    if (r.error) { setRes({ text: r.error }); postEq.current = true; onError && onError(); return; }
+    if (r.error) { setRes({ text: r.error }); postEq.current = true; onError && onError(r.error); return; }
     histRef.current = [...histRef.current.filter((x) => x !== s), s].slice(-24);
     setHi(-1); setAns(r.value); setAsFrac(false); postEq.current = true;
     setRes({ val: r.value, frac: calcToFrac(r.value) });
@@ -10875,7 +10892,7 @@ function CalcSkinSwatch({ id, locked, on, onPick }) {
           <span style={{ flex: 1, borderRadius: 2, background: sk.P.del }} />
         </span>
       </button>
-      <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (sk.ach ? "🔒" : `Lv ${sk.lv}`) : sk.name}</div>
+      <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "center", marginTop: 3 }}>{locked ? (sk.ach ? "???" : `${sk.name} · Lv ${sk.lv}`) : sk.name}</div>
     </div>
   );
 }
@@ -10943,7 +10960,7 @@ function CelebrationOverlay({ c, onDone }) {
     if (!c) return;
     setGi(0);
     const streakMs = c.kind === "streak" && STREAK_MILESTONES[(c.data && c.data.n) || 0];
-    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200, konami: 3200, streak: streakMs ? 3800 : 1700 }[c.kind] || 2200;
+    const dur = { prestige: 4800, firstsplus: 2600, bigach: 2200, daily1: 2200, groupsplus: 2200, konami: 3200, honoredone: 3000, steamedhams: 3000, streak: streakMs ? 3800 : 1700 }[c.kind] || 2200;
     if (c.kind === "groupsplus") {
       const groups = (c.data && c.data.groups) || [];
       let i = 0, t;
@@ -11051,6 +11068,28 @@ function CelebrationOverlay({ c, onDone }) {
         <Confetti count={170} duration={3000} />
         <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 3.2s ease forwards" }}>
           {stampBox("🕹", "KONAMI CODE — EVERYTHING UNLOCKED", "#63EEF7")}
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "honoredone") {
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle, #FFE9A8, #1a1a2e 75%)", animation: "celFlash 1.1s ease-out forwards" }} />
+        <Confetti count={140} duration={3000} />
+        <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 3.2s ease forwards" }}>
+          {stampBox("♾️", "THE HONORED ONE — INFINITY ATTAINED", "#FFD866")}
+        </div>
+      </div>
+    );
+  }
+  if (c.kind === "steamedhams") {
+    return (
+      <div className="mub-cel" style={wrap}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,#0a2a28,#0f5c52,#1faf95)", animation: "celFlash 1.1s ease-out forwards" }} />
+        <Confetti count={140} duration={3000} />
+        <div style={{ animation: "celPop 0.6s cubic-bezier(.2,.9,.3,1.15) forwards, celFade 3.2s ease forwards" }}>
+          {stampBox("🍔", "STEAMED HAMS — SECRET UNLOCKED", "#6CF0DA")}
         </div>
       </div>
     );
@@ -11254,6 +11293,7 @@ export default function MathsUnlockedBN() {
   const [settingsOpen, setSettingsOpen] = useState(false); // gear-icon settings panel
   const [missionsOpen, setMissionsOpen] = useState(false); // Missions overlay
   const [achOpen, setAchOpen] = useState(false); // Achievements overlay
+  const [achFocusId, setAchFocusId] = useState(null); // scrolled/highlighted when jumped to from a locked swatch
   const [achHideDone, setAchHideDone] = useState(false); // hide earned achievements
   const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
@@ -12165,6 +12205,20 @@ export default function MathsUnlockedBN() {
     playSeq([523.25, 659.25, 783.99, 1046.5, 1318.5], { wave: "square", step: 0.07, dur: 0.16, attack: 0.003, vol: 0.09 });
     setTimeout(() => playSeq([1046.5, 1318.5, 1567.98, 2093.0], { wave: "square", step: 0.06, dur: 0.12, attack: 0.003, vol: 0.07 }), 430);
     setTimeout(() => playSeq([783.99, 1046.5], { wave: "square", step: 0.1, dur: 0.42, attack: 0.004, vol: 0.08, detune: 8 }), 740);
+  }
+
+  // "The Honored One" — infinity attained: a slow rise that folds back on
+  // itself, echoing the ∞ symbol's endless loop.
+  function playInfinityJingle() {
+    playSeq([523.25, 659.25, 783.99, 1046.5, 783.99, 659.25, 523.25], { wave: "sine", step: 0.13, dur: 0.5, attack: 0.02, vol: 0.1 });
+    setTimeout(() => playSeq([1046.5, 1567.98], { wave: "triangle", step: 0.18, dur: 1.1, attack: 0.05, vol: 0.09 }), 950);
+  }
+
+  // "Steamed Hams" — a sizzle-and-reveal nod to the Aurora Borealis in
+  // Skinner's kitchen: quick sizzling blips then a bright "ta-da" chime.
+  function playKitchenJingle() {
+    playSeq([1567.98, 1396.9, 1661.2, 1479.98, 1760.0], { wave: "square", step: 0.045, dur: 0.09, attack: 0.002, vol: 0.055 });
+    setTimeout(() => playSeq([659.25, 783.99, 987.77, 1318.5], { wave: "triangle", step: 0.08, dur: 0.34, attack: 0.006, vol: 0.11 }), 380);
   }
 
   // Whole mastery group taken to S+ — a short triumphant run + sparkle.
@@ -14025,6 +14079,13 @@ ${aBlocks}
 
     if (viaWrite) next.writtenAnswers = (next.writtenAnswers || 0) + 1; // "Old School"
 
+    // "Steamed Hams" — write "Aurora Borealis" into any answer text box,
+    // whatever the question actually asked for.
+    if (!next.steamedhams) {
+      const auroraTexts = [typed, ...Object.values(structParts || {}), ...Object.values(multiInput || {})];
+      if (auroraTexts.some((s) => /aurora\s*borealis/i.test(s || ""))) next.steamedhams = true;
+    }
+
     // Struggling in a topic that has a guided lesson? Offer it — once per
     // day per topic so a bad run doesn't nag.
     let learnNudge = null;
@@ -14034,10 +14095,12 @@ ${aBlocks}
     }
 
     const unlocked = awardAchievements(next);
+    const steamedHamsAch = unlocked.find((a) => a.id === "steamedhams");
     // A perk that just hit its upgrade target this answer.
     const perkUpgraded = perks.find((id) => !plus(id) && (next.perkProg[id] || 0) >= PERKS[id].up) || null;
     const bonusSound = unlocked.length > 0 || leveledTo || perkUpgraded;
-    if (bonusSound) playJingle(!!leveledTo || !!perkUpgraded);
+    if (steamedHamsAch) playKitchenJingle();
+    else if (bonusSound) playJingle(!!leveledTo || !!perkUpgraded);
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
@@ -14046,6 +14109,7 @@ ${aBlocks}
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
     if (bigAch) celebrate("bigach", { icon: bigAch.icon, name: bigAch.name, color: TIER_COLOR[bigAch.tier] });
+    else if (steamedHamsAch) celebrate("steamedhams");
     else if (rankedUp && rankedUp.to === "S+" && !hadSPlusBefore) celebrate("firstsplus");
     if (rankJumpTopic) setRankJump({ topicId: rankJumpTopic, rank: rankJumpRank });
     if (firstSEver) setTimeout(() => { setSfbStars(0); setSfbText(""); setSfbDone(false); setSfbOpen(true); }, 2200);
@@ -14679,8 +14743,15 @@ ${aBlocks}
   const newAchIds = (profile.achievements || []).filter((id) => !(profile.seenAch || []).includes(id));
   const closeAch = () => {
     setAchOpen(false);
+    setAchFocusId(null);
     if (newAchIds.length) patchProfile((p) => ({ seenAch: [...new Set([...(p.seenAch || []), ...(p.achievements || [])])] }));
   };
+  const showAchievement = (id) => { setStylePickerOpen(false); setAchFocusId(id); setAchOpen(true); };
+  useEffect(() => {
+    if (!achOpen || !achFocusId) return;
+    const el = document.getElementById(`ach-row-${achFocusId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [achOpen, achFocusId]);
   const myLevel = levelFromExp(totalExp(profile));
   // Level-gated tools (calculator / rough-working / handwriting) stay
   // unlocked after prestige — see hasLevelUnlock.
@@ -14690,13 +14761,17 @@ ${aBlocks}
   const openWrite = () => { markFirstUse("usedWrite"); setWritePad(true); };
   const toggleSketch = () => { markFirstUse("usedSketch"); setSketchOn((v) => !v); };
   // "Math.exe has crashed" — first calculator error.
-  const noteCalcError = () => {
-    if (profile.calcErrored) return;
+  // "The Honored One" — divide-by-zero showing ∞/-∞ specifically.
+  const noteCalcError = (errText) => {
+    const isInfinity = errText === "∞" || errText === "-∞";
+    if (profile.calcErrored && (!isInfinity || profile.honoredone)) return;
     const next = JSON.parse(JSON.stringify(profile));
     next.calcErrored = true;
+    if (isInfinity) next.honoredone = true;
     const unlocked = awardAchievements(next);
     saveProfile(next);
-    if (unlocked.length) playJingle(true);
+    if (unlocked.some((a) => a.id === "honoredone")) { celebrate("honoredone"); playInfinityJingle(); }
+    else if (unlocked.length) playJingle(true);
   };
   // Admin (a teachers row with admin = true): dev/cheat tools, Admin view,
   // Question bank, the weekly graphic. Plain teacher accounts get only the
@@ -14881,7 +14956,7 @@ ${aBlocks}
                   <Users size={15} />
                   {friendAlert && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--paper)", boxSizing: "border-box" }} />}
                 </button>
-                <button onClick={() => setAchOpen(true)} aria-label="Achievements" title="Achievements" style={{
+                <button onClick={() => { setAchFocusId(null); setAchOpen(true); }} aria-label="Achievements" title="Achievements" style={{
                   position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
                   width: 30, height: 30, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
                   border: "1px solid var(--grid)", background: "var(--card)", color: "var(--muted)",
@@ -18188,7 +18263,7 @@ ${aBlocks}
       )}
       {pickIcon && <IconPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickIcon(false)} />}
       {pickBanner && <BannerPickerModal profile={profile} onChange={patchProfile} onClose={() => setPickBanner(false)} />}
-      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} isAdmin={isAdmin} />}
+      {stylePickerOpen && <StyleModal profile={profile} onChange={patchProfile} onClose={() => setStylePickerOpen(false)} previewPack={previewPack} isAdmin={isAdmin} onShowAchievement={showAchievement} />}
       {stepPracticeOpen && question && <StepPracticeModal question={question} onClose={() => setStepPracticeOpen(false)} playCorrect={playCorrect} playWrong={playWrong} />}
       {writePad && screen === "daily" && dailyQ && (
         <WritePad
@@ -18629,22 +18704,25 @@ ${aBlocks}
                       {items.map((a) => {
                         const unlocked = (profile.achievements || []).includes(a.id);
                         const hidden = a.secret && !unlocked;
-                        const nameHidden = hidden && !a.showName; // some secrets show their name as a teaser
+                        const focused = a.id === achFocusId; // jumped to from a locked swatch — show its themed clue
+                        const nameHidden = hidden && !a.showName && !(focused && a.teaserName); // some secrets show their name as a teaser
                         const fresh = unlocked && newAchIds.includes(a.id);
                         return (
-                          <div key={a.id} style={{
+                          <div key={a.id} id={`ach-row-${a.id}`} style={{
                             position: "relative",
                             display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
                             background: unlocked ? "var(--card)" : "transparent",
-                            border: `1px solid ${unlocked ? tc : "var(--grid)"}`,
-                            boxShadow: unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
+                            border: `1px solid ${focused ? tc : unlocked ? tc : "var(--grid)"}`,
+                            boxShadow: focused ? `0 0 0 2px ${tc}, 0 0 14px ${tc}88` : unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
                             opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
                           }}>
                             {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                             <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700 }}>{nameHidden ? "???" : a.name}</div>
-                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{hidden ? "Secret — revealed when earned" : a.desc}</div>
+                              <div style={{ fontWeight: 700 }}>{focused && a.teaserName ? a.teaserName : nameHidden ? "???" : a.name}</div>
+                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                                {focused && a.hint ? <i>{a.hint}</i> : hidden ? "Secret — revealed when earned" : a.desc}
+                              </div>
                             </div>
                           </div>
                         );
