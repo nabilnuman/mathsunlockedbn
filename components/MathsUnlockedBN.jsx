@@ -8777,7 +8777,7 @@ const CARD_BGS = {
                img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
   stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
   aurora:    { name: "Aurora",      dark: true, bg: "linear-gradient(180deg,#050912 0%,#0A1830 55%,#0B2440 100%)",
-               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.022 0.004", 11, 4, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.30, 0.55))}`, size: "130px 130px, cover" },
+               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.050 0.010", 11, 3, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.28, 0.52))}`, size: "130px 130px, cover" },
   gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
                bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
