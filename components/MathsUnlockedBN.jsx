@@ -3042,20 +3042,25 @@ const TOPICS = [
       const start = randInt(5, 14) * 60 + randInt(0, 59);
       const dur = randInt(1, 5) * 60 + randInt(5, 55);
       const end = start + dur;
+      // Whether the minutes-only parts of start/dur carry (or, read
+      // backwards from the answer, borrow) past 60 — e.g. 35 + 42 minutes,
+      // or 15 - 45 minutes — which needs an extra regrouping step beyond
+      // just adding/subtracting the hours and minutes separately.
+      const carries = (start % 60) + (dur % 60) >= 60;
 
       if (mode === 1) {
-        return { sub: "finish", prompt: `${who} left at ${fmt(start)} and the journey took ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} arrive?`,
+        return { sub: "finish", who, carries, prompt: `${who} left at ${fmt(start)} and the journey took ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} arrive?`,
           answer: fmt(end), hint: "e.g. 14:35", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (end % 1440) % 720,
           steps: [`Start ${fmt(start)}, add ${Math.floor(dur / 60)} h → ${fmt(start + Math.floor(dur / 60) * 60)}`, `Then add ${dur % 60} min → ${fmt(end)}`, `Arrived at ${fmt(end)}`] };
       }
       if (mode === 2) {
-        return { sub: "start", prompt: `${who} arrived at ${fmt(end)} after a journey of ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} leave?`,
+        return { sub: "start", who, carries, prompt: `${who} arrived at ${fmt(end)} after a journey of ${durText(dur)}. What time did ${/the /.test(who) ? "it" : "they"} leave?`,
           answer: fmt(start), hint: "e.g. 09:20", check: (inp) => parseClock(inp) != null && parseClock(inp) % 720 === (start % 1440) % 720,
           steps: [`Arrival ${fmt(end)}, subtract ${Math.floor(dur / 60)} h → ${fmt(end - Math.floor(dur / 60) * 60)}`, `Then subtract ${dur % 60} min → ${fmt(start)}`, `Left at ${fmt(start)}`] };
       }
       const dh = Math.floor(dur / 60), dm = dur % 60;
       const askHM = Math.random() < 0.75;
-      return { sub: "duration", prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
+      return { sub: "duration", who, prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
         answer: askHM ? `${dh} h ${dm} min` : `${dur}`,
         hint: askHM ? "e.g. 2 h 15 min" : "Enter a number.",
         check: (inp) => parseDuration(inp) === dur,
@@ -3274,12 +3279,14 @@ const TOPICS = [
           sub: "solve",
           prompt: `By factorising, solve:   x² ${tail} = 0`,
           answer: roots.map((v) => `x = ${v}`).join(",  "),
-          hint: a === b ? "one repeated solution" : "give both values of x, separated by a comma",
-          check: (inp) => {
-            const ns = String(inp).match(/-?\d+(?:\.\d+)?/g);
-            if (!ns || ns.length !== roots.length) return false;
-            const g = ns.map(Number).sort((u, v) => u - v);
-            return roots.every((rt, i) => Math.abs(g[i] - rt) < 1e-9);
+          hint: a === b ? "one repeated solution — enter it in both boxes" : "give both values of x, one per box",
+          fields: [{ key: "x1", label: "x =", placeholder: "?" }, { key: "x2", label: "x =", placeholder: "?" }],
+          check: (m) => {
+            const g = [m.x1, m.x2].map((s) => parseFloat(String(s).replace(/[−–—]/g, "-").replace(/[^0-9.\-]/g, "")));
+            if (g.some((v) => !Number.isFinite(v))) return false;
+            g.sort((u, v) => u - v);
+            const want = roots.length === 1 ? [roots[0], roots[0]] : roots;
+            return want.every((rt, i) => Math.abs(g[i] - rt) < 1e-9);
           },
           steps: [
             `Factorise:  x² ${tail} = (x${tight(a)})(x${tight(b)})`,
@@ -3563,15 +3570,15 @@ const TOPICS = [
         : seq.kind === "sqShift" ? "sqshift" : seq.kind;
 
       if (mode === "next") {
-        return { sub: _subSeq, prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
+        return { sub: _subSeq, mode, seqKind: seq.kind, prompt: `Find the next term:   ${seqStr}`, answer: `${seq.term(6)}`, hint: "Enter a number.",
           steps: [seq.how, `Next term = ${seq.term(6)}`] };
       }
       if (mode === "rule") {
-        return { sub: _subSeq, prompt: `Write the nth-term rule, in terms of n:   ${seqStr}`, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1",
+        return { sub: _subSeq, mode, seqKind: seq.kind, prompt: `Write the nth-term rule, in terms of n:   ${seqStr}`, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1",
           steps: [seq.how, `nth term = ${seq.rule}`] };
       }
       const k = seq.kind === "geo" ? pick([7, 8, 9, 10]) : pick([12, 15, 20, 25, 30, 40, 50, 60, 100]);
-      return { sub: _subSeq, prompt: `Find the ${k}th term:   ${seqStr}`, answer: `${seq.term(k)}`, hint: "work out the rule first",
+      return { sub: _subSeq, mode, seqKind: seq.kind, prompt: `Find the ${k}th term:   ${seqStr}`, answer: `${seq.term(k)}`, hint: "work out the rule first",
         steps: [seq.how, `Substitute n = ${k}:  ${seq.term(k)}`] };
     } },
   { id: "proportionality", name: "Proportionality", icon: "⚖️", prereqs: ["algebra"],
@@ -3653,19 +3660,31 @@ const TOPICS = [
       const kLine = rel.disp(gx) === `${fg}`
         ? `k = ${gy} ${op} ${gx} = ${k}`
         : `k = ${gy} ${op} ${rel.disp(gx)} = ${gy} ${op} ${fg} = ${k}`;
-      const useLine = inverse
-        ? `When x = ${ax}:  y = ${k} ÷ ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`
-        : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
+      const kStep = inverse ? `Inverse: y = k ÷ ${rel.txt}, so k = y × ${rel.txt}` : `Direct: y = k${rel.txt === "x" ? "x" : " · " + rel.txt}, so k = y ÷ ${rel.txt}`;
 
+      // Half the time ask for x given y instead of always y given x — the
+      // "find y" direction is a plain substitution, "find x" needs the
+      // relationship rearranged first, which is the harder skill.
+      if (Math.random() < 0.5) {
+        const useLine = inverse
+          ? `When x = ${ax}:  y = ${k} ÷ ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`
+          : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
+        return {
+          sub: inverse ? "inverse" : "direct",
+          prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
+          answer: `${ay}`, hint: "Enter a number.",
+          steps: [kStep, kLine, useLine],
+        };
+      }
+      const rhs = inverse ? `${k} ÷ ${ay}` : `${ay} ÷ ${k}`;
+      const findXLine = rel.disp(ax) === `${fa}`
+        ? `When y = ${ay}:  x = ${rhs} = ${fa}`
+        : `When y = ${ay}:  ${rel.disp(ax)} = ${rhs} = ${fa}  →  x = ${ax}`;
       return {
         sub: inverse ? "inverse" : "direct",
-        prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
-        answer: `${ay}`, hint: "Enter a number.",
-        steps: [
-          inverse ? `Inverse: y = k ÷ ${rel.txt}, so k = y × ${rel.txt}` : `Direct: y = k${rel.txt === "x" ? "x" : " · " + rel.txt}, so k = y ÷ ${rel.txt}`,
-          kLine,
-          useLine,
-        ],
+        prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find x when y = ${ay}`,
+        answer: `${ax}`, hint: "Enter a number.",
+        steps: [kStep, kLine, findXLine],
       };
     } },
   { id: "coordgeo", name: "Co-ordinate Geometry", icon: "📍", prereqs: [],
@@ -4063,7 +4082,7 @@ const TOPICS = [
       let q;
       for (let i = 0; i < 40; i++) { q = build(); if (q) break; }
       const answer = `x ${q.ans} ${q.x0}`;
-      const symbols = /[≥≤]/.test(q.ans) ? ["x", "≥", "≤"] : ["x", ">", "<"];
+      const symbols = ["x", "<", ">", "≤", "≥"]; // all four — showing only the matching pair gave the strictness away
       return {
         prompt: `Solve the inequality:   ${q.disp}`,
         answer, hint: `give the answer as an inequality, e.g. x ${q.op} 3`, symbols,
@@ -4785,8 +4804,15 @@ const TOPICS = [
         ? `Area scale factor = ${k}² = ${k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k} = ${bigAsk} ${unit[askFor]}`
         : `Volume scale factor = ${k}³ = ${k * k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k * k} = ${bigAsk} ${unit[askFor]}`;
 
+      // sub groups by how much scale-factor work the pair actually needs —
+      // volume anywhere (asked or given) needs cubing/cube-rooting the
+      // ratio, area anywhere (with no volume) needs squaring/square-rooting
+      // it, and only a pure length-to-length pair is a single multiply —
+      // so Paper 1 can exclude both the squared and cubed variants and
+      // keep only the straightforward one (see MOCK_PAPERS.p1.excludeSubs).
+      const sub = (askFor === "volume" || givenAs === "volume") ? "volume" : (askFor === "area" || givenAs === "area") ? "area" : "length";
       return {
-        sub: askFor,
+        sub,
         prompt: `Two similar ${noun} have corresponding ${wordFor(givenAs)}s ${smallGiven} ${unit[givenAs]} and ${bigGiven} ${unit[givenAs]}.\nThe smaller ${nounSing} has ${wordFor(askFor)} ${smallAsk} ${unit[askFor]}. Find the ${wordFor(askFor)} of the larger one`,
         answer: `${bigAsk}`, hint: `Enter a number (${unit[askFor]}).`,
         steps: [scaleStep, applyStep],
@@ -7548,6 +7574,20 @@ function marksForQuestion(q) {
   if (q.topicId === "limits") return q.sub === "combine" ? 2 : 1; // bounds: single value vs. a combined quantity (area, speed, ...)
   if (q.topicId === "coordgeo" && (q.sub === "twopoints" || q.sub === "perpendicular")) return 3;
   if (q.topicId === "indices" && (q.sub === "zeroneg" || q.sub === "fractional")) return 1; // a^0, a^-n, a^(1/n) is one recalled fact (e.g. 9^(1/2) = 3), not a multi-step method
+  if (q.topicId === "sets" && q.sub === "shade") return 2; // shading a named region on a Venn diagram
+  if (q.topicId === "circles" && q.sub === "area") return 1; // one formula, one substitution
+  if (q.topicId === "circles" && q.circle && q.circle.type === "tangents" && (q.circle.textP === "?" || q.circle.textO === "?")) return 1; // one-step: 360 - 90 - 90 - given angle
+  if (q.topicId === "statistics" && q.sub === "averages") return 1; // mean/median/mode/range from a list
+  if (q.topicId === "statistics" && q.sub === "histogram") return 2; // read the bar, multiply by class width
+  if (q.topicId === "mensuration" && /surface area/i.test(q.prompt || "")) return 2; // surface area of a 3D solid — more steps than a single face
+  if (q.topicId === "mensuration" && ["rectangle", "square", "triangle", "parallelogram", "trapezium"].includes(q.sub)) return 1; // a single 2D area/perimeter formula
+  if (q.topicId === "mensuration" && q.sub === "cuboid") return 1; // simple volume = l × w × h (surface-area branch already returned above)
+  if (q.topicId === "graphicalsolutions" && q.sub === "linescross") return 2; // set two expressions equal and solve for x
+  if (q.topicId === "sequences" && q.mode === "next") return 1; // spotting the next term by eye
+  if (q.topicId === "sequences" && q.seqKind === "quad" && q.mode === "rule") return 3; // deriving a quadratic nth-term rule
+  if (q.topicId === "sequences" && q.seqKind === "quad" && q.mode === "kth") return 4; // derive the rule, then substitute
+  if (q.topicId === "sequences" && q.seqKind === "arith" && q.mode === "kth") return 3; // derive the rule, then substitute
+  if (q.topicId === "time" && (q.sub === "finish" || q.sub === "start")) return q.carries ? 2 : 1; // 2 when the minutes cross an hour boundary and need a carry/borrow
   if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
   if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
   if (q.choices) return 1;
@@ -7711,9 +7751,10 @@ const MOCK_PAPERS = {
     key: "p1", name: "Paper 1", calc: false, minutes: 120, structuredCount: 0,
     excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
     excludeSubs: {
-      statistics: ["meantable"], similarity: ["volume"], // mean-from-table and cubing a scale factor need a calculator
+      statistics: ["meantable"], similarity: ["area", "volume"], // mean-from-table and squaring/cubing a scale factor need a calculator
       limits: ["combine"], // bounds of a ÷/× calculation need a calculator; bounds of one measurement don't
       polygons: ["sidesfromsum"], // reverse-solving n from the angle SUM is a harder two-step ask non-calculator
+      indices: ["solve"], // solving a^x = a^k can land on a large power (e.g. 4^5 = 1024) that's awkward without a calculator
     },
   },
   p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
@@ -12691,14 +12732,25 @@ ${aBlocks}
     }
     const parts = [];
     let fallback = null;
+    const usedSubs = new Set(), usedWho = new Set();
     for (let n = 0; n < partCount; n++) {
-      let picked = null;
+      let picked = null, repeatPlain = null;
       for (let tries = 0; tries < 6; tries++) {
         const cand = genSingleFor(topicId, paper);
-        if (isPlainAnswerQ(cand)) { picked = cand; break; }
-        if (!fallback) fallback = cand; // keep the first attempt in case every part here fails
+        if (!isPlainAnswerQ(cand)) { if (!fallback) fallback = cand; continue; }
+        // Prefer a part whose sub-type (and, for Time, whose named person)
+        // isn't already used elsewhere in this cluster, so e.g. three Time
+        // parts don't all land on "arrival time" or all feature Mei Ling —
+        // but a repeat is still accepted on the last try rather than
+        // dropping the part.
+        const repeated = (cand.sub && usedSubs.has(cand.sub)) || (cand.who && usedWho.has(cand.who));
+        if (!repeated) { picked = cand; break; }
+        if (!repeatPlain) repeatPlain = cand;
       }
+      if (!picked) picked = repeatPlain;
       if (picked) {
+        if (picked.sub) usedSubs.add(picked.sub);
+        if (picked.who) usedWho.add(picked.who);
         const part = {
           label: `(${String.fromCharCode(97 + parts.length)})`,
           prompt: picked.prompt, marks: marksForQuestion(picked), answer: picked.answer, check: picked.check,
@@ -17132,8 +17184,13 @@ ${aBlocks}
               {(() => {
                 const { lead, expr } = splitPrompt(question.prompt);
                 // Shrink the expression's font as it gets longer so it wraps
-                // gracefully instead of forcing a horizontal scroll.
-                const exprSize = expr ? Math.max(13, Math.min(20, Math.round(290 / (expr.length * 0.62)))) : 17;
+                // gracefully instead of forcing a horizontal scroll — sized
+                // off the LONGEST rendered line, not the raw string length,
+                // so a deliberately multi-line expression (e.g. a pair of
+                // simultaneous equations, one per line) isn't measured as
+                // one long line and shrunk far more than it needs to be.
+                const widestLine = expr ? Math.max(...expr.split("\n").map((ln) => ln.length)) : 0;
+                const exprSize = expr ? Math.max(13, Math.min(20, Math.round(290 / (widestLine * 0.62)))) : 17;
                 return (
                   <div style={{ marginBottom: 16 }}>
                     <div className="mub-mono" style={{ fontSize: expr ? 13 : 17, lineHeight: 1.5, color: expr ? "var(--muted)" : "var(--ink)", overflowWrap: "break-word" }}><MathText text={lead} /></div>
@@ -17256,10 +17313,12 @@ ${aBlocks}
                         marginBottom: 12, paddingBottom: 12,
                         borderBottom: i < question.parts.length - 1 ? "1px solid var(--grid)" : "none",
                       }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                          <span className="mub-mono" style={{ fontWeight: 800, fontSize: 14, color: "var(--ink)" }}>{p.label}</span>
-                          <span className="mub-mono" style={{ fontSize: 13.5, color: "var(--ink)", flex: 1 }}><MathText text={p.prompt} /></span>
-                          <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>[{p.marks} mark{p.marks === 1 ? "" : "s"}]</span>
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                            <span className="mub-mono" style={{ fontWeight: 800, fontSize: 14, color: "var(--ink)" }}>{p.label}</span>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginLeft: "auto", flexShrink: 0 }}>[{p.marks} mark{p.marks === 1 ? "" : "s"}]</span>
+                          </div>
+                          <div className="mub-mono" style={{ fontSize: 13.5, color: "var(--ink)", marginTop: 3, overflowWrap: "break-word" }}><MathText text={p.prompt} /></div>
                         </div>
                         {CLUSTER_VISUAL_KEYS.some((k) => p[k]) && <div style={{ marginBottom: 8 }}><QuestionFigure q={p} /></div>}
                         <input
