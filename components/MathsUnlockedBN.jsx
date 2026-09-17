@@ -9753,7 +9753,12 @@ function ParentProgressView({ profile }) {
   // Lifetime-best rank throughout this view (not the current run's own
   // highestRank) — so the page reads consistently with the overall grade
   // below (also lifetime-based) and doesn't regress after a prestige.
-  const started = TOPICS.map((t) => ({ t, r: bestRankOf(profile, t.id) })).filter((x) => x.r >= 0);
+  // Same FAIR_SHAKE_ATTEMPTS gate as avgRankIdxOf, so a topic tried for
+  // the first time today doesn't immediately show up under "Needs work"
+  // either — it just hasn't had enough goes yet to mean anything.
+  const attempts = profile.topicAttempts || {};
+  const started = TOPICS.map((t) => ({ t, r: bestRankOf(profile, t.id) }))
+    .filter((x) => x.r >= 0 && (attempts[x.t.id] || 0) >= FAIR_SHAKE_ATTEMPTS);
   const avgIdx = avgRankIdxOf(profile);
   const overall = rankDisplay(avgIdx >= 0 ? Math.round(avgIdx) : -1);
   const level = levelFromExp(totalExp(profile));
@@ -9995,12 +10000,18 @@ function ParentProgressView({ profile }) {
             <button onClick={() => setShowAllTopics(false)} style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>hide ▴</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8, marginBottom: 14 }}>
-            {[...TOPICS].map((t) => ({ t, r: bestRankOf(profile, t.id) }))
+            {[...TOPICS].map((t) => ({ t, r: bestRankOf(profile, t.id), locked: !isUnlocked(t, profile) }))
               .sort((a, b) => (a.r < 0 ? 99 : a.r) - (b.r < 0 ? 99 : b.r))
-              .map(({ t, r }) => (
-                <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px", border: "1px solid var(--grid)", borderRadius: 10, background: "var(--card)" }}>
+              .map(({ t, r, locked }) => (
+                <div key={t.id} title={locked ? lockedReason(t) : undefined} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "8px 10px",
+                  border: "1px solid var(--grid)", borderRadius: 10,
+                  background: locked ? "var(--locked, var(--paper))" : "var(--card)", opacity: locked ? 0.65 : 1,
+                }}>
                   <span style={{ fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.icon} {t.name}</span>
-                  <span style={{ fontWeight: 700, fontSize: 12, color: rankDisplay(r).color, flexShrink: 0 }}>{rankDisplay(r).label}</span>
+                  {locked
+                    ? <span style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>🔒 Locked</span>
+                    : <span style={{ fontWeight: 700, fontSize: 12, color: rankDisplay(r).color, flexShrink: 0 }}>{rankDisplay(r).label}</span>}
                 </div>
               ))}
           </div>
@@ -10259,15 +10270,25 @@ function weeklyFocusId(wk = weekKey()) {
 const FOCUS_XP_MULT = 2;
 const MIXED_XP_MULT = 1.5; // Mixed Review answers score 50% more XP
 
-// Average LIFETIME-BEST rank index across every topic the student has
-// ever started — the one number a "Grade X" summary (and the weekly
-// trend below) are both built from. -1 if nothing has been started yet.
-// Deliberately reads bestRankOf (survives prestige, self-migrating from
-// the current run) rather than the current run's own highestRank, so
-// prestiging doesn't make the overall grade regress even though the
-// current run's topics are wiped.
+// A brand-new topic only needs 1 correct answer to reach rank F (see
+// RANK_THRESHOLD) — nowhere near enough attempts for that rank to mean
+// anything yet. Left out of the overall grade below until it's had at
+// least this many lifetime attempts, so trying something new doesn't
+// visibly drag a parent-facing "Grade X" down the moment it's started.
+const FAIR_SHAKE_ATTEMPTS = 5;
+// Average LIFETIME-BEST rank index across every topic that's had a fair
+// shake — the one number a "Grade X" summary (and the weekly trend below)
+// are both built from. -1 if nothing qualifies yet. Deliberately reads
+// bestRankOf (survives prestige, self-migrating from the current run)
+// rather than the current run's own highestRank, so prestiging doesn't
+// make the overall grade regress even though the current run's topics
+// are wiped.
 function avgRankIdxOf(profile) {
-  const started = TOPICS.map((t) => bestRankOf(profile, t.id)).filter((r) => r >= 0);
+  const attempts = profile.topicAttempts || {};
+  const started = TOPICS
+    .filter((t) => (attempts[t.id] || 0) >= FAIR_SHAKE_ATTEMPTS)
+    .map((t) => bestRankOf(profile, t.id))
+    .filter((r) => r >= 0);
   return started.length ? started.reduce((s, r) => s + r, 0) / started.length : -1;
 }
 
@@ -14192,6 +14213,11 @@ ${aBlocks}
 
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     if (!forgiven) {
+      // Lifetime, survives prestige (unlike `topics`, which gets wiped) —
+      // lets the parent-facing overall grade tell a brand-new topic (see
+      // avgRankIdxOf) apart from one that's actually been given a fair go.
+      next.topicAttempts = { ...(next.topicAttempts || {}) };
+      next.topicAttempts[scoredId] = (next.topicAttempts[scoredId] || 0) + 1;
       t.history = [...t.history, correct ? 1 : 0].slice(-10);
       // Wider rolling window than `history` (which drives the visible rank
       // and is capped at 10 to stay responsive) — kept for a future "Face
