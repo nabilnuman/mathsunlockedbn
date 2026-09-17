@@ -8116,6 +8116,10 @@ const ACHIEVEMENTS = [
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(29, 30), "A") },
   { id: "triplethreat", tier: "Silver", name: "Triple Threat", icon: "⚠️", desc: "Get 33 Trigonometry questions correct in a row",
     check: (p) => (p.bestTrigStreak || 0) >= 33 },
+  { id: "mockperfectp1", tier: "Silver", name: "Part 1: A New Hope", icon: "🏆", desc: "Score 100% on a Paper 1 Mock Exam",
+    check: (p) => !!p.mockPerfectP1 },
+  { id: "mockperfectp2", tier: "Silver", name: "Part 2: Electric Boogaloo", icon: "🏆", desc: "Score 100% on a Paper 2 Mock Exam",
+    check: (p) => !!p.mockPerfectP2 },
 
   /* ---------------- Gold ---------------- */
   { id: "unstoppable", tier: "Gold", name: "Unstoppable", icon: "🚀", desc: "Reach S+ rank in any topic",
@@ -11596,14 +11600,19 @@ export default function MathsUnlockedBN() {
   const [mcPick, setMcPick] = useState(null);        // chosen option on a multiple-choice question
   const [drawTri, setDrawTri] = useState([]);        // up to 3 vertices tapped to place an image triangle
   const [barBuild, setBarBuild] = useState(null);    // [{to,h}, ...] bars dragged into place on a "build the histogram" question
-  // Mock Exam: mockExamRef is the authoritative run state (queue of topic ids,
-  // current index, running correct count, start time); mockProgress mirrors the
-  // bits the banner needs to re-render on. mockResult is the finished-run summary
-  // shown on the results screen. None of this is persisted to profile — a mock
-  // exam is a single-session practice run, not a tracked record (yet).
+  // Mock Exam: mockExamRef is the authoritative run state (queue, pre-
+  // generated questions, current index, per-slot answer snapshots, start
+  // time); mockProgress mirrors the bits the banner needs to re-render on.
+  // mockResult is the finished-run summary shown on the results screen,
+  // including the per-question review list. The run itself is a single-
+  // session practice thing (nothing mid-run is saved if you close the
+  // app), but completing one now does persist: profile.mockBest (per
+  // paper, ratcheted) and the two 100%-only achievements — see
+  // finishMockExam.
   const mockExamRef = useRef(null);
-  const [mockProgress, setMockProgress] = useState(null); // { idx, total, correctCount }
-  const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec }
+  const [mockProgress, setMockProgress] = useState(null); // { idx, total, deadline }
+  const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec, review, ... }
+  const [mockReviewOpen, setMockReviewOpen] = useState(false); // per-question review overlay on the results screen
   const [mockTick, setMockTick] = useState(0); // ticks every second while a Mock Exam is running, just to redraw its countdown banner
   const [structParts, setStructParts] = useState({}); // { [partLabel]: typedAnswer } for a structured (multi-part) question
   const [focusedPart, setFocusedPart] = useState(null); // which structured part's input the "insert" symbol row should target
@@ -13379,12 +13388,15 @@ ${aBlocks}
     return () => clearInterval(iv);
   }, [mockProgress]);
 
-  // Freeze the countdown the instant the LAST question in the paper is
-  // submitted — the clock shouldn't keep draining while its feedback is
-  // being reviewed; tapping "Next question" from there just shows results.
+  // Freeze the countdown the instant every question in the paper has been
+  // answered — the clock shouldn't keep draining while there's nothing
+  // left to do but tap Finish Paper. Doesn't fire just from reaching the
+  // last slot (free navigation means that's not meaningful any more) or
+  // while anything is still skipped/unanswered — leaving something blank
+  // on purpose still costs real time, same as a real exam.
   useEffect(() => {
     const mx = mockExamRef.current;
-    if (feedback && mx && mx.idx === mx.total - 1 && !mx.stoppedAt) {
+    if (feedback && mx && !mx.stoppedAt && mx.snapshots.every((s) => s !== null)) {
       mx.stoppedAt = Date.now();
       setMockTick((t) => t + 1);
     }
@@ -13819,121 +13831,167 @@ ${aBlocks}
 
   // Start a Mock Exam: a fixed-length, timed run across a shuffled queue
   // (see buildMockQueue) for the given paper ("p1"/"p2"), tracked by
-  // mockExamRef (see nextQuestion for how it advances, and the countdown
-  // effect for how it times out). Reuses the same per-question reset block
-  // as startTopic/nextQuestion so every quiz-card interaction works exactly
-  // as normal — Mock Exam is just a driver deciding what comes next.
+  // mockExamRef. Every question is generated up front (not lazily one at a
+  // time) so Back/Skip revisit the exact same question rather than
+  // re-rolling a new random one, and so an unanswered question's max marks
+  // are still known for the final score even if it's never opened.
   function startMockExam(paperKey) {
     const paper = MOCK_PAPERS[paperKey] || MOCK_PAPERS.p1;
     if (profile.hwRun) patchProfile(() => ({ hwRun: null }));
     recentQRef.current = [];
     const queue = buildMockQueue(paper);
-    const q = genMockItem(queue[0], paper);
-    setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[queue[0].topicId]);
+    const questions = queue.map((item) => genMockItem(item, paper));
+    const deadline = Date.now() + paper.minutes * 60 * 1000;
+    mockExamRef.current = { paper, queue, questions, idx: 0, total: queue.length, snapshots: new Array(queue.length).fill(null), startedAt: Date.now(), deadline };
+    loadMockIndex(0);
+    setMockResult(null);
+    setScreen("quiz");
+  }
+
+  // Loads queue slot `i` of the in-progress Mock Exam: a fresh, blank
+  // question if it's never been answered, or the exact snapshot of
+  // whatever was submitted there before (see commitMockAnswer) if it has.
+  // Every input the app's various question types can use is restored
+  // uniformly — most are just each question's own default/empty value —
+  // so this one function covers every question type without needing to
+  // know which ones it's dealing with.
+  function loadMockIndex(i) {
+    const mx = mockExamRef.current;
+    if (!mx) return;
+    mx.idx = i;
+    const snap = mx.snapshots[i];
+    const q = mx.questions[i];
+    setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[mx.queue[i].topicId]);
     setQuestion(q);
     const autoHint = autoHintDue(profile, q.topicId);
     setHintFree(autoHint);
-    setAnswerInput(""); setWritePad(false);
-    setMultiInput({});
-    setDrawPts([]);
+    setAnswerInput(snap ? snap.answerInput : ""); setWritePad(false);
+    setMultiInput(snap ? snap.multiInput : {});
+    setDrawPts(snap ? snap.drawPts : []);
     setRegionPick(null);
     setCfPick([]);
-    setVennPressed([]);
-    setVennPlace({});
-    setMcPick(null);
-    setDrawTri([]);
-    setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
-    setStructParts({});
+    setVennPressed(snap ? snap.vennPressed : []);
+    setVennPlace(snap ? snap.vennPlace : {});
+    setMcPick(snap ? snap.mcPick : null);
+    setDrawTri(snap ? snap.drawTri : []);
+    setBarBuild(snap ? snap.barBuild : (q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null));
+    setStructParts(snap ? snap.structParts : {});
     setFocusedPart(null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
     setShieldOffer(false);
     setShieldDeclined(false);
-    setFeedback(null);
+    setFeedback(snap ? snap.feedback : null);
     startTimeRef.current = Date.now();
-    const deadline = Date.now() + paper.minutes * 60 * 1000;
-    mockExamRef.current = { paper, queue, idx: 0, correctCount: 0, marksEarned: 0, totalMarks: 0, startedAt: Date.now(), deadline, total: queue.length, committed: false };
-    setMockProgress({ paper, idx: 0, total: queue.length, correctCount: 0, deadline });
-    setMockResult(null);
-    setScreen("quiz");
+    setMockProgress({ paper: mx.paper, idx: i, total: mx.total, deadline: mx.deadline });
   }
 
-  // Fold the currently-shown question's feedback into the running mock-exam
-  // totals — idempotent (guarded by mx.committed, reset to false whenever a
-  // new question loads) since both nextQuestion (advancing normally) and
-  // finishMockExam (the countdown hitting zero, possibly moments after a
-  // Submit but before "Next question" was tapped) call it without risking
-  // a double-count.
+  // Move to a specific slot in the paper (Back / Skip / Next all funnel
+  // through this), committing whatever's currently on screen first —
+  // clamped, since there's no wraparound and "Finish paper" is the only
+  // way to end the exam early rather than running off either end.
+  function goToMockIndex(i) {
+    const mx = mockExamRef.current;
+    if (!mx) return;
+    commitMockAnswer();
+    loadMockIndex(Math.max(0, Math.min(mx.total - 1, i)));
+  }
+
+  // Snapshot the just-submitted answer into its queue slot — everything
+  // needed to restore this exact question, read-only, if revisited (see
+  // loadMockIndex; inputs are already disabled whenever feedback is set,
+  // app-wide, so restoring `feedback` alone is what makes a re-visited
+  // answered question read-only — no separate "review mode" UI needed).
+  // A no-op if nothing was submitted (a skipped question, or navigating
+  // away from a question already snapshotted without changing anything),
+  // and safe to call more than once — finishMockExam always sums fresh off
+  // this array rather than an incrementally-updated running total, so
+  // there's no double-counting to guard against.
   function commitMockAnswer() {
     const mx = mockExamRef.current;
-    if (!mx || !feedback || mx.committed) return;
-    if (feedback.correct) mx.correctCount += 1;
-    mx.marksEarned += feedback.marksEarned ?? (feedback.correct ? (question.structured ? question.totalMarks : marksForQuestion(question)) : 0);
-    mx.totalMarks += question.structured ? question.totalMarks : marksForQuestion(question);
-    mx.committed = true;
+    if (!mx || !feedback) return;
+    mx.snapshots[mx.idx] = { feedback, answerInput, structParts, multiInput, mcPick, vennPressed, vennPlace, drawPts, drawTri, barBuild };
   }
 
-  // Shared by "ran out of questions" (nextQuestion) and "ran out of time"
-  // (the countdown effect below) — both just finalise whatever's been
-  // scored so far.
+  // Ends the Mock Exam — commits whatever's currently on screen, then
+  // tallies every slot fresh from its snapshot (an unanswered/skipped slot
+  // still contributes its max marks to the total, same as leaving a real
+  // exam question blank). Also builds the per-question review list and
+  // folds in the rewards that only apply on completing a full paper: a
+  // lump-sum XP bonus keyed to the grade, a ratcheted personal best, and
+  // the two 100%-only achievements.
   function finishMockExam() {
     const mx = mockExamRef.current;
     if (!mx) return;
     commitMockAnswer();
     const elapsedSec = Math.round(((mx.stoppedAt || Date.now()) - mx.startedAt) / 1000);
-    // Raw marks (marksForQuestion is only ever a heuristic, so the paper's
-    // real total varies run to run) are rescaled to a flat "out of 100",
-    // matching the real exam's own mark scheme.
-    const pct = mx.totalMarks > 0 ? (mx.marksEarned / mx.totalMarks) * 100 : 0;
+    let correctCount = 0, marksEarned = 0, totalMarks = 0;
+    const review = mx.questions.map((q, i) => {
+      const snap = mx.snapshots[i];
+      const maxMarks = q.structured ? q.totalMarks : marksForQuestion(q);
+      totalMarks += maxMarks;
+      if (!snap) return { prompt: q.prompt, given: null, answer: q.structured ? null : String(q.answerDisplay ?? q.answer ?? ""), correct: false, marks: 0, maxMarks, skipped: true, parts: null };
+      const fb = snap.feedback;
+      const earned = fb.marksEarned ?? (fb.correct ? maxMarks : 0);
+      marksEarned += earned;
+      if (fb.correct) correctCount++;
+      let given = snap.answerInput;
+      if ((given == null || given === "") && snap.multiInput && Object.keys(snap.multiInput).length) given = Object.values(snap.multiInput).filter((v) => v != null && v !== "").join(", ");
+      if ((given == null || given === "") && snap.mcPick) given = snap.mcPick;
+      return {
+        prompt: q.prompt,
+        given: q.structured ? null : String(given == null || given === "" ? "—" : given).slice(0, 80),
+        answer: q.structured ? null : String(q.answerDisplay ?? q.answer ?? "").slice(0, 60),
+        parts: q.structured ? q.parts.map((p, pi) => ({
+          label: p.label, prompt: p.prompt, answer: p.answer,
+          given: (snap.structParts || {})[p.label] || "—",
+          correct: !!(fb.structResults && fb.structResults[pi] && fb.structResults[pi].correct),
+        })) : null,
+        correct: !!fb.correct, marks: earned, maxMarks, skipped: false,
+      };
+    });
+    const pct = totalMarks > 0 ? (marksEarned / totalMarks) * 100 : 0;
     const scaledMarks = Math.round(pct);
+    const grade = gradeForPct(pct);
+
+    const COMPLETION_XP = { "A*": 500, A: 350, B: 250, C: 150, D: 80, E: 40, U: 0 };
+    const completionXp = COMPLETION_XP[grade] || 0;
+    const prevBest = (profile.mockBest || {})[mx.paper.key] || 0;
+    const isNewBest = scaledMarks > prevBest;
+    const next = JSON.parse(JSON.stringify(profile));
+    next.bonusExp = (next.bonusExp || 0) + completionXp;
+    next.mockBest = { ...(next.mockBest || {}) };
+    next.mockBest[mx.paper.key] = Math.max(prevBest, scaledMarks);
+    if (scaledMarks >= 100) {
+      if (mx.paper.key === "p1") next.mockPerfectP1 = true;
+      if (mx.paper.key === "p2") next.mockPerfectP2 = true;
+    }
+    const unlocked = awardAchievements(next);
+    saveProfile(next);
+
     setMockResult({
-      paper: mx.paper, correct: mx.correctCount, total: mx.total,
-      marksEarned: mx.marksEarned, totalMarks: mx.totalMarks, scaledMarks, grade: gradeForPct(pct),
-      elapsedSec, targetSec: mx.paper.minutes * 60,
+      paper: mx.paper, correct: correctCount, total: mx.total,
+      marksEarned, totalMarks, scaledMarks, grade, completionXp, isNewBest, best: next.mockBest[mx.paper.key],
+      elapsedSec, targetSec: mx.paper.minutes * 60, review, unlocked,
     });
     mockExamRef.current = null;
     setMockProgress(null);
     setScreen("mockresult");
+    if (unlocked.length) playJingle(true);
   }
 
   function nextQuestion() {
     setStepPracticeOpen(false);
-    // Mock Exam in progress: advance through its fixed queue instead of
-    // re-rolling the current topic. submitAnswer already scored the last
-    // answer normally (it reads question.topicId, so cross-topic scoring
-    // just works) — this only tracks the run's own correct count/progress.
+    // Mock Exam in progress: move to the next slot in its fixed queue
+    // instead of re-rolling the current topic. submitAnswer already scored
+    // the last answer normally (it reads question.topicId, so cross-topic
+    // scoring just works) — goToMockIndex only tracks the run's own
+    // progress/snapshots. Clamped, not auto-advancing to results — Finish
+    // Paper (or time running out) is the only way the exam actually ends,
+    // so reaching the last question doesn't force-finish it.
     if (mockExamRef.current) {
-      const mx = mockExamRef.current;
-      commitMockAnswer();
-      mx.idx += 1;
-      if (mx.idx >= mx.total) { finishMockExam(); return; }
-      mx.committed = false; // ready for this new question's own future commit
-      const q = genMockItem(mx.queue[mx.idx], mx.paper);
-      setActiveTopic(TOPIC_BY_ID[q.topicId] || TOPIC_BY_ID[mx.queue[mx.idx].topicId]);
-      setQuestion(q);
-      const autoHint = autoHintDue(profile, q.topicId);
-      setHintFree(autoHint);
-      setAnswerInput(""); setWritePad(false);
-      setMultiInput({});
-      setDrawPts([]);
-      setRegionPick(null);
-      setCfPick([]);
-      setVennPressed([]);
-      setVennPlace({});
-      setMcPick(null);
-      setDrawTri([]);
-      setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
-      setStructParts({});
-      setFocusedPart(null);
-      setSketchStrokes([]);
-      setSketchOn(false);
-      setHintShown(false);
-      setShieldOffer(false);
-      setShieldDeclined(false);
-      setFeedback(null);
-      startTimeRef.current = Date.now();
-      setMockProgress({ paper: mx.paper, idx: mx.idx, total: mx.total, correctCount: mx.correctCount, deadline: mx.deadline });
+      goToMockIndex(mockExamRef.current.idx + 1);
       return;
     }
     const run = profileRef.current.hwRun;
@@ -16844,6 +16902,40 @@ ${aBlocks}
           </div>
         )}
 
+        {/* MOCK EXAM — PRE-GAME (choose Paper 1 or 2, shows personal bests) */}
+        {screen === "mockintro" && (
+          <div style={{ maxWidth: 520, margin: "40px auto 0", textAlign: "center" }}>
+            <div style={{ fontSize: 44 }}>📝</div>
+            <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 10px" }}>Mock Exam</div>
+            <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 22 }}>
+              A full, timed past-paper-style run. Skip a question and come back to it, go back and forth freely,
+              then review every answer once you're done.
+            </div>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+              {[MOCK_PAPERS.p1, MOCK_PAPERS.p2].map((paper) => {
+                const best = (profile.mockBest || {})[paper.key];
+                return (
+                  <div key={paper.key} style={{ flex: "1 1 210px", maxWidth: 230, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 18 }}>
+                    <div className="mub-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{paper.name}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
+                      {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {mockQuestionCount(paper)} questions
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
+                      Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100` : "—"}</strong>
+                    </div>
+                    <button onClick={() => startMockExam(paper.key)} style={{ width: "100%", padding: "10px 0", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      Start
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => setScreen("dashboard")} style={{ marginTop: 22, fontSize: 12.5, color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>
+              ← back to topics
+            </button>
+          </div>
+        )}
+
         {/* MOCK EXAM RESULTS */}
         {screen === "mockresult" && mockResult && (() => {
           const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -16864,14 +16956,25 @@ ${aBlocks}
                 <div className="mub-display" style={{ fontSize: 32, fontWeight: 900, color: GRADE_COL[mockResult.grade] || "var(--ink)" }}>{mockResult.grade}</div>
               </div>
               <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 10 }}>indicative grade — not a real boundary</div>
-              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
                 <strong style={{ color: "var(--ink)" }}>{mockResult.correct}/{mockResult.total}</strong> questions fully correct
               </div>
+              {mockResult.isNewBest ? (
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", marginBottom: 12 }}>🏆 New personal best for {mockResult.paper.name}!</div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Your best for {mockResult.paper.name}: <strong style={{ color: "var(--ink)" }}>{mockResult.best}/100</strong></div>
+              )}
+              {mockResult.completionXp > 0 && (
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--blue)", marginBottom: 12 }}>+{mockResult.completionXp} XP for completing the paper</div>
+              )}
               <div style={{ display: "flex", justifyContent: "center", gap: 22, marginBottom: 20, fontSize: 12.5, color: "var(--muted)" }}>
                 <span>⏱ Your time: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.elapsedSec)}</strong></span>
                 <span>Time limit: <strong style={{ color: "var(--ink)" }}>{fmt(mockResult.targetSec)}</strong></span>
               </div>
-              <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                <button onClick={() => setMockReviewOpen(true)} style={{ padding: "10px 18px", background: "none", color: "var(--blue)", border: "1px solid var(--blue)", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  📋 Review answers
+                </button>
                 <button onClick={() => startMockExam(mockResult.paper.key)} style={{ padding: "10px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                   Try another
                 </button>
@@ -16882,6 +16985,49 @@ ${aBlocks}
             </div>
           );
         })()}
+
+        {/* MOCK EXAM — REVIEW ANSWERS */}
+        {mockReviewOpen && mockResult && (
+          <div onClick={() => setMockReviewOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>{mockResult.paper.name} · Review</span>
+                <button onClick={() => setMockReviewOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {mockResult.review.map((r, i) => (
+                  <div key={i} style={{
+                    padding: "9px 11px", borderRadius: 10, fontSize: 12,
+                    border: `1px solid ${r.skipped ? "var(--grid)" : r.correct ? "var(--green)" : "var(--red)"}`,
+                    background: r.skipped ? "transparent" : r.correct ? "var(--green-wash, var(--paper))" : "var(--red-wash, var(--paper))",
+                    opacity: r.skipped ? 0.7 : 1,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontWeight: 700 }}>Q{i + 1}</span>
+                      <span style={{ fontWeight: 700, color: r.skipped ? "var(--muted)" : r.correct ? "var(--green)" : "var(--red)", flexShrink: 0 }}>
+                        {r.skipped ? "Not answered" : `${r.marks}/${r.maxMarks} marks`}
+                      </span>
+                    </div>
+                    <div className="mub-mono" style={{ color: "var(--muted)", marginBottom: r.parts ? 4 : 0 }}>{splitPrompt(r.prompt).lead || r.prompt}</div>
+                    {r.parts ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {r.parts.map((p) => (
+                          <div key={p.label} style={{ color: p.correct ? "var(--green)" : "var(--red)" }}>
+                            {p.label} you: <strong>{p.given}</strong>{!p.correct && <> · correct: <strong>{p.answer}</strong></>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : !r.skipped && (
+                      <div style={{ color: r.correct ? "var(--green)" : "var(--red)" }}>
+                        you: <strong>{r.given}</strong>{!r.correct && <> · correct: <strong>{r.answer}</strong></>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* QUIZ */}
         {screen === "quiz" && question && (
@@ -16918,6 +17064,19 @@ ${aBlocks}
               const mm = String(Math.floor(remaining / 60)).padStart(2, "0"), ss = String(remaining % 60).padStart(2, "0");
               const urgent = remaining <= 300; // last 5 minutes
               const col = urgent ? "var(--red)" : "var(--amber)";
+              const answeredCount = mx ? mx.snapshots.filter((s) => s !== null).length : 0;
+              const marksSoFar = mx ? mx.snapshots.reduce((s, snap, i) => {
+                if (!snap) return s;
+                const q = mx.questions[i];
+                return s + (snap.feedback.marksEarned ?? (snap.feedback.correct ? (q.structured ? q.totalMarks : marksForQuestion(q)) : 0));
+              }, 0) : 0;
+              const atFirst = !mx || mx.idx === 0, atLast = !mx || mx.idx === mx.total - 1;
+              const answeredHere = mx && mx.snapshots[mx.idx] !== null;
+              const btnStyle = (primary) => ({
+                fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 7, cursor: "pointer",
+                border: `1px solid ${primary ? col : "var(--grid)"}`, background: primary ? col : "var(--paper)",
+                color: primary ? "var(--on-accent)" : "var(--ink)",
+              });
               return (
                 <div style={{ maxWidth: 520, margin: "0 auto 10px", background: "var(--paper)", border: `1px solid ${col}`, borderRadius: 10, padding: "8px 12px", fontSize: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -16926,7 +17085,14 @@ ${aBlocks}
                     </span>
                     <span className="mub-mono" style={{ fontWeight: 700, color: col, flexShrink: 0 }}>⏱ {mm}:{ss}</span>
                   </div>
-                  <div style={{ marginTop: 2, color: "var(--muted)" }}>{mx ? mx.marksEarned : 0} marks so far</div>
+                  <div style={{ marginTop: 2, color: "var(--muted)" }}>{marksSoFar} marks so far · {answeredCount}/{mockProgress.total} answered</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    <button type="button" disabled={atFirst} onClick={() => goToMockIndex(mx.idx - 1)} style={{ ...btnStyle(false), opacity: atFirst ? 0.4 : 1, cursor: atFirst ? "default" : "pointer" }}>◂ Prev</button>
+                    <button type="button" disabled={atLast} onClick={() => goToMockIndex(mx.idx + 1)} style={{ ...btnStyle(false), opacity: atLast ? 0.4 : 1, cursor: atLast ? "default" : "pointer" }}>
+                      {answeredHere ? "Next ▸" : "Skip ▸"}
+                    </button>
+                    <button type="button" onClick={finishMockExam} style={{ ...btnStyle(true), marginLeft: "auto" }}>Finish paper ✓</button>
+                  </div>
                 </div>
               );
             })()}
@@ -17437,21 +17603,23 @@ ${aBlocks}
                       </div>
                     );
                   })()}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {feedback.hwComplete ? (<>
-                      <button ref={nextRef} onClick={() => startHomework({ id: feedback.hwComplete.assignmentId, topic_id: feedback.hwComplete.topicId, count: feedback.hwComplete.count })}
-                        style={{ padding: "9px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                        🔁 Retry to improve
-                      </button>
-                      <button onClick={() => { setActiveTopic(null); setScreen("dashboard"); }} style={{ padding: "9px 18px", background: "none", color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                        Done
-                      </button>
-                    </>) : (
-                      <button ref={nextRef} onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-                        Next question →
-                      </button>
-                    )}
-                  </div>
+                  {!mockProgress && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {feedback.hwComplete ? (<>
+                        <button ref={nextRef} onClick={() => startHomework({ id: feedback.hwComplete.assignmentId, topic_id: feedback.hwComplete.topicId, count: feedback.hwComplete.count })}
+                          style={{ padding: "9px 18px", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                          🔁 Retry to improve
+                        </button>
+                        <button onClick={() => { setActiveTopic(null); setScreen("dashboard"); }} style={{ padding: "9px 18px", background: "none", color: "var(--muted)", border: "1px solid var(--grid)", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                          Done
+                        </button>
+                      </>) : (
+                        <button ref={nextRef} onClick={nextQuestion} style={{ padding: "9px 18px", background: "var(--ink)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                          Next question →
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -18866,20 +19034,19 @@ ${aBlocks}
                     </span>
                   </span>
                 </button>
-                {isAdmin && [MOCK_PAPERS.p1, MOCK_PAPERS.p2].map((paper) => (
-                  <button key={paper.key} onClick={() => go(() => startMockExam(paper.key))} className="mub-card" style={modeBtn(true)}>
+                {isAdmin && (
+                  <button onClick={() => go(() => setScreen("mockintro"))} className="mub-card" style={modeBtn(true)}>
                     <span style={{ fontSize: 28 }}>📝</span>
                     <span style={{ minWidth: 0, flex: 1 }}>
                       <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                        Mock Exam — {paper.name} <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
+                        Mock Exam <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
                       </span>
                       <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {mockQuestionCount(paper)} questions
-                        {paper.structuredCount ? `, ${paper.structuredCount} multi-part` : ""}.
+                        A full, timed past-paper run — choose Paper 1 or Paper 2.
                       </span>
                     </span>
                   </button>
-                ))}
+                )}
                 <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
                   <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
