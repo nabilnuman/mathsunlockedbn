@@ -8088,11 +8088,13 @@ const ACHIEVEMENTS = [
     check: (p) => !!p.konami },
   { id: "honoredone", tier: "Bronze", name: "The Honored One", icon: "♾️", desc: "Attain Infinity",
     check: (p) => !!p.honoredone },
-  { id: "steamedhams", tier: "Bronze", name: "Steamed Hams", icon: "🍔", desc: "???", secret: true,
-    // Revealed only when navigated to from Aurora's locked swatch (see
-    // StyleModal's "???" card backgrounds) — a themed clue instead of the
-    // usual generic "Secret — revealed when earned" placeholder.
-    teaserName: "What's in the kitchen?", hint: "Write your answer in any answer text box",
+  { id: "steamedhams", tier: "Bronze", name: "Steamed Hams", icon: "🍔", desc: "Aurora Borealis", secret: true,
+    // Name stays hidden ("???") in the general list until earned. When
+    // navigated to from Aurora's locked swatch specifically (see
+    // StyleModal's "???" card backgrounds), the real name IS shown, plus
+    // a themed clue in place of the usual generic "Secret — revealed when
+    // earned" placeholder.
+    clue: "What's in the kitchen?", hint: "Type your answer in any answer text box",
     check: (p) => !!p.steamedhams },
 
   /* ---------------- Silver ---------------- */
@@ -18994,8 +18996,8 @@ ${aBlocks}
                       {items.map((a) => {
                         const unlocked = (profile.achievements || []).includes(a.id);
                         const hidden = a.secret && !unlocked;
-                        const focused = a.id === achFocusId; // jumped to from a locked swatch — show its themed clue
-                        const nameHidden = hidden && !a.showName && !(focused && a.teaserName); // some secrets show their name as a teaser
+                        const focused = a.id === achFocusId; // jumped to from a locked swatch — reveal the real name + a themed clue
+                        const nameHidden = hidden && !a.showName && !focused;
                         const fresh = unlocked && newAchIds.includes(a.id);
                         return (
                           <div key={a.id} id={`ach-row-${a.id}`} style={{
@@ -19009,9 +19011,14 @@ ${aBlocks}
                             {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                             <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700 }}>{focused && a.teaserName ? a.teaserName : nameHidden ? "???" : a.name}</div>
+                              <div style={{ fontWeight: 700 }}>{nameHidden ? "???" : a.name}</div>
                               <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                                {focused && a.hint ? <i>{a.hint}</i> : hidden ? "Secret — revealed when earned" : a.desc}
+                                {focused && hidden && a.clue ? (
+                                  <>
+                                    <div>{a.clue}</div>
+                                    {a.hint && <div style={{ marginTop: 2 }}><i>{a.hint}</i></div>}
+                                  </>
+                                ) : hidden ? "Secret — revealed when earned" : a.desc}
                               </div>
                             </div>
                           </div>
