@@ -4809,15 +4809,16 @@ const TOPICS = [
     } },
   { id: "polygons", name: "Polygons", icon: "⬡", prereqs: [],
     generate() {
-      const NAME = { 3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon", 7: "heptagon", 8: "octagon", 9: "nonagon", 10: "decagon", 11: "hendecagon", 12: "dodecagon" };
+      // Capped at decagon — the syllabus doesn't name polygons beyond 10 sides.
+      const NAME = { 3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon", 7: "heptagon", 8: "octagon", 9: "nonagon", 10: "decagon" };
       const named = (n) => NAME[n] || `${n}-sided polygon`;
-      const A = (n) => `${/^(octagon|8|11|18)/.test(named(n)) ? "an" : "a"} ${named(n)}`;
+      const A = (n) => `${/^(octagon|8)/.test(named(n)) ? "an" : "a"} ${named(n)}`;
       const pick = (a) => a[randInt(0, a.length - 1)];
-      const div360 = [3, 4, 5, 6, 8, 9, 10, 12]; // regular polygons with whole-number angles
+      const div360 = [3, 4, 5, 6, 8, 9, 10]; // regular polygons with whole-number angles, up to decagon
       const r = Math.random();
 
       if (r < 0.22) {
-        const n = pick([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]), sum = (n - 2) * 180;
+        const n = pick([3, 4, 5, 6, 7, 8, 9, 10]), sum = (n - 2) * 180;
         return { sub: "interior", prompt: `Find the sum of the interior angles of ${A(n)}, in degrees`, answer: `${sum}`, hint: "Enter a number.",
           steps: [`Sum of interior angles = (n − 2) × 180°`, `= (${n} − 2) × 180 = ${sum}°`] };
       }
@@ -4832,8 +4833,11 @@ const TOPICS = [
           steps: [`The exterior angles of any polygon add up to 360°`, `Each = 360 ÷ ${n} = ${each}°`] };
       }
       if (r < 0.78) {
+        // Tagged separately from the other two "sides" forms below — reverse-
+        // solving from the angle SUM takes an extra division-then-add-2 step
+        // that's a harder ask non-calculator, so Paper 1 excludes just this one.
         const n = randInt(3, 14), sum = (n - 2) * 180;
-        return { sub: "sides", prompt: `The interior angles of a polygon add up to ${sum}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
+        return { sub: "sidesfromsum", prompt: `The interior angles of a polygon add up to ${sum}°. How many sides does it have?`, answer: `${n}`, hint: "Enter a number.",
           steps: [`(n − 2) × 180 = ${sum}`, `n − 2 = ${sum} ÷ 180 = ${sum / 180}`, `n = ${n}`] };
       }
       if (r < 0.88) {
@@ -7379,6 +7383,7 @@ const SUBTOPICS = {
     { key: "interior", name: "Interior angles (total or each)" },
     { key: "exterior", name: "Exterior angles (each)" },
     { key: "sides", name: "Number of sides from an angle" },
+    { key: "sidesfromsum", name: "Number of sides from the angle sum" },
   ],
   circles: [
     { key: "circumference", name: "Circumference" },
@@ -7684,45 +7689,138 @@ function generateStructuredQuestion(templateIdx) {
   };
 }
 
-// Two papers, matching the real syllabus 4024's own published shape:
-// 100 marks each, Paper 1 non-calculator in 2 hours, Paper 2 calculator-
-// allowed in 2 hours 30 minutes. Question counts and mark totals here were
-// calibrated against a decade-plus of real past papers (2015–2025): Paper
-// 1 is almost entirely 1–3 mark single questions, and real Paper 1
-// sittings run ~45-46 scored sub-parts for 100 marks (each "single
-// question" here plays the role of one such sub-part); Paper 2 leans on a
-// handful of big multi-part "structured" questions plus enough single
-// questions to fill the rest, mirroring how real Paper 2 questions are a
-// few large multi-step problems rather than many small ones.
-// singleCount can exceed MOCK_EXAM_POOL's topic count — buildMockQueue
-// cycles through the pool again rather than stopping there. It's a target
-// for the number of atomic single-question-equivalents drawn, not a
-// literal item count — most get bundled 2 (sometimes 1 or 3) to a card,
-// all from the same topic, and marksForQuestion is only ever a heuristic
+// Two papers, matching the real syllabus 4024's own published shape: 100
+// marks each, Paper 1 non-calculator in 2 hours, Paper 2 calculator-
+// allowed in 2 hours 30 minutes. Calibrated against a decade-plus of real
+// past papers (2015–2025). Every eligible topic (MOCK_EXAM_POOL, minus
+// excludeTopics and whatever the structured questions already cover) is
+// used exactly once — no repeats — with most getting 2 (sometimes 1 or 3)
+// parts from that one topic; see buildMockQueue for how that's sized per
+// paper to land near 100 marks. marksForQuestion is only ever a heuristic
 // (this app's questions were never authored against a real mark scheme),
 // so the raw total is a target, not a guarantee — the final score is
 // always rescaled to /100 against whatever the actual total turns out to
-// be. singleCount was set ~9-19% above the raw 100/68 mark target to
-// compensate, since tier-1 topics (see TOPIC_TIER) are correctly valued
-// at 1 mark rather than the old flat 2, pulling the achieved average down.
-// excludeTopics / excludeSubs keep content that needs a calculator (or is
-// otherwise out of place) out of the non-calculator paper.
+// be. excludeTopics / excludeSubs keep content that needs a calculator (or
+// is otherwise too advanced non-calculator) out of Paper 1.
 const MOCK_PAPERS = {
   p1: {
-    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 49, structuredCount: 0,
+    key: "p1", name: "Paper 1", calc: false, minutes: 120, structuredCount: 0,
     excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
-    excludeSubs: { statistics: ["meantable"], similarity: ["volume"] }, // mean-from-table and cubing a scale factor need a calculator
+    excludeSubs: {
+      statistics: ["meantable"], similarity: ["volume"], // mean-from-table and cubing a scale factor need a calculator
+      limits: ["combine"], // bounds of a ÷/× calculation need a calculator; bounds of one measurement don't
+      polygons: ["sidesfromsum"], // reverse-solving n from the angle SUM is a harder two-step ask non-calculator
+    },
   },
-  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, singleCount: 37, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
 };
+// Every pool topic becomes exactly one queue slot (see buildMockQueue), so
+// the number of question CARDS a paper shows is fixed and known up front —
+// used only for the mode-picker's descriptive text.
+function mockQuestionCount(paper) {
+  const structTopics = paper.structuredCount >= STRUCTURED_TEMPLATES.length ? new Set(STRUCTURED_TEMPLATE_TOPIC) : new Set();
+  const pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
+  return pool.length + paper.structuredCount;
+}
 // A cluster can only bundle plain typed-answer questions — there's no
-// shared card layout for e.g. a draw-based or Venn-diagram part — so
-// generateClusterQuestion checks each candidate against this before using
-// it as a part.
+// shared card layout for e.g. a draw-based, Venn-diagram, or tap-to-read
+// (cumfreq) part — so generateClusterQuestion checks each candidate
+// against this before using it as a part. A STATIC diagram (see
+// CLUSTER_VISUAL_KEYS) is fine and gets carried onto the part.
 function isPlainAnswerQ(q) {
   return !!q && !q.choices && !q.fields && !q.venn && !q.placeVenn && !q.region
     && !q.drawGraph && !q.drawSolve && !q.drawTransform && !q.drawMirror
-    && !q.tapPoint && !q.buildHist && !q.vector;
+    && !q.tapPoint && !q.buildHist && !q.vector && !q.cumfreq;
+}
+// Static (non-interactive) diagram/figure fields a single question can
+// carry — dropped by an earlier version of generateClusterQuestion, which
+// only copied prompt/marks/answer/check/steps onto a part, silently
+// leaving questions like "find the area of this circle" or "the straight
+// line is drawn on the grid" with no diagram at all. Carried onto each
+// part now, and rendered per-part via QuestionFigure (the same component
+// the worksheet preview already uses for exactly this — a static-only
+// subset of the quiz card's figure switch).
+const CLUSTER_VISUAL_KEYS = [
+  "graph", "motion", "histogram", "scatter", "table", "figure", "tri", "circle",
+  "parallel", "triParallel", "isoLine", "straightLine", "bearing", "solid", "vec", "transform",
+];
+// A 2-part vectors cluster is special-cased to a genuine "hence" pair
+// (find AB, then use it to find AM) instead of two independent random
+// vectors questions sharing a header — the vectors topic's own generator
+// already has this exact scenario (M dividing AB in a ratio) but only
+// ever asks for OM or AM directly; this reuses the same geometry and
+// checker logic (duplicated here since the topic's version is private to
+// its own generate() closure) to ask for the AB "connector" first.
+function vectorChainPair() {
+  const pick = (a) => a[randInt(0, a.length - 1)];
+  const evalVec = (str, A, B) => {
+    let s = String(str).trim().toLowerCase().replace(/[−–—]/g, "-")
+      .replace(/[×·∙•]/g, "*").replace(/x/g, "*")
+      .replace(/\s+/g, "")
+      .replace(/½/g, "(1/2)").replace(/⅓/g, "(1/3)").replace(/⅔/g, "(2/3)").replace(/¼/g, "(1/4)").replace(/¾/g, "(3/4)");
+    if (!s) return NaN;
+    s = s.replace(/\*+/g, "*").replace(/([0-9ab)])(?=[ab(])/g, "$1*").replace(/([ab)])(?=[0-9])/g, "$1*");
+    s = s.replace(/a/g, `(${A})`).replace(/b/g, `(${B})`);
+    if (!/^[-+*/().0-9]+$/.test(s)) return NaN;
+    try { const r = Function(`"use strict";return (${s})`)(); return typeof r === "number" && Number.isFinite(r) ? r : NaN; }
+    catch (e) { return NaN; }
+  };
+  const checkVec = (ca, cb) => (inp) => {
+    for (const [A, B] of [[1, 0], [0, 1], [3, 2], [-1, 4], [2.5, -1.5]]) {
+      const u = evalVec(inp, A, B);
+      if (!Number.isFinite(u) || Math.abs(u - (ca * A + cb * B)) > 1e-6) return false;
+    }
+    return true;
+  };
+  const FR = [[1, 2, "½"], [1, 3, "⅓"], [2, 3, "⅔"], [1, 4, "¼"], [3, 4, "¾"]];
+  const coef = (c) => {
+    const m = Math.abs(c), sign = c < 0 ? "−" : "";
+    if (Math.abs(m - 1) < 1e-9) return sign;
+    for (const [n, d, ch] of FR) if (Math.abs(m - n / d) < 1e-9) return sign + ch;
+    return sign + `${Math.round(m * 100) / 100}`;
+  };
+  const term = (ca, cb) => {
+    const nz = (v) => Math.abs(v) > 1e-9;
+    if (!nz(ca) && !nz(cb)) return "0";
+    if (nz(ca) && nz(cb) && Math.abs(Math.abs(ca) - Math.abs(cb)) < 1e-9 && Math.abs(ca) - 1 < -1e-9) {
+      const k = coef(Math.abs(ca));
+      if (ca > 0 && cb > 0) return `${k}(a + b)`;
+      if (ca < 0 && cb < 0) return `−${k}(a + b)`;
+      if (ca > 0 && cb < 0) return `${k}(a − b)`;
+      return `${k}(b − a)`;
+    }
+    const parts = [];
+    if (nz(ca)) parts.push({ c: ca, v: "a" });
+    if (nz(cb)) parts.push({ c: cb, v: "b" });
+    parts.sort((p, q) => (q.c > 0 ? 1 : 0) - (p.c > 0 ? 1 : 0));
+    return parts.map((p, i) => {
+      const body = coef(Math.abs(p.c)) + p.v;
+      if (i === 0) return (p.c < 0 ? "−" : "") + body;
+      return (p.c < 0 ? " − " : " + ") + body;
+    }).join("");
+  };
+
+  const O = [0, 0], A = [4, 0], Bp = [1.2, 3.2];
+  const r = pick([[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]]);
+  const t = r[0] / (r[0] + r[1]);
+  const M = [A[0] + t * (Bp[0] - A[0]), A[1] + t * (Bp[1] - A[1])];
+
+  return {
+    context: `M lies on ${vov("AB")} with ${vov("AM")} : ${vov("MB")} = ${r[0]} : ${r[1]}.  ${vov("OA")} = a  and  ${vov("OB")} = b.`,
+    vec: {
+      labels: [{ p: O, t: "O" }, { p: A, t: "A" }, { p: Bp, t: "B" }],
+      marks: [{ p: M, t: "M" }],
+      edges: [[A, Bp]],
+      dashed: [[O, M]],
+      arrows: [{ a: O, b: A, t: "a" }, { a: O, b: Bp, t: "b" }],
+    },
+    parts: [
+      { label: "(a)", prompt: `Write ${vov("AB")} in terms of a and b.`, marks: 1, answer: term(-1, 1), check: checkVec(-1, 1),
+        steps: [`${vov("AB")} = ${vov("AO")} + ${vov("OB")} = −a + b`] },
+      { label: "(b)", prompt: `Hence write ${vov("AM")} in terms of a and b.`, marks: 2, answer: term(-t, t), check: checkVec(-t, t),
+        steps: [`${vov("AM")} = ${coef(t)} × ${vov("AB")} = ${coef(t)}(b − a) = ${term(-t, t)}`] },
+    ],
+  };
 }
 // Measured empirically (30 samples/topic): these almost never generate a
 // plain typed-answer question (simultaneous 0/30, transformations 4/30,
@@ -7737,49 +7835,57 @@ const CLUSTER_UNSAFE_TOPICS = new Set(["simultaneous", "transformations", "sets"
 // then excluded from the single-question pool — so no topic appears twice
 // in one paper, whether as a single question or a structured one.
 //
-// Most single-topic slots get bundled into a 2- (sometimes 1- or 3-) part
-// cluster, ALL parts from that SAME topic — the way a real question is
-// "1 (a) ... (b) ..." on one idea, never two unrelated topics sharing a
-// number — so the paper reads as roughly half its singleCount in numbered
-// questions with sub-parts, rather than one flat list of atomic items.
-// genMockItem turns a "cluster" item into a single card with several
-// parts (see generateClusterQuestion). Topics that are almost never a
-// plain typed-answer question (CLUSTER_UNSAFE_TOPICS) are always size 1.
+// Every remaining topic in the pool is used EXACTLY ONCE — a real paper
+// doesn't test the same topic three separate times, so this shouldn't
+// either. Most of those slots get bundled into a 2- (sometimes 1- or
+// 3-) part cluster, ALL parts from that SAME topic — the way a real
+// question is "1 (a) ... (b) ..." on one idea, never two unrelated topics
+// sharing a number. genMockItem turns a "cluster" item into a single card
+// with several parts (see generateClusterQuestion). Topics that are
+// almost never a plain typed-answer question (CLUSTER_UNSAFE_TOPICS) are
+// always size 1. Non-calculator papers always open with Arithmetic (both
+// sub-parts, if clustered, stay Arithmetic too) — every real Paper 1
+// sitting studied opens with a simple evaluate, never anything harder.
 //
 // The queue is then ordered by ascending topic difficulty tier (shuffled
 // within each tier), with structured questions last — matching how a real
 // paper front-loads recall/arithmetic and saves its biggest multi-step
 // problems for the back half, rather than a fully random order.
+function pickClusterSize(topicId, sizeProbs) {
+  if (CLUSTER_UNSAFE_TOPICS.has(topicId)) return 1;
+  const r = Math.random();
+  if (r < sizeProbs[0]) return 1;
+  if (r < sizeProbs[1]) return 2;
+  return 3;
+}
 function buildMockQueue(paper) {
   const idxs = STRUCTURED_TEMPLATES.map((_, i) => i);
   for (let i = idxs.length - 1; i > 0; i--) { const j = randInt(0, i); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
   const structIdxs = idxs.slice(0, Math.min(paper.structuredCount, idxs.length));
   const structTopics = new Set(structIdxs.map((i) => STRUCTURED_TEMPLATE_TOPIC[i]));
-  const pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
+  let pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
 
-  const slots = []; // { topicId, size }
-  let used = 0, cyclePool = [], cyclePos = 0;
-  const nextTopic = () => {
-    if (cyclePos >= cyclePool.length) {
-      cyclePool = [...pool];
-      for (let i = cyclePool.length - 1; i > 0; i--) { const j = randInt(0, i); [cyclePool[i], cyclePool[j]] = [cyclePool[j], cyclePool[i]]; }
-      cyclePos = 0;
-    }
-    return cyclePool[cyclePos++];
-  };
-  while (used < paper.singleCount && pool.length) {
-    const topicId = nextTopic();
-    const remaining = paper.singleCount - used;
-    const r = Math.random();
-    const size = CLUSTER_UNSAFE_TOPICS.has(topicId) ? 1
-      : remaining === 1 ? 1 : r < 0.12 ? 1 : r < 0.82 ? 2 : Math.min(3, remaining);
-    slots.push({ topicId, size });
-    used += size;
+  const slots = []; // { topicId, size, tier }
+  if (!paper.calc && pool.includes("arithmetic")) {
+    pool = pool.filter((id) => id !== "arithmetic");
+    slots.push({ topicId: "arithmetic", size: Math.random() < 0.7 ? 2 : 1, tier: 0 });
+  }
+
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) { const j = randInt(0, i); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+  // Paper 2 already gets ~32 marks from its 6 structured questions and
+  // draws from a smaller pool (the structured topics are excluded above),
+  // so it leans toward smaller clusters to avoid running well past 100;
+  // Paper 1 leans toward 2-part clusters to reach 100 across its full
+  // ~24-topic pool with no structured questions to help.
+  const sizeProbs = paper.calc ? [0.25, 0.80] : [0.08, 0.72]; // cumulative: below[0] -> 1 part, below[1] -> 2 parts, else 3
+  for (const topicId of shuffled) {
+    slots.push({ topicId, size: pickClusterSize(topicId, sizeProbs), tier: TOPIC_TIER[topicId] || 3 });
   }
 
   const items = slots.map((s) => (s.size === 1
-    ? { type: "single", topicId: s.topicId, tier: TOPIC_TIER[s.topicId] || 3 }
-    : { type: "cluster", topicId: s.topicId, partCount: s.size, tier: TOPIC_TIER[s.topicId] || 3 }));
+    ? { type: "single", topicId: s.topicId, tier: s.tier }
+    : { type: "cluster", topicId: s.topicId, partCount: s.size, tier: s.tier }));
   structIdxs.forEach((i) => items.push({ type: "structured", templateIdx: i, tier: 6 }));
 
   for (let i = items.length - 1; i > 0; i--) { const j = randInt(0, i); [items[i], items[j]] = [items[j], items[i]]; }
@@ -12520,10 +12626,9 @@ ${aBlocks}
     return freshQuestion(() => pickQuestion(topic, subs));
   }
   // Bundles partCount independent questions from ONE topic into a single
-  // structured-style card, so the mock paper reads as roughly half its
-  // singleCount in numbered questions with sub-parts, the way a real
-  // short-answer paper lays out "1 (a) ... (b) ..." — always one topic,
-  // never two unrelated ones sharing a number. Only plain typed-answer
+  // structured-style card, the way a real short-answer paper lays out
+  // "1 (a) ... (b) ..." — always one topic, never two unrelated ones
+  // sharing a number. Only plain typed-answer
   // questions can share the card (see isPlainAnswerQ), so each part gets a
   // few regeneration attempts to land one (freshQuestion's own anti-repeat
   // history also keeps the parts from duplicating each other). buildMockQueue
@@ -12534,6 +12639,20 @@ ${aBlocks}
   // first (non-plain) one is shown standalone instead of returning a
   // broken question.
   function generateClusterQuestion(topicId, partCount, paper) {
+    // Vectors always gets a genuine "hence" pair (find AB, then use it for
+    // AM) rather than two independent random vector questions sharing a
+    // header — the one case in this app's topic pool with a natural,
+    // guaranteed two-step chain.
+    if (topicId === "vectors" && partCount >= 2) {
+      const chain = vectorChainPair();
+      return {
+        structured: true, totalMarks: chain.parts.reduce((s, p) => s + p.marks, 0), steps: [],
+        prompt: chain.context, vec: chain.vec,
+        topicId, topicName: TOPIC_BY_ID[topicId].name, topicIcon: TOPIC_BY_ID[topicId].icon,
+        answer: chain.parts.map((p) => `${p.label} ${p.answer}`).join("  "),
+        parts: chain.parts,
+      };
+    }
     const parts = [];
     let fallback = null;
     for (let n = 0; n < partCount; n++) {
@@ -12544,11 +12663,13 @@ ${aBlocks}
         if (!fallback) fallback = cand; // keep the first attempt in case every part here fails
       }
       if (picked) {
-        parts.push({
+        const part = {
           label: `(${String.fromCharCode(97 + parts.length)})`,
           prompt: picked.prompt, marks: marksForQuestion(picked), answer: picked.answer, check: picked.check,
           steps: (picked.steps && picked.steps.length) ? picked.steps : (picked.hint ? [picked.hint] : ["Check your working carefully."]),
-        });
+        };
+        for (const k of CLUSTER_VISUAL_KEYS) if (picked[k] !== undefined) part[k] = picked[k];
+        parts.push(part);
       }
     }
     if (!parts.length) return fallback || genSingleFor(topicId, paper); // never hand back a broken/empty question
@@ -16933,6 +17054,7 @@ ${aBlocks}
                           <span className="mub-mono" style={{ fontSize: 13.5, color: "var(--ink)", flex: 1 }}><MathText text={p.prompt} /></span>
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", flexShrink: 0 }}>[{p.marks} mark{p.marks === 1 ? "" : "s"}]</span>
                         </div>
+                        {CLUSTER_VISUAL_KEYS.some((k) => p[k]) && <div style={{ marginBottom: 8 }}><QuestionFigure q={p} /></div>}
                         <input
                           className="mub-mono"
                           autoCapitalize="none" autoCorrect="off" spellCheck={false}
@@ -18711,7 +18833,7 @@ ${aBlocks}
                         Mock Exam — {paper.name} <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
                       </span>
                       <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {paper.singleCount + paper.structuredCount} questions
+                        {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {mockQuestionCount(paper)} questions
                         {paper.structuredCount ? `, ${paper.structuredCount} multi-part` : ""}.
                       </span>
                     </span>
