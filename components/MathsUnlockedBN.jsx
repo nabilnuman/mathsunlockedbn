@@ -14067,6 +14067,12 @@ ${aBlocks}
     const viaWrite = wroteAnswerRef.current;
     wroteAnswerRef.current = false;
     const typed = typeof override === "string" ? override : answerInput;
+    // "Steamed Hams" — typing this anywhere is forgiven like a slip from
+    // the Error Correction perk (see `forgiven` below), not scored as a
+    // real wrong answer — it's an easter egg, not something that should
+    // cost a streak or trigger the streak-shield prompt.
+    const saidAurora = !profile.steamedhams
+      && [typed, ...Object.values(structParts || {}), ...Object.values(multiInput || {})].some((s) => /aurora\s*borealis/i.test(s || ""));
     let correct;
     let structResults = null, structMarksEarned = 0; // set only for question.structured
     if (question.structured) {
@@ -14149,11 +14155,12 @@ ${aBlocks}
     let secondWindKept = null; // set if Second Wind saved the streak this answer
     let xpBonuses = []; // { label } for every bonus that boosted this answer's XP — shown in the feedback UI, not just tallied server-side
 
-    // Wrong, holding a Streak Shield, and the Error Correction perk didn't
-    // already cover it — pause and offer to spend the shield before the
-    // streak breaks. Nothing is committed yet; they retry the same question.
+    // Wrong, holding a Streak Shield, and neither the Error Correction perk
+    // nor "Aurora Borealis" already forgives it — pause and offer to spend
+    // the shield before the streak breaks. Nothing is committed yet; they
+    // retry the same question.
     const forgiveCovers = perks.includes("forgive") && forgivenHere < ecMax;
-    if (!correct && !question.structured && !forgiveCovers && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
+    if (!correct && !question.structured && !forgiveCovers && !saidAurora && !shieldDeclined && (profile.shields || 0) > 0 && (profile.streak || 0) > 0) {
       setShieldOffer(true);
       return;
     }
@@ -14173,8 +14180,13 @@ ${aBlocks}
 
     // Error Correction perk: the first slip (two, once upgraded) in each
     // topic per day is forgiven — streak / rank history / consec-wrong stay.
-    const forgiven = !correct && perks.includes("forgive") && forgivenHere < ecMax;
-    if (forgiven) { d.forgiven = [...(d.forgiven || []), scoredId]; bumpPerk("forgive"); }
+    // "Aurora Borealis" is forgiven the same way, but doesn't touch the
+    // perk's own per-day budget — it's a separate, unlimited exemption, and
+    // takes priority so a player who happens to have both never burns a
+    // perk use on something the easter egg already covered for free.
+    const forgiven = !correct && (saidAurora || (perks.includes("forgive") && forgivenHere < ecMax));
+    const ecForgives = forgiven && !saidAurora;
+    if (ecForgives) { d.forgiven = [...(d.forgiven || []), scoredId]; bumpPerk("forgive"); }
 
     const t = next.topics[scoredId] || { history: [], highestRank: -1, streak: 0 };
     if (!forgiven) {
@@ -14358,12 +14370,9 @@ ${aBlocks}
 
     if (viaWrite) next.writtenAnswers = (next.writtenAnswers || 0) + 1; // "Old School"
 
-    // "Steamed Hams" — write "Aurora Borealis" into any answer text box,
-    // whatever the question actually asked for.
-    if (!next.steamedhams) {
-      const auroraTexts = [typed, ...Object.values(structParts || {}), ...Object.values(multiInput || {})];
-      if (auroraTexts.some((s) => /aurora\s*borealis/i.test(s || ""))) next.steamedhams = true;
-    }
+    // "Steamed Hams" — writing "Aurora Borealis" anywhere unlocks the
+    // achievement (see saidAurora above, which also makes it forgiven).
+    if (saidAurora) next.steamedhams = true;
 
     // Struggling in a topic that has a guided lesson? Offer it — once per
     // day per topic so a bad run doesn't nag.
@@ -14383,7 +14392,7 @@ ${aBlocks}
     else if (hwComplete) playJingle(false);
     else if (correct) playCorrect();
     if (!correct && !hwComplete) playWrong();
-    setFeedback({ correct, forgiven, unlocked, expGain, leveledTo, keysWon, boostsWon, xpBonuses, rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept, structResults, marksEarned: question.structured ? structMarksEarned : undefined });
+    setFeedback({ correct, forgiven, auroraForgiven: forgiven && saidAurora, unlocked, expGain, leveledTo, keysWon, boostsWon, xpBonuses, rankedUp, hwComplete, learnNudge, perkUpgraded, secondWindKept, structResults, marksEarned: question.structured ? structMarksEarned : undefined });
     saveProfile(next);
     // Celebrations — one at a time, rarest first.
     const bigAch = unlocked.find((a) => a.tier === "Platinum" || a.tier === "Diamond");
@@ -17292,7 +17301,7 @@ ${aBlocks}
                     </div>
                     {feedback.forgiven && (
                       <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--blue)", display: "flex", alignItems: "center", gap: 4 }}>
-                        🛟 Error Correction — streak safe
+                        {feedback.auroraForgiven ? "🍔 Steamed Hams — streak safe" : "🛟 Error Correction — streak safe"}
                       </div>
                     )}
                     {feedback.rankedUp && (() => {
