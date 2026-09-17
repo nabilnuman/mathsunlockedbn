@@ -7510,24 +7510,20 @@ const MOCK_EXAM_POOL = [
   "vectors", "sets",                                                            // Vectors & Sets
   "probability", "statistics",                                                 // Probability & Statistics
 ];
-function pickMockExamPool(n, pool = MOCK_EXAM_POOL) {
-  const filtered = pool.filter((id) => TOPIC_BY_ID[id]);
-  if (!filtered.length) return [];
-  const shuffleOnce = () => {
-    const a = [...filtered];
-    for (let i = a.length - 1; i > 0; i--) { const j = randInt(0, i); [a[i], a[j]] = [a[j], a[i]]; }
-    return a;
-  };
-  // A real paper regularly needs more single questions than there are
-  // distinct topics (e.g. a 45-question non-calculator Paper 1 against a
-  // 20-ish-topic pool), so once one shuffled lap is exhausted, reshuffle
-  // and keep drawing rather than hard-capping at the pool size — this
-  // still guarantees no topic repeats until every other topic has had a
-  // turn, it just no longer caps the paper's length at the topic count.
-  let out = [];
-  while (out.length < n) out.push(...shuffleOnce());
-  return out.slice(0, n);
-}
+// Rough difficulty tier per topic (1 = earliest/simplest, 5 = hardest),
+// modelled on where these actually tend to land in a real Cambridge D
+// Maths paper — pure recall/arithmetic first, multi-step applied topics
+// (mensuration, transformations, circle theorems) in the back half,
+// trigonometry/vectors/simultaneous equations last. Structured questions
+// count as tier 6 — always after every single/cluster item, matching how
+// a real paper's biggest scaffolded problems sit near the end.
+const TOPIC_TIER = {
+  arithmetic: 1, hcflcm: 1, time: 1, symmetry: 1, sigfig: 1,
+  indices: 2, standardform: 2, algebra: 2, polygons: 2,
+  factorization: 3, sequences: 3, proportionality: 3, coordgeo: 3, sets: 3, probability: 3, inequalities: 3, limits: 3,
+  mensuration: 4, statistics: 4, transformations: 4, graphicalsolutions: 4, circles: 4, similarity: 4,
+  trigonometry: 5, vectors: 5, simultaneous: 5,
+};
 
 // A rough per-question mark value, shown as "[n marks]" — heuristic (this
 // app's questions were never authored with a mark scheme), based only on
@@ -7536,16 +7532,25 @@ function marksForQuestion(q) {
   // Specific, deliberately-set values first — these are quick, largely
   // one-step question forms (or, for the coordinate-geometry pair, forms
   // with a fixed 3-step method: find the gradient, substitute, state the
-  // equation) that the generic type-based heuristic below would otherwise
-  // over- or under-value.
+  // equation) that the tier-based default below would otherwise over- or
+  // under-value.
   if (q.topicId === "symmetry") return 1; // order of rotational / line symmetry
   if (q.topicId === "sequences" && q.sub === "nextterm") return 1;
   if (q.topicId === "limits") return q.sub === "combine" ? 2 : 1; // bounds: single value vs. a combined quantity (area, speed, ...)
   if (q.topicId === "coordgeo" && (q.sub === "twopoints" || q.sub === "perpendicular")) return 3;
+  if (q.topicId === "indices" && (q.sub === "zeroneg" || q.sub === "fractional")) return 1; // a^0, a^-n, a^(1/n) is one recalled fact (e.g. 9^(1/2) = 3), not a multi-step method
   if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
   if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
   if (q.choices) return 1;
   if (q.drawGraph || q.drawSolve || q.drawTransform || q.drawMirror || q.tapPoint || q.venn || q.placeVenn || q.region) return 3;
+  // Otherwise fall back to the topic's difficulty tier (see TOPIC_TIER) —
+  // tier 1 (pure recall/arithmetic) is usually a single mark on the real
+  // paper, the multi-step applied topics (tier 4-5) usually more than a
+  // flat default of 2 would give them. This is still a broad-strokes
+  // heuristic, not a per-subtopic audit of what each one actually needs.
+  const tier = TOPIC_TIER[q.topicId];
+  if (tier === 1) return 1;
+  if (tier >= 4) return 3;
   return 2;
 }
 
@@ -7683,27 +7688,32 @@ function generateStructuredQuestion(templateIdx) {
 // 100 marks each, Paper 1 non-calculator in 2 hours, Paper 2 calculator-
 // allowed in 2 hours 30 minutes. Question counts and mark totals here were
 // calibrated against a decade-plus of real past papers (2015–2025): Paper
-// 1 is almost entirely 1–3 mark single questions (~45 of them, since each
-// "single question" here plays the role of one real exam sub-part, and
-// real Paper 1 sittings run ~45 scored sub-parts for 100 marks); Paper 2
-// leans on a handful of big multi-part "structured" questions plus enough
-// single questions to fill the rest, mirroring how real Paper 2 questions
-// are a few large multi-step problems rather than many small ones.
-// singleCount can exceed MOCK_EXAM_POOL's topic count — pickMockExamPool
-// cycles through the pool again rather than truncating (see there).
-// marksForQuestion is only ever a heuristic (this app's questions were
-// never authored against a real mark scheme), so the raw total below is a
-// target, not a guarantee — the final score is always rescaled to /100
-// against whatever the actual generated total turns out to be.
+// 1 is almost entirely 1–3 mark single questions, and real Paper 1
+// sittings run ~45-46 scored sub-parts for 100 marks (each "single
+// question" here plays the role of one such sub-part); Paper 2 leans on a
+// handful of big multi-part "structured" questions plus enough single
+// questions to fill the rest, mirroring how real Paper 2 questions are a
+// few large multi-step problems rather than many small ones.
+// singleCount can exceed MOCK_EXAM_POOL's topic count — buildMockQueue
+// cycles through the pool again rather than stopping there. It's a target
+// for the number of atomic single-question-equivalents drawn, not a
+// literal item count — most get bundled 2 (sometimes 1 or 3) to a card,
+// all from the same topic, and marksForQuestion is only ever a heuristic
+// (this app's questions were never authored against a real mark scheme),
+// so the raw total is a target, not a guarantee — the final score is
+// always rescaled to /100 against whatever the actual total turns out to
+// be. singleCount was set ~9-19% above the raw 100/68 mark target to
+// compensate, since tier-1 topics (see TOPIC_TIER) are correctly valued
+// at 1 mark rather than the old flat 2, pulling the achieved average down.
 // excludeTopics / excludeSubs keep content that needs a calculator (or is
 // otherwise out of place) out of the non-calculator paper.
 const MOCK_PAPERS = {
   p1: {
-    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 45, structuredCount: 0,
+    key: "p1", name: "Paper 1", calc: false, minutes: 120, singleCount: 49, structuredCount: 0,
     excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
     excludeSubs: { statistics: ["meantable"], similarity: ["volume"] }, // mean-from-table and cubing a scale factor need a calculator
   },
-  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, singleCount: 31, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, singleCount: 37, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
 };
 // A cluster can only bundle plain typed-answer questions — there's no
 // shared card layout for e.g. a draw-based or Venn-diagram part — so
@@ -7727,34 +7737,53 @@ const CLUSTER_UNSAFE_TOPICS = new Set(["simultaneous", "transformations", "sets"
 // then excluded from the single-question pool — so no topic appears twice
 // in one paper, whether as a single question or a structured one.
 //
-// Most of the (cluster-safe) single-topic pool is bundled into small
-// clusters (usually 2 topics, sometimes 1 or 3) so the paper reads as
-// roughly half its singleCount in numbered questions with sub-parts — the
-// way a real short-answer paper lays out "1 (a) ... (b) ..." — rather than
-// one flat list of singleCount atomic items. genMockItem turns a "cluster"
-// item into a single card with several parts (see generateClusterQuestion).
+// Most single-topic slots get bundled into a 2- (sometimes 1- or 3-) part
+// cluster, ALL parts from that SAME topic — the way a real question is
+// "1 (a) ... (b) ..." on one idea, never two unrelated topics sharing a
+// number — so the paper reads as roughly half its singleCount in numbered
+// questions with sub-parts, rather than one flat list of atomic items.
+// genMockItem turns a "cluster" item into a single card with several
+// parts (see generateClusterQuestion). Topics that are almost never a
+// plain typed-answer question (CLUSTER_UNSAFE_TOPICS) are always size 1.
+//
+// The queue is then ordered by ascending topic difficulty tier (shuffled
+// within each tier), with structured questions last — matching how a real
+// paper front-loads recall/arithmetic and saves its biggest multi-step
+// problems for the back half, rather than a fully random order.
 function buildMockQueue(paper) {
   const idxs = STRUCTURED_TEMPLATES.map((_, i) => i);
   for (let i = idxs.length - 1; i > 0; i--) { const j = randInt(0, i); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
   const structIdxs = idxs.slice(0, Math.min(paper.structuredCount, idxs.length));
   const structTopics = new Set(structIdxs.map((i) => STRUCTURED_TEMPLATE_TOPIC[i]));
   const pool = MOCK_EXAM_POOL.filter((id) => !(paper.excludeTopics || []).includes(id) && !structTopics.has(id));
-  const topics = pickMockExamPool(paper.singleCount, pool);
-  const clusterable = topics.filter((id) => !CLUSTER_UNSAFE_TOPICS.has(id));
-  const solo = topics.filter((id) => CLUSTER_UNSAFE_TOPICS.has(id));
 
-  const items = solo.map((id) => ({ type: "single", topicId: id }));
-  let i = 0;
-  while (i < clusterable.length) {
-    const remaining = clusterable.length - i;
+  const slots = []; // { topicId, size }
+  let used = 0, cyclePool = [], cyclePos = 0;
+  const nextTopic = () => {
+    if (cyclePos >= cyclePool.length) {
+      cyclePool = [...pool];
+      for (let i = cyclePool.length - 1; i > 0; i--) { const j = randInt(0, i); [cyclePool[i], cyclePool[j]] = [cyclePool[j], cyclePool[i]]; }
+      cyclePos = 0;
+    }
+    return cyclePool[cyclePos++];
+  };
+  while (used < paper.singleCount && pool.length) {
+    const topicId = nextTopic();
+    const remaining = paper.singleCount - used;
     const r = Math.random();
-    const size = remaining === 1 ? 1 : r < 0.12 ? 1 : r < 0.82 ? 2 : Math.min(3, remaining);
-    if (size === 1) items.push({ type: "single", topicId: clusterable[i] });
-    else items.push({ type: "cluster", topicIds: clusterable.slice(i, i + size) });
-    i += size;
+    const size = CLUSTER_UNSAFE_TOPICS.has(topicId) ? 1
+      : remaining === 1 ? 1 : r < 0.12 ? 1 : r < 0.82 ? 2 : Math.min(3, remaining);
+    slots.push({ topicId, size });
+    used += size;
   }
-  structIdxs.forEach((i) => items.push({ type: "structured", templateIdx: i }));
+
+  const items = slots.map((s) => (s.size === 1
+    ? { type: "single", topicId: s.topicId, tier: TOPIC_TIER[s.topicId] || 3 }
+    : { type: "cluster", topicId: s.topicId, partCount: s.size, tier: TOPIC_TIER[s.topicId] || 3 }));
+  structIdxs.forEach((i) => items.push({ type: "structured", templateIdx: i, tier: 6 }));
+
   for (let i = items.length - 1; i > 0; i--) { const j = randInt(0, i); [items[i], items[j]] = [items[j], items[i]]; }
+  items.sort((a, b) => a.tier - b.tier);
   return items;
 }
 // genMockItem(item, paper) — turns a queue item into an actual question
@@ -11444,6 +11473,7 @@ export default function MathsUnlockedBN() {
   const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec }
   const [mockTick, setMockTick] = useState(0); // ticks every second while a Mock Exam is running, just to redraw its countdown banner
   const [structParts, setStructParts] = useState({}); // { [partLabel]: typedAnswer } for a structured (multi-part) question
+  const [focusedPart, setFocusedPart] = useState(null); // which structured part's input the "insert" symbol row should target
   const [sketchOn, setSketchOn] = useState(false);   // scratch overlay toggle on the quiz card
   const [sketchStrokes, setSketchStrokes] = useState([]); // rough-working strokes, cleared per question
   const [feedback, setFeedback] = useState(null);
@@ -11836,6 +11866,18 @@ export default function MathsUnlockedBN() {
   // Insert a symbol at the caret in the answer box (for keys not on a
   // phone keyboard).
   function insertSym(sym) {
+    // Structured/clustered questions have one input per part, not the
+    // single shared `answerRef` — target whichever part was last focused
+    // (defaulting to the first part, so it still works before the student
+    // has tapped into a field at all).
+    if (question && question.structured) {
+      const label = focusedPart && question.parts.some((p) => p.label === focusedPart)
+        ? focusedPart
+        : (question.parts[0] && question.parts[0].label);
+      if (!label) return;
+      setStructParts((s) => ({ ...s, [label]: (s[label] || "") + sym }));
+      return;
+    }
     const el = answerRef.current;
     if (!el) { setAnswerInput((a) => a + sym); return; }
     const start = el.selectionStart ?? answerInput.length;
@@ -12477,26 +12519,29 @@ ${aBlocks}
       : undefined;
     return freshQuestion(() => pickQuestion(topic, subs));
   }
-  // Bundles 2-3 single-topic questions into one structured-style card, so
-  // the mock paper reads as roughly half its singleCount in numbered
-  // questions with sub-parts, the way a real short-answer paper lays out
-  // "1 (a) ... (b) ...". Only plain typed-answer questions can share the
-  // card (see isPlainAnswerQ), so each topic gets a few regeneration
-  // attempts to land one. buildMockQueue already keeps the topics that are
-  // almost never plain (CLUSTER_UNSAFE_TOPICS) out of clusters entirely,
-  // so a genuine failure here should be rare; if it still happens, that
-  // one topic is just left out of this card rather than retried forever —
-  // and if every topic in the cluster fails, the very first (non-plain)
-  // attempt is shown standalone instead of returning a broken question.
-  function generateClusterQuestion(topicIds, paper) {
+  // Bundles partCount independent questions from ONE topic into a single
+  // structured-style card, so the mock paper reads as roughly half its
+  // singleCount in numbered questions with sub-parts, the way a real
+  // short-answer paper lays out "1 (a) ... (b) ..." — always one topic,
+  // never two unrelated ones sharing a number. Only plain typed-answer
+  // questions can share the card (see isPlainAnswerQ), so each part gets a
+  // few regeneration attempts to land one (freshQuestion's own anti-repeat
+  // history also keeps the parts from duplicating each other). buildMockQueue
+  // already keeps topics that are almost never plain (CLUSTER_UNSAFE_TOPICS)
+  // out of clusters entirely, so a genuine failure here should be rare; if
+  // a part still can't land a plain-answer version, it's just left out
+  // rather than retried forever — and if every attempt fails, the very
+  // first (non-plain) one is shown standalone instead of returning a
+  // broken question.
+  function generateClusterQuestion(topicId, partCount, paper) {
     const parts = [];
     let fallback = null;
-    for (const topicId of topicIds) {
+    for (let n = 0; n < partCount; n++) {
       let picked = null;
       for (let tries = 0; tries < 6; tries++) {
         const cand = genSingleFor(topicId, paper);
         if (isPlainAnswerQ(cand)) { picked = cand; break; }
-        if (!fallback) fallback = cand; // keep the first attempt in case every topic here fails
+        if (!fallback) fallback = cand; // keep the first attempt in case every part here fails
       }
       if (picked) {
         parts.push({
@@ -12506,20 +12551,20 @@ ${aBlocks}
         });
       }
     }
-    if (!parts.length) return fallback || genSingleFor(topicIds[0], paper); // never hand back a broken/empty question
+    if (!parts.length) return fallback || genSingleFor(topicId, paper); // never hand back a broken/empty question
     const totalMarks = parts.reduce((s, p) => s + p.marks, 0);
-    const firstTopic = TOPIC_BY_ID[topicIds[0]];
+    const topic = TOPIC_BY_ID[topicId];
     return {
       structured: true, totalMarks, steps: [],
       prompt: parts.length > 1 ? `Answer ${parts.length === 2 ? "both parts" : "all parts"} below.` : parts[0].prompt,
-      topicId: topicIds[0], topicName: firstTopic.name, topicIcon: firstTopic.icon,
+      topicId, topicName: topic.name, topicIcon: topic.icon,
       answer: parts.map((p) => `${p.label} ${p.answer}`).join("  "),
       parts,
     };
   }
   function genMockItem(item, paper) {
     if (item.type === "structured") return generateStructuredQuestion(item.templateIdx);
-    if (item.type === "cluster") return generateClusterQuestion(item.topicIds, paper);
+    if (item.type === "cluster") return generateClusterQuestion(item.topicId, item.partCount, paper);
     return genSingleFor(item.topicId, paper);
   }
 
@@ -13651,6 +13696,7 @@ ${aBlocks}
     setDrawTri([]);
     setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     setStructParts({});
+    setFocusedPart(null);
     setSketchStrokes([]);
     setSketchOn(false);
     setHintShown(false);
@@ -13731,6 +13777,7 @@ ${aBlocks}
       setDrawTri([]);
       setBarBuild(q.buildHist ? q.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
       setStructParts({});
+      setFocusedPart(null);
       setSketchStrokes([]);
       setSketchOn(false);
       setHintShown(false);
@@ -13800,6 +13847,7 @@ ${aBlocks}
     setDrawPts([]); setRegionPick(null); setCfPick([]); setVennPressed([]); setVennPlace({}); setMcPick(null); setDrawTri([]);
     setBarBuild(question.buildHist ? question.buildHist.initial.map((b) => (b ? { ...b } : null)) : null);
     setStructParts({});
+    setFocusedPart(null);
     startTimeRef.current = Date.now();
     if (isDesktop) setTimeout(() => { try { answerRef.current && answerRef.current.focus(); } catch (e) { /* noop */ } }, 0);
     flash("🛟 Streak Shield used — your streak is safe. Try again.");
@@ -16890,6 +16938,7 @@ ${aBlocks}
                           autoCapitalize="none" autoCorrect="off" spellCheck={false}
                           value={structParts[p.label] || ""}
                           onChange={(e) => setStructParts((s) => ({ ...s, [p.label]: e.target.value }))}
+                          onFocus={() => setFocusedPart(p.label)}
                           onKeyDown={(e) => { if (e.key === "Enter") { feedback ? nextQuestion() : submitAnswer(); } }}
                           placeholder="?"
                           disabled={!!feedback || shieldOffer}
