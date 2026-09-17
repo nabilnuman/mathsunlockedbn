@@ -4703,18 +4703,22 @@ const TOPICS = [
       }
 
       // ---------- cone: volume or curved surface area (in terms of π) ----------
+      // Cone/sphere formulas aren't expected to be memorised, so — like the
+      // real paper — they're given in brackets right on the question,
+      // rather than assumed known the way rectangle/triangle/cuboid/
+      // cylinder area & volume formulas are.
       if (r < 0.91) {
         if (Math.random() < 0.5) {
           const rad = pick([3, 6]), h = randInt(3, 10);
           return {
-            prompt: `Find the volume of this cone. Leave your answer in terms of π`,
+            prompt: `[Volume of a cone = ⅓πr²h]\nFind the volume of this cone. Leave your answer in terms of π`,
             solid: { shape: "cone", dims: { r: rad, h } },
             answer: `${(rad * rad * h) / 3}π`, hint: "give your answer as a multiple of π",
             steps: [`Volume = ⅓ × πr²h`, `= ⅓ × π × ${rad}² × ${h} = ${(rad * rad * h) / 3}π cm³`] };
         }
         const [rad, , slant] = pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [9, 12, 15], [8, 15, 17]]);
         return {
-          prompt: `This cone has base radius ${rad} cm and slant height ${slant} cm. Find the curved surface area in terms of π`,
+          prompt: `[Curved surface area of a cone = πrl]\nThis cone has base radius ${rad} cm and slant height ${slant} cm. Find the curved surface area in terms of π`,
           solid: { shape: "cone", dims: { r: rad, slant } },
           answer: `${rad * slant}π`, hint: "give your answer as a multiple of π",
           steps: [`Curved surface area = πrl`, `= π × ${rad} × ${slant} = ${rad * slant}π cm²`] };
@@ -4724,14 +4728,14 @@ const TOPICS = [
       if (Math.random() < 0.5) {
         const rad = pick([3, 6]);
         return {
-          prompt: `Find the volume of this sphere. Leave your answer in terms of π`,
+          prompt: `[Volume of a sphere = ⁴⁄₃πr³]\nFind the volume of this sphere. Leave your answer in terms of π`,
           solid: { shape: "sphere", dims: { r: rad } },
           answer: `${(4 * rad * rad * rad) / 3}π`, hint: "give your answer as a multiple of π",
           steps: [`Volume = 4⁄3 × πr³`, `= 4⁄3 × π × ${rad}³ = ${(4 * rad * rad * rad) / 3}π cm³`] };
       }
       const rad = randInt(2, 8);
       return {
-        prompt: `Find the surface area of this sphere. Leave your answer in terms of π`,
+        prompt: `[Surface area of a sphere = 4πr²]\nFind the surface area of this sphere. Leave your answer in terms of π`,
         solid: { shape: "sphere", dims: { r: rad } },
         answer: `${4 * rad * rad}π`, hint: "give your answer as a multiple of π",
         steps: [`Surface area = 4πr²`, `= 4 × π × ${rad}² = ${4 * rad * rad}π cm²`] };
