@@ -272,6 +272,10 @@ function checkSimplifiedSurd(input, answer) {
 // Answer left in index form: must be "<base>^<exp>" (or the superscript
 // form) — not the evaluated number and not a rewritten base.
 function checkIndexForm(input, base, exp) {
+  // A power of 1 is just the base — "5^1" is technically right but nobody
+  // writes it that way, so a bare "5" is accepted too when that's the
+  // actual answer.
+  if (exp === 1 && Number(String(input).replace(/\s/g, "")) === base) return true;
   let s = String(input).replace(/\s|\*|·/g, "");
   s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, (mm) => "^" + mm.replace(/./g, (c) => (c === "⁻" ? "-" : "⁰¹²³⁴⁵⁶⁷⁸⁹".indexOf(c))));
   const m = s.match(/^(-?\d+)\^\(?(-?\d+)\)?$/);
@@ -2680,6 +2684,9 @@ const TOPICS = [
       const alg = "e.g. 12x^5";
       const num = "Enter a number.";
       const fracHint = "Fraction or decimal.";
+      // b^1 is just b — nobody actually writes "5^1" as a final answer.
+      const powAns = (b, e) => (e === 1 ? `${b}` : `${b}^${e}`);
+      const powDisp = (b, e) => (e === 1 ? `${b}` : `${b}${sup(e)}`);
       const forms = [
         () => { // a^m × a^n = a^(m+n)
           const a = randInt(2, 6), b = randInt(2, 6), m = randInt(1, 4), n = randInt(1, 4);
@@ -2737,23 +2744,23 @@ const TOPICS = [
         () => { // b^m × b^n → b^(m+n), leave in index form
           const b = [2, 3, 5, 7][randInt(0, 3)], m = randInt(2, 6), n = randInt(2, 4);
           return { sub: "numeric", prompt: `Write as a single power:   ${b}${sup(m)} × ${b}${sup(n)}`,
-            answer: `${b}^${m + n}`, answerDisplay: `${b}${sup(m + n)}`, hint: `Leave it as a power, e.g. ${b}^${m + n + 1}`,
+            answer: powAns(b, m + n), answerDisplay: powDisp(b, m + n), hint: `Leave it as a power, e.g. ${b}^${m + n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m + n),
-            steps: [`Same base — add the powers: ${m} + ${n} = ${m + n}`, `Answer: ${b}${sup(m + n)}`] };
+            steps: [`Same base — add the powers: ${m} + ${n} = ${m + n}`, `Answer: ${powDisp(b, m + n)}`] };
         },
         () => { // b^m ÷ b^n → b^(m−n), leave in index form
           const b = [2, 3, 5, 7][randInt(0, 3)], n = randInt(1, 4), m = n + randInt(2, 6);
           return { sub: "numeric", prompt: `Write as a single power:   ${frac(`${b}${sup(m)}`, `${b}${sup(n)}`)}`,
-            answer: `${b}^${m - n}`, answerDisplay: `${b}${sup(m - n)}`, hint: `Leave it as a power, e.g. ${b}^${m - n + 1}`,
+            answer: powAns(b, m - n), answerDisplay: powDisp(b, m - n), hint: `Leave it as a power, e.g. ${b}^${m - n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m - n),
-            steps: [`Same base — subtract the powers: ${m} − ${n} = ${m - n}`, `Answer: ${b}${sup(m - n)}`] };
+            steps: [`Same base — subtract the powers: ${m} − ${n} = ${m - n}`, `Answer: ${powDisp(b, m - n)}`] };
         },
         () => { // (b^m)^n → b^(mn), leave in index form
           const b = [2, 3, 5][randInt(0, 2)], m = randInt(2, 4), n = randInt(2, 3);
           return { sub: "numeric", prompt: `Write as a single power:   (${b}${sup(m)})${sup(n)}`,
-            answer: `${b}^${m * n}`, answerDisplay: `${b}${sup(m * n)}`, hint: `Leave it as a power, e.g. ${b}^${m * n + 1}`,
+            answer: powAns(b, m * n), answerDisplay: powDisp(b, m * n), hint: `Leave it as a power, e.g. ${b}^${m * n + 1}`,
             check: (inp) => checkIndexForm(inp, b, m * n),
-            steps: [`Power of a power — multiply the powers: ${m} × ${n} = ${m * n}`, `Answer: ${b}${sup(m * n)}`] };
+            steps: [`Power of a power — multiply the powers: ${m} × ${n} = ${m * n}`, `Answer: ${powDisp(b, m * n)}`] };
         },
       ];
       return forms[randInt(0, forms.length - 1)]();
@@ -7599,6 +7606,9 @@ function pinnedMarks(q) {
   if (q.topicId === "circles" && q.sub === "circumference") return 1; // one formula, one substitution
   if (q.topicId === "circles" && q.sub === "area") return 1; // one formula, one substitution
   if (q.topicId === "circles" && q.circle && q.circle.type === "tangents" && (q.circle.textP === "?" || q.circle.textO === "?")) return 1; // one-step: 360 - 90 - 90 - given angle
+  if (q.topicId === "circles" && q.circle && q.circle.type === "tangents" && q.circle.baseText === "?") return 2; // isosceles base angle: two steps (180 - p, then halve)
+  if (q.topicId === "circles" && q.sub === "theorems" && q.circle && ["centre", "semicircle", "sameseg", "cyclic", "altseg"].includes(q.circle.type)) return 1; // a single named circle theorem applied once
+  if (q.topicId === "circles" && q.sub === "sector" && q.circle && q.circle.rText === "r = ?") return 2; // rearrange the sector-area formula for r, then square-root
   if (q.topicId === "statistics" && q.sub === "averages") return 1; // mean/median/mode/range from a list
   if (q.topicId === "statistics" && q.sub === "histogram") return 2; // read the bar, multiply by class width
   if (q.topicId === "probability" && q.sub === "singlepick") return 1; // a single event, straight favourable/total
@@ -7747,6 +7757,9 @@ function gradeForPct(pct) {
   if (pct >= 40) return "E";
   return "U";
 }
+// Shared between the Mock Exam pre-game screen (a colored grade badge next
+// to "Your best") and the results screen.
+const GRADE_COL = { "A*": "var(--green)", A: "var(--green)", B: "var(--blue)", C: "var(--blue)", D: "var(--amber)", E: "var(--amber)", U: "var(--red)" };
 
 // ---- Structured (multi-part) questions ----------------------------------
 // Each template computes every value up front in one go, so later parts can
@@ -7766,6 +7779,10 @@ function tplTrigChain() {
   return {
     context: `In triangle ABC, angle ABC = 90° and angle BAC = ${angle}°. AB = ${AB} cm.`,
     topicId: "trigonometry", topicName: "Trigonometry", topicIcon: "📐",
+    // Right angle at B — A out along +x (AB known), C straight up from B
+    // (BC is what (a) solves for); only the given side/angle are labelled,
+    // BC/AC stay blank on the diagram since finding them is the point.
+    tri: { verts: [[AB, 0], [0, 0], [0, -BC]], sideLabels: ["", "", `${AB} cm`], angleLabels: [`${angle}°`, "", ""], vertLabels: ["A", "B", "C"], rightAngle: 1 },
     parts: [
       { label: "(a)", prompt: "Calculate the length of BC.", marks: 2, answer: `${BC}`, check: numCheck(BC, 0.15), hint: "tan(angle) = opposite ÷ adjacent", steps: [`BC = AB × tan(${angle}°) = ${AB} × tan(${angle}°) = ${BC} cm`] },
       { label: "(b)", prompt: "Hence calculate the length of AC.", marks: 2, answer: `${AC}`, check: numCheck(AC, 0.15), hint: "cos(angle) = adjacent ÷ hypotenuse", steps: [`AC = AB ÷ cos(${angle}°) = ${AB} ÷ cos(${angle}°) = ${AC} cm`] },
@@ -7797,9 +7814,10 @@ function tplMensurationChain() {
   return {
     context: `A cylindrical tank has radius ${r} cm and height ${h} cm.`,
     topicId: "mensuration", topicName: "Mensuration", topicIcon: "▦",
+    solid: { shape: "cylinder", dims: { r, h } },
     parts: [
       { label: "(a)", prompt: "Calculate the volume of the tank, in cm³.", marks: 2, answer: `${vol}`, check: numCheck(vol, Math.max(1, vol * 0.01)), hint: "Volume = πr²h", steps: [`Volume = π × ${r}² × ${h} = ${vol} cm³`] },
-      { label: "(b)", prompt: "Hence find the volume in litres (1 litre = 1000 cm³).", marks: 1, answer: `${litres}`, check: numCheck(litres, Math.max(0.05, litres * 0.01)), steps: [`${vol} ÷ 1000 = ${litres} litres`] },
+      { label: "(b)", prompt: "Hence find the volume in litres.", marks: 1, answer: `${litres}`, check: numCheck(litres, Math.max(0.05, litres * 0.01)), steps: [`${vol} ÷ 1000 = ${litres} litres`] },
       { label: "(c)", prompt: `Water costs $${rate} per litre. Find the cost of filling the tank.`, marks: 2, answer: `${cost}`, check: numCheck(cost, Math.max(0.1, cost * 0.02)), steps: [`Cost = ${litres} × $${rate} = $${cost}`] },
     ],
   };
@@ -7820,15 +7838,28 @@ function tplSimilarityChain() {
   };
 }
 function tplStatsChain() {
-  const n = randInt(5, 7), nums = Array.from({ length: n }, () => randInt(2, 20));
-  const sum = nums.reduce((a, b) => a + b, 0), mean = Math.round((sum / n) * 10) / 10;
-  const targetMean = mean + randInt(1, 3), neededSum = targetMean * (n + 1), extra = Math.round((neededSum - sum) * 10) / 10;
+  // Build the list backwards from a whole-number mean (same technique the
+  // regular "find the mean" question uses) instead of rounding a random
+  // list's mean to 1 d.p. — that made the mean itself usually a decimal,
+  // and every value downstream of it (the target mean, the missing
+  // number in part (b)) inherited that.
+  const n = randInt(5, 7), mean = randInt(6, 14);
+  let nums = null;
+  for (let i = 0; i < 60 && !nums; i++) {
+    const head = Array.from({ length: n - 1 }, () => randInt(2, 20));
+    const last = mean * n - head.reduce((a, b) => a + b, 0);
+    if (last >= 2 && last <= 20) nums = [...head, last];
+  }
+  if (!nums) nums = Array(n).fill(mean);
+  for (let i = nums.length - 1; i > 0; i--) { const j = randInt(0, i); [nums[i], nums[j]] = [nums[j], nums[i]]; }
+  const sum = mean * n;
+  const targetMean = mean + randInt(1, 3), neededSum = targetMean * (n + 1), extra = neededSum - sum;
   return {
     context: `A list of ${n} numbers is: ${nums.join(", ")}.`,
     topicId: "statistics", topicName: "Statistics", topicIcon: "📊",
     parts: [
       { label: "(a)", prompt: "Calculate the mean of these numbers.", marks: 2, answer: `${mean}`, check: numCheck(mean, 0.05), steps: [`Mean = (${nums.join(" + ")}) ÷ ${n} = ${sum} ÷ ${n} = ${mean}`] },
-      { label: "(b)", prompt: `A new number is added to the list so that the mean of all ${n + 1} numbers becomes ${targetMean}. Find the value of the new number.`, marks: 3, answer: `${extra}`, check: numCheck(extra, 0.05), hint: "new total = new mean × new count", steps: [`New total needed = ${targetMean} × ${n + 1} = ${neededSum}`, `New number = ${neededSum} − ${sum} = ${extra}`] },
+      { label: "(b)", prompt: `A new number is added to the list so that the mean of all ${n + 1} numbers becomes ${targetMean}. Find the value of the new number.`, marks: 2, answer: `${extra}`, check: numCheck(extra, 0.05), hint: "new total = new mean × new count", steps: [`New total needed = ${targetMean} × ${n + 1} = ${neededSum}`, `New number = ${neededSum} − ${sum} = ${extra}`] },
     ],
   };
 }
@@ -7889,7 +7920,7 @@ const MOCK_PAPERS = {
       indices: ["solve"], // solving a^x = a^k can land on a large power (e.g. 4^5 = 1024) that's awkward without a calculator
     },
   },
-  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 150, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
+  p2: { key: "p2", name: "Paper 2", calc: true, minutes: 120, structuredCount: 6, excludeTopics: [], excludeSubs: {} },
 };
 // Every pool topic becomes exactly one queue slot (see buildMockQueue), so
 // the number of question CARDS a paper shows is fixed and known up front —
@@ -7996,6 +8027,69 @@ function vectorChainPair() {
         steps: [`${vov("AB")} = ${vov("AO")} + ${vov("OB")} = −a + b`] },
       { label: "(b)", prompt: `Hence write ${vov("AM")} in terms of a and b.`, marks: 2, answer: term(-t, t), check: checkVec(-t, t),
         steps: [`${vov("AM")} = ${coef(t)} × ${vov("AB")} = ${coef(t)}(b − a) = ${term(-t, t)}`] },
+    ],
+  };
+}
+// Shared by sequenceChainPair below (kept independent from the "sequences"
+// topic's own generate(), same way vectorChainPair above doesn't share
+// helpers with the regular vectors generator either).
+function seqLinRule(m, c) {
+  const mt = m === 1 ? "n" : m === -1 ? "-n" : `${m}n`;
+  return c === 0 ? mt : `${mt} ${c > 0 ? "+" : "-"} ${Math.abs(c)}`;
+}
+function seqQuadRule(a, b, c) {
+  const at = a === 1 ? "n²" : a === -1 ? "-n²" : `${a}n²`;
+  const bt = b === 0 ? "" : ` ${b > 0 ? "+" : "-"} ${Math.abs(b) === 1 ? "" : Math.abs(b)}n`;
+  const ct = c === 0 ? "" : ` ${c > 0 ? "+" : "-"} ${Math.abs(c)}`;
+  return `${at}${bt}${ct}`;
+}
+function buildSequence() {
+  const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
+  const pick = (a) => a[randInt(0, a.length - 1)];
+  const kind = pick(["arith", "arith", "arith", "geo", "geo", "quad", "quad", "sqShift", "sqShift"]);
+  if (kind === "arith") {
+    const a1 = nz(-10, 10), d = nz(-9, 9);
+    return { kind, term: (n) => a1 + (n - 1) * d, rule: seqLinRule(d, a1 - d),
+      how: `Constant difference of ${d}, so nth term = ${seqLinRule(d, a1 - d)}` };
+  }
+  if (kind === "geo") {
+    const a = pick([1, 1, 2, -1, 2, 3]), r = pick([2, 2, 3, -2]);
+    const aPart = a === 1 ? "" : a === -1 ? "-" : `${a}×`;
+    const rTxt = r < 0 ? `(${r})` : `${r}`;
+    return { kind, term: (n) => a * Math.pow(r, n - 1), rule: `${aPart}${rTxt}^(n-1)`,
+      how: `Each term is ${r}× the previous one, so nth term = ${aPart}${rTxt}^(n-1)` };
+  }
+  if (kind === "quad") {
+    const a = pick([1, 1, 2, 2, 3, -1]), b = nz(-6, 6), c = nz(-8, 8);
+    return { kind, term: (n) => a * n * n + b * n + c, rule: seqQuadRule(a, b, c),
+      how: `Second difference is ${2 * a} (constant → quadratic), so nth term = ${seqQuadRule(a, b, c)}` };
+  }
+  const s = pick([-3, -2, -1, 1, 2, 3, 4, 5]);
+  const shift = `n ${s > 0 ? "+" : "-"} ${Math.abs(s)}`;
+  return { kind: "sqShift", term: (n) => (n + s) * (n + s), rule: `(${shift})²`,
+    how: `Every term is a perfect square; the number being squared is ${shift}, so nth term = (${shift})²` };
+}
+// A genuine "find the rule, then use it" pair sharing ONE sequence, the
+// way a real paper structures it — instead of generateClusterQuestion's
+// usual two independent random single questions sharing a card (which,
+// for sequences, could land "(a) find the next term of THIS sequence /
+// (b) find the 40th term of some OTHER, unrelated sequence").
+function sequenceChainPair() {
+  const pick = (a) => a[randInt(0, a.length - 1)];
+  let seq, shown;
+  for (let tries = 0; tries < 20; tries++) {
+    seq = buildSequence();
+    shown = [1, 2, 3, 4, 5].map(seq.term);
+    if (shown.every((v, i) => i === 0 || v !== shown[i - 1])) break;
+  }
+  const k = seq.kind === "geo" ? pick([7, 8, 9, 10]) : pick([12, 15, 20, 25, 30, 40, 50, 60, 100]);
+  const ruleMarks = seq.kind === "quad" ? 3 : 2, kthMarks = seq.kind === "quad" ? 4 : 3;
+  return {
+    context: `The sequence is:   ${shown.join(", ")}, ...`,
+    topicId: "sequences", topicName: "Number Sequences", topicIcon: "🔢",
+    parts: [
+      { label: "(a)", prompt: "Write the nth-term rule, in terms of n.", marks: ruleMarks, answer: seq.rule, hint: "use n — e.g. 3n - 2  or  2n^2 + 1", steps: [seq.how, `nth term = ${seq.rule}`] },
+      { label: "(b)", prompt: `Find the ${k}th term.`, marks: kthMarks, answer: `${seq.term(k)}`, hint: "work out the rule first", steps: [seq.how, `Substitute n = ${k}:  ${seq.term(k)}`] },
     ],
   };
 }
@@ -12889,6 +12983,19 @@ ${aBlocks}
         parts: chain.parts,
       };
     }
+    // Same idea for sequences — "find the rule, then use it on the SAME
+    // sequence" instead of two independent random sequence questions
+    // sharing a card.
+    if (topicId === "sequences" && partCount >= 2) {
+      const chain = sequenceChainPair();
+      return {
+        structured: true, totalMarks: chain.parts.reduce((s, p) => s + p.marks, 0), steps: [],
+        prompt: chain.context,
+        topicId, topicName: TOPIC_BY_ID[topicId].name, topicIcon: TOPIC_BY_ID[topicId].icon,
+        answer: chain.parts.map((p) => `${p.label} ${p.answer}`).join("  "),
+        parts: chain.parts,
+      };
+    }
     const parts = [];
     let fallback = null;
     const usedSubs = new Set(), usedWho = new Set();
@@ -17270,10 +17377,18 @@ ${aBlocks}
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
                       {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {mockQuestionCount(paper)} questions
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
-                      {inProgress
-                        ? <span style={{ color: "var(--amber)", fontWeight: 700 }}>In progress · Q{mockExamRef.current.idx + 1}/{mockExamRef.current.total}</span>
-                        : <>Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100 (${gradeForPct(best)})` : "—"}</strong></>}
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                      {inProgress ? (
+                        <span style={{ color: "var(--amber)", fontWeight: 700 }}>In progress · Q{mockExamRef.current.idx + 1}/{mockExamRef.current.total}</span>
+                      ) : best != null ? (
+                        <>
+                          <span>Your best: <strong style={{ color: "var(--ink)" }}>{best}%</strong></span>
+                          {(() => {
+                            const g = gradeForPct(best), gc = GRADE_COL[g] || "var(--muted)";
+                            return <span style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "var(--card)", border: `2px solid ${gc}`, color: gc, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10.5, lineHeight: 1 }}>{g}</span>;
+                          })()}
+                        </>
+                      ) : "Your best: —"}
                     </div>
                     <button
                       onClick={() => { if (inProgress) { setMockResult(null); setScreen("quiz"); loadMockIndex(mockExamRef.current.idx); } else { startMockExam(paper.key); } }}
@@ -17297,7 +17412,6 @@ ${aBlocks}
         {screen === "mockresult" && mockResult && (() => {
           const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
           const timedOut = mockResult.elapsedSec >= mockResult.targetSec - 1;
-          const GRADE_COL = { "A*": "var(--green)", A: "var(--green)", B: "var(--blue)", C: "var(--blue)", D: "var(--amber)", E: "var(--amber)", U: "var(--red)" };
           return (
             <div style={{
               maxWidth: 480, margin: "40px auto 0", background: "var(--card)", border: "1px solid var(--grid)",
@@ -17306,14 +17420,12 @@ ${aBlocks}
               <div style={{ fontSize: 34, marginBottom: 4 }}>📝</div>
               <div className="mub-display" style={{ fontSize: 19, fontWeight: 800, marginBottom: 2 }}>Mock Exam complete</div>
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 6 }}>{mockResult.paper.name}{timedOut ? " · time's up" : ""}</div>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 14, margin: "10px 0 2px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, margin: "10px 0 10px" }}>
                 <div className="mub-display" style={{ fontSize: 44, fontWeight: 900, color: "var(--blue)" }}>
-                  {mockResult.scaledMarks}<span style={{ fontSize: 22, color: "var(--muted)" }}>/100</span>
+                  {mockResult.scaledMarks}<span style={{ fontSize: 22, color: "var(--muted)" }}>%</span>
                 </div>
-                <div className="mub-display" style={{ fontSize: 32, fontWeight: 900, color: GRADE_COL[mockResult.grade] || "var(--ink)" }}>{mockResult.grade}</div>
+                <span style={{ flexShrink: 0, width: 50, height: 50, borderRadius: "50%", background: "var(--card)", border: `3px solid ${GRADE_COL[mockResult.grade] || "var(--muted)"}`, color: GRADE_COL[mockResult.grade] || "var(--ink)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 19, lineHeight: 1 }}>{mockResult.grade}</span>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", marginBottom: 2 }}>{mockResult.scaledMarks}%</div>
-              <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 10 }}>indicative grade — not a real boundary</div>
               <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
                 <strong style={{ color: "var(--ink)" }}>{mockResult.marksEarned}/{mockResult.totalMarks}</strong> marks obtained
               </div>
@@ -17807,6 +17919,7 @@ ${aBlocks}
                 else if (/\^|²/.test(ctx)) syms.push("^");
                 if (srcTopicId === "factorization") syms.push("(", ")", "+", "-");
                 if (srcTopicId === "vectors") syms.push("+", "-");
+                if (srcTopicId === "probability") syms.push("/");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
