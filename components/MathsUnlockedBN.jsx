@@ -10449,6 +10449,7 @@ const DAILY_XP = { showup: 5 * XP_SCALE, task: 40 * XP_SCALE };  // show-up is d
 const MILESTONE_XP = 50 * XP_SCALE;
 const DAILY_SOLVE_XP = 50 * XP_SCALE;  // for clearing the Daily Challenge (once a day)
 const SLIDE_SOLVE_XP = 50 * XP_SCALE;  // for clearing the Daily Slide (once a day)
+const SLIDE_GLOW_MS = 1500; // how long the solved board glows before the results panel takes over
 
 function todayKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -12143,6 +12144,7 @@ export default function MathsUnlockedBN() {
   const [slideHintPos, setSlideHintPos] = useState(null); // board position glowing as "move this one"
   const [slideHintReadyAt, setSlideHintReadyAt] = useState(0); // ms timestamp hint next becomes usable
   const slideHintTimerRef = useRef(null);
+  const [slideSolving, setSlideSolving] = useState(false); // true during the post-solve glow pause, before slideDone flips
   const [gfx, setGfx] = useState(null); // admin weekly-schools graphic: null | { rows, activeTotal, weekLabel }
   const [gfxBusy, setGfxBusy] = useState(false);
   const gfxRef = useRef(null);
@@ -12272,10 +12274,10 @@ export default function MathsUnlockedBN() {
   // Daily Slide live timer — also drives the hint cooldown countdown
   // (both just read Date.now() against a stored timestamp on every tick).
   useEffect(() => {
-    if (screen !== "slide" || slideDone != null || !slideStart) return;
+    if (screen !== "slide" || slideDone != null || slideSolving || !slideStart) return;
     const t = setInterval(() => setSlideElapsed(Math.max(0, (Date.now() - slideStart) / 1000)), 100);
     return () => clearInterval(t);
-  }, [screen, slideDone, slideStart]);
+  }, [screen, slideDone, slideSolving, slideStart]);
 
   async function togglePush() {
     if (pushBusy) return;
@@ -13549,7 +13551,7 @@ ${aBlocks}
   async function startSlide() {
     setModesOpen(false);
     const key = bruneiDayKey();
-    setSlideBoardRows(null); setSlideXp(null); setSlideHintPos(null);
+    setSlideBoardRows(null); setSlideXp(null); setSlideHintPos(null); setSlideSolving(false);
     getLeaderboard(true).then((all) => {
       const m = {};
       for (const p of all || []) if (p && p.uid) m[p.uid] = p;
@@ -13601,6 +13603,7 @@ ${aBlocks}
     }
   }
   async function finishSlide(board) {
+    setSlideSolving(false);
     const run = profileRef.current.slideRun;
     const key = bruneiDayKey();
     const startedAt = run && run.day === key ? run.startedAt : Date.now();
@@ -13627,7 +13630,7 @@ ${aBlocks}
     setSlideBoardRows(rows);
   }
   function slideTap(pos) {
-    if (slideDone != null || !slideBoardState) return;
+    if (slideDone != null || slideSolving || !slideBoardState) return;
     if (slideTileMovableAt(slideBoardState, pos) === -1) return;
     playCorrect();
     const next = slideMoveTileAt(slideBoardState, pos);
@@ -13637,7 +13640,12 @@ ${aBlocks}
     const furthest = Math.max(slideFurthest, idx);
     setSlideFurthest(furthest);
     patchProfile((p) => ({ slideRun: { ...(p.slideRun || {}), day: bruneiDayKey(), board: next, furthest } }));
-    if (slideIsSolved(next)) finishSlide(next);
+    if (slideIsSolved(next)) {
+      // Let the completed board glow for a moment before handing off to
+      // the results panel — a snap-straight-to-leaderboard felt abrupt.
+      setSlideSolving(true);
+      setTimeout(() => finishSlide(next), SLIDE_GLOW_MS);
+    }
   }
   function slideHint() {
     if (Date.now() < slideHintReadyAt || !slidePath || !slideBoardState) return;
@@ -13659,7 +13667,7 @@ ${aBlocks}
     slideHintTimerRef.current = setTimeout(() => setSlideHintPos(null), 2500);
   }
   function slideRefresh() {
-    if (slideDone != null || !slideStartBoard) return;
+    if (slideDone != null || slideSolving || !slideStartBoard) return;
     const now = Date.now();
     setSlideBoardState(slideStartBoard);
     setSlideFurthest(0);
@@ -15936,6 +15944,9 @@ ${aBlocks}
         @keyframes hintPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 55%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--blue) 25%, transparent); } }
         .mub-hint-pulse { animation: hintPulse 1s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .mub-hint-pulse { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 40%, transparent); } }
+        @keyframes solvedGlow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent); transform: scale(1); } 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--green) 30%, transparent); transform: scale(1.05); } }
+        .mub-solved-glow { animation: solvedGlow 0.7s ease-in-out 2; border-color: var(--green) !important; }
+        @media (prefers-reduced-motion: reduce) { .mub-solved-glow { animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 40%, transparent); border-color: var(--green) !important; } }
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
         .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
         .mub-grid input::placeholder, .mub-grid textarea::placeholder { color: var(--muted); }
@@ -17118,7 +17129,7 @@ ${aBlocks}
                 <ArrowLeft size={14} /> back
               </button>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🧩 Daily Slide</div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🛝 Daily Slide</div>
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
               </div>
 
@@ -17131,29 +17142,47 @@ ${aBlocks}
                     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
                       <span className="mub-mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--blue)" }}>{slideElapsed.toFixed(1)}s</span>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, maxWidth: 300, margin: "0 auto 16px" }}>
-                      {slideBoardState.map((val, pos) => (
-                        <button key={pos} onClick={() => slideTap(pos)} disabled={val === 0}
-                          className={`mub-display${slideHintPos === pos ? " mub-hint-pulse" : ""}`}
-                          style={{
-                            aspectRatio: "1 / 1", display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 32, fontWeight: 800, borderRadius: 14,
-                            border: `1px solid ${slideHintPos === pos ? "var(--blue)" : "var(--grid)"}`,
-                            background: val === 0 ? "var(--locked)" : "var(--card)",
-                            color: "var(--ink)", cursor: val === 0 ? "default" : "pointer",
-                            boxShadow: val === 0 ? "none" : "0 1px 4px var(--shadow-soft)",
-                          }}>
-                          {val !== 0 ? val : ""}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={slideHint} disabled={hintWait > 0}
-                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", cursor: hintWait > 0 ? "not-allowed" : "pointer", opacity: hintWait > 0 ? 0.6 : 1 }}>
+                    {(() => {
+                      const BOARD = 300, GAP = 8, CELL = (BOARD - 2 * GAP) / 3;
+                      const cellPos = (pos) => ({ left: (pos % 3) * (CELL + GAP), top: Math.floor(pos / 3) * (CELL + GAP) });
+                      return (
+                        <div style={{ position: "relative", width: BOARD, height: BOARD, margin: "0 auto 16px" }}>
+                          {Array.from({ length: 9 }).map((_, i) => {
+                            const { left, top } = cellPos(i);
+                            return <div key={`bg${i}`} style={{ position: "absolute", left, top, width: CELL, height: CELL, borderRadius: 14, background: "var(--locked)" }} />;
+                          })}
+                          {slideBoardState.map((val, pos) => {
+                            if (val === 0) return null;
+                            const { left, top } = cellPos(pos);
+                            return (
+                              <button key={val} onClick={() => slideTap(pos)} disabled={slideSolving}
+                                className={`mub-display${slideHintPos === pos ? " mub-hint-pulse" : ""}${slideSolving ? " mub-solved-glow" : ""}`}
+                                style={{
+                                  position: "absolute", left, top, width: CELL, height: CELL,
+                                  transition: "left 0.18s cubic-bezier(.3,.9,.4,1), top 0.18s cubic-bezier(.3,.9,.4,1)",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 32, fontWeight: 800, borderRadius: 14,
+                                  border: `1px solid ${slideHintPos === pos ? "var(--blue)" : "var(--grid)"}`,
+                                  background: "var(--card)", color: "var(--ink)", cursor: slideSolving ? "default" : "pointer",
+                                  boxShadow: "0 1px 4px var(--shadow-soft)",
+                                }}>
+                                {val}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                    {slideSolving && (
+                      <div className="mub-display" style={{ textAlign: "center", fontSize: 14, fontWeight: 800, color: "var(--green)", marginBottom: 10 }}>✓ Solved!</div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, opacity: slideSolving ? 0.5 : 1 }}>
+                      <button onClick={slideHint} disabled={hintWait > 0 || slideSolving}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", cursor: hintWait > 0 || slideSolving ? "not-allowed" : "pointer", opacity: hintWait > 0 ? 0.6 : 1 }}>
                         💡 {hintWait > 0 ? `Hint (${hintWait}s)` : "Hint"}
                       </button>
-                      <button onClick={slideRefresh}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 14px", cursor: "pointer" }}>
+                      <button onClick={slideRefresh} disabled={slideSolving}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 14px", cursor: slideSolving ? "not-allowed" : "pointer" }}>
                         <RotateCcw size={14} /> Restart
                       </button>
                     </div>
@@ -19856,7 +19885,7 @@ ${aBlocks}
                 </button>
                 <button onClick={() => go(startSlide)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
                   {slideDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                  <span style={{ fontSize: 28 }}>🧩</span>
+                  <span style={{ fontSize: 28 }}>🛝</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Slide</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
