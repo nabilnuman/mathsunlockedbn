@@ -3357,6 +3357,7 @@ const TOPICS = [
       // negative-times-negative bookkeeping in the working. Hard: general
       // 1-5 coefficients on both variables and solutions that can be
       // negative — needs real elimination (scale, then subtract).
+      const nz = (lo, hi) => { let v = 0; while (v === 0) v = randInt(lo, hi); return v; };
       const easy = Math.random() < 0.5;
       let xSol, ySol, a, b, c, d;
       if (easy) {
@@ -3364,7 +3365,10 @@ const TOPICS = [
         a = 1; b = randInt(1, 3); c = randInt(1, 4); d = randInt(1, 4);
         while (a * d - b * c === 0) { c = randInt(1, 4); d = randInt(1, 4); }
       } else {
-        xSol = randInt(-6, 6); ySol = randInt(-6, 6);
+        xSol = nz(-6, 6); ySol = nz(-6, 6); // never 0 — a solution of 0 makes the "substitute back" step trivial either way
+        // Both negative is a real case but should stay rare — flip one sign
+        // positive unless we're in the ~5% meant to still cover it.
+        if (xSol < 0 && ySol < 0 && Math.random() > 0.05) { if (Math.random() < 0.5) xSol = -xSol; else ySol = -ySol; }
         a = randInt(1, 5); b = randInt(1, 5); c = randInt(1, 5); d = randInt(1, 5);
         while (a * d - b * c === 0) { c = randInt(1, 5); d = randInt(1, 5); }
       }
@@ -3670,7 +3674,7 @@ const TOPICS = [
           ? `When x = ${ax}:  y = ${k} ÷ ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`
           : `When x = ${ax}:  y = ${k} × ${rel.disp(ax) === `${fa}` ? ax : `${rel.disp(ax)} = ${fa}`}  →  y = ${ay}`;
         return {
-          sub: inverse ? "inverse" : "direct",
+          sub: inverse ? "inverse" : "direct", relKind: rel.txt,
           prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find y when x = ${ax}`,
           answer: `${ay}`, hint: "Enter a number.",
           steps: [kStep, kLine, useLine],
@@ -3681,7 +3685,7 @@ const TOPICS = [
         ? `When y = ${ay}:  x = ${rhs} = ${fa}`
         : `When y = ${ay}:  ${rel.disp(ax)} = ${rhs} = ${fa}  →  x = ${ax}`;
       return {
-        sub: inverse ? "inverse" : "direct",
+        sub: inverse ? "inverse" : "direct", relKind: rel.txt,
         prompt: `y is ${rl}. When x = ${gx}, y = ${gy}. Find x when y = ${ay}`,
         answer: `${ax}`, hint: "Enter a number.",
         steps: [kStep, kLine, findXLine],
@@ -7588,6 +7592,8 @@ function marksForQuestion(q) {
   if (q.topicId === "sequences" && q.seqKind === "quad" && q.mode === "kth") return 4; // derive the rule, then substitute
   if (q.topicId === "sequences" && q.seqKind === "arith" && q.mode === "kth") return 3; // derive the rule, then substitute
   if (q.topicId === "time" && (q.sub === "finish" || q.sub === "start")) return q.carries ? 2 : 1; // 2 when the minutes cross an hour boundary and need a carry/borrow
+  if (q.topicId === "similarity" && q.sub === "length") return 2; // pure length-to-length ratio — one multiply, no squaring/cubing a scale factor
+  if (q.topicId === "proportionality" && (q.sub === "direct" || q.sub === "inverse")) return q.relKind === "x" ? 2 : 3; // plain "y is proportional to x" vs. to x²/√x/x³ (an extra squaring/rooting step)
   if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
   if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
   if (q.choices) return 1;
@@ -7601,6 +7607,54 @@ function marksForQuestion(q) {
   if (tier === 1) return 1;
   if (tier >= 4) return 3;
   return 2;
+}
+
+// Splits `total` whole marks across `weights` (proportionally, largest-
+// remainder rounding) so the parts sum to EXACTLY `total` — every part
+// gets at least 1 (never a 0-mark part). Shared by buildMockMarksPlan
+// (one entry per queue slot) and applyMockMarks (one entry per part of a
+// single structured/cluster question).
+function apportion(weights, total) {
+  const sum = weights.reduce((s, v) => s + v, 0) || 1;
+  const scale = total / sum;
+  const floats = weights.map((v) => v * scale);
+  const out = floats.map((v) => Math.max(1, Math.floor(v)));
+  let remaining = total - out.reduce((s, v) => s + v, 0);
+  const order = floats.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
+  let k = 0;
+  while (remaining > 0 && k < order.length) { out[order[k].i]++; remaining--; k++; }
+  k = order.length - 1;
+  while (remaining < 0 && k >= 0) { if (out[order[k].i] > 1) { out[order[k].i]--; remaining++; } k--; }
+  return out;
+}
+// Decides, once per Mock Exam (right after the paper's questions are
+// generated), how many of the paper's 100 marks each queue slot gets —
+// proportional to marksForQuestion's usual per-question heuristic, but
+// apportioned so the WHOLE PAPER sums to exactly 100 rather than
+// whatever raw total the heuristic happens to land on (previously ~85-
+// 115 depending on the shuffle, silently rescaled for the headline score
+// but NOT for what the review screen showed per question — the two
+// disagreed). Persisted on the run (see persistMockRun) so a slot
+// regenerated after a resume gets the same mark allocation it was
+// always going to get, not a fresh recount against whatever new random
+// content lands there.
+function buildMockMarksPlan(questions) {
+  const raw = questions.map((q) => (q.structured ? q.totalMarks : marksForQuestion(q)));
+  return apportion(raw, 100);
+}
+// Applies a slot's planned total to the question occupying it — for a
+// structured/cluster question, also re-splits ITS OWN parts (by their
+// own current mark weights) so they sum to that total. Safe to call more
+// than once on the same question (re-apportioning already-apportioned
+// integer marks against the same target is a no-op), so it doesn't need
+// to distinguish a freshly-generated question from an already-answered,
+// previously-normalized one restored from the resume cache.
+function applyMockMarks(q, total) {
+  q.totalMarks = total;
+  if (q.structured && q.parts && q.parts.length) {
+    const partMarks = apportion(q.parts.map((p) => p.marks), total);
+    q.parts.forEach((p, i) => { p.marks = partMarks[i]; });
+  }
 }
 
 // Indicative O-Level-style grade bands (U / E / D / C / B / A / A*) — round
@@ -12778,6 +12832,7 @@ ${aBlocks}
         const part = {
           label: `(${String.fromCharCode(97 + parts.length)})`,
           prompt: picked.prompt, marks: marksForQuestion(picked), answer: picked.answer, check: picked.check,
+          hint: picked.hint, symbols: picked.symbols, topicId,
           steps: (picked.steps && picked.steps.length) ? picked.steps : (picked.hint ? [picked.hint] : ["Check your working carefully."]),
         };
         for (const k of CLUSTER_VISUAL_KEYS) if (picked[k] !== undefined) part[k] = picked[k];
@@ -13464,6 +13519,21 @@ ${aBlocks}
     return () => clearInterval(iv);
   }, [mockProgress]);
 
+  // Same, but for the dashboard's own Continue-Mock-Exam card — its
+  // countdown (and the run itself) still needs to keep ticking, and
+  // finish on time, even while the student's stepped out to the
+  // dashboard rather than sitting on the quiz screen.
+  useEffect(() => {
+    if (screen !== "dashboard" || !mockExamRef.current) return;
+    const iv = setInterval(() => {
+      const mx = mockExamRef.current;
+      if (!mx) return;
+      if (Date.now() >= mx.deadline) { finishMockExam(); return; }
+      setMockTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [screen]);
+
   // Freeze the countdown the instant every question in the paper has been
   // answered — the clock shouldn't keep draining while there's nothing
   // left to do but tap Finish Paper. Doesn't fire just from reaching the
@@ -13938,7 +14008,7 @@ ${aBlocks}
       if (!mx) { window.localStorage.removeItem("mub_mockrun"); return; }
       window.localStorage.setItem("mub_mockrun", JSON.stringify({
         paperKey: mx.paper.key, queue: mx.queue, idx: mx.idx, total: mx.total,
-        startedAt: mx.startedAt, deadline: mx.deadline,
+        startedAt: mx.startedAt, deadline: mx.deadline, marksPlan: mx.marksPlan,
         snapshots: mx.snapshots.map((s) => (s ? mockSafeClone(s) : null)),
         questionCache: mx.questionCache || {},
       }));
@@ -13956,9 +14026,13 @@ ${aBlocks}
     if (!paper) { try { window.localStorage.removeItem("mub_mockrun"); } catch (e) { /* ignore */ } return; }
     const cache = run.questionCache || {};
     const questions = run.queue.map((item, i) => cache[i] || genMockItem(item, paper));
+    // A run saved before marksPlan existed has none — fall back to a fresh
+    // plan rather than leaving every question without a mark total.
+    const marksPlan = run.marksPlan || buildMockMarksPlan(questions);
+    questions.forEach((q, i) => applyMockMarks(q, marksPlan[i]));
     mockExamRef.current = {
       paper, queue: run.queue, questions, idx: run.idx, total: run.total,
-      snapshots: run.snapshots, questionCache: cache,
+      snapshots: run.snapshots, questionCache: cache, marksPlan,
       startedAt: run.startedAt, deadline: run.deadline,
     };
     if (run.deadline <= Date.now()) {
@@ -13983,8 +14057,10 @@ ${aBlocks}
     recentQRef.current = [];
     const queue = buildMockQueue(paper);
     const questions = queue.map((item) => genMockItem(item, paper));
+    const marksPlan = buildMockMarksPlan(questions);
+    questions.forEach((q, i) => applyMockMarks(q, marksPlan[i]));
     const deadline = Date.now() + paper.minutes * 60 * 1000;
-    mockExamRef.current = { paper, queue, questions, idx: 0, total: queue.length, snapshots: new Array(queue.length).fill(null), questionCache: {}, startedAt: Date.now(), deadline };
+    mockExamRef.current = { paper, queue, questions, idx: 0, total: queue.length, snapshots: new Array(queue.length).fill(null), questionCache: {}, marksPlan, startedAt: Date.now(), deadline };
     loadMockIndex(0);
     setMockResult(null);
     setScreen("quiz");
@@ -14075,7 +14151,7 @@ ${aBlocks}
     let correctCount = 0, marksEarned = 0, totalMarks = 0;
     const review = mx.questions.map((q, i) => {
       const snap = mx.snapshots[i];
-      const maxMarks = q.structured ? q.totalMarks : marksForQuestion(q);
+      const maxMarks = q.totalMarks; // set once for every mock question by applyMockMarks — always sums to 100 across the paper
       totalMarks += maxMarks;
       if (!snap) return { prompt: q.prompt, given: null, answer: q.structured ? null : String(q.answerDisplay ?? q.answer ?? ""), correct: false, marks: 0, maxMarks, skipped: true, parts: null };
       const fb = snap.feedback;
@@ -14099,7 +14175,7 @@ ${aBlocks}
     });
     const pct = totalMarks > 0 ? (marksEarned / totalMarks) * 100 : 0;
     const scaledMarks = Math.round(pct);
-    const grade = gradeForPct(pct);
+    const grade = gradeForPct(scaledMarks); // grade from the SAME rounded number the results screen shows, not the unrounded pct — a displayed "90" always means the A* band, never a hair under it
 
     const COMPLETION_XP = { "A*": 500, A: 350, B: 250, C: 150, D: 80, E: 40, U: 0 };
     const completionXp = COMPLETION_XP[grade] || 0;
@@ -16068,8 +16144,31 @@ ${aBlocks}
               );
             })()}
 
-            {/* Quick Start — resume the last topic, streak on the side */}
+            {/* Quick Start — resume the last topic, streak on the side. An
+                in-progress Mock Exam takes over this slot instead, with a
+                live countdown, since it's the one thing on a real timer. */}
             {(() => {
+              const mx = mockExamRef.current;
+              if (mx) {
+                const remaining = Math.max(0, Math.round((mx.deadline - Date.now()) / 1000));
+                const mm = String(Math.floor(remaining / 60)).padStart(2, "0"), ss = String(remaining % 60).padStart(2, "0");
+                return (
+                  <button onClick={() => { setMockResult(null); setScreen("quiz"); loadMockIndex(mx.idx); }} className="mub-card" style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", borderRadius: 16,
+                    border: "none", background: "var(--amber)", color: "var(--on-accent)", cursor: "pointer", marginBottom: 16, textAlign: "left",
+                  }}>
+                    <span style={{ fontSize: 24, lineHeight: 1 }}>📝</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontWeight: 800, fontSize: 15.5 }}>Continue Mock Exam</span>
+                      <span style={{ display: "block", fontSize: 12, opacity: 0.9, marginTop: 1 }}>{mx.paper.name} · Q{mx.idx + 1} of {mx.total}</span>
+                    </span>
+                    <span style={{ flexShrink: 0, textAlign: "center", lineHeight: 1.15 }}>
+                      <span className="mub-display mub-mono" style={{ display: "block", fontSize: 18, fontWeight: 800 }}>⏱{mm}:{ss}</span>
+                      <span style={{ display: "block", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.85 }}>remaining</span>
+                    </span>
+                  </button>
+                );
+              }
               const last = profile.lastTopicId && TOPIC_BY_ID[profile.lastTopicId];
               const canResume = last && isUnlocked(last, profile);
               const target = canResume ? last : TOPICS[0];
@@ -17126,9 +17225,10 @@ ${aBlocks}
                 </div>
                 <div className="mub-display" style={{ fontSize: 32, fontWeight: 900, color: GRADE_COL[mockResult.grade] || "var(--ink)" }}>{mockResult.grade}</div>
               </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)", marginBottom: 2 }}>{mockResult.scaledMarks}%</div>
               <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 10 }}>indicative grade — not a real boundary</div>
               <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
-                <strong style={{ color: "var(--ink)" }}>{mockResult.correct}/{mockResult.total}</strong> questions fully correct
+                <strong style={{ color: "var(--ink)" }}>{mockResult.marksEarned}/{mockResult.totalMarks}</strong> marks obtained
               </div>
               {mockResult.isNewBest ? (
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", marginBottom: 12 }}>🏆 New personal best for {mockResult.paper.name}!</div>
@@ -17239,7 +17339,7 @@ ${aBlocks}
               const marksSoFar = mx ? mx.snapshots.reduce((s, snap, i) => {
                 if (!snap) return s;
                 const q = mx.questions[i];
-                return s + (snap.feedback.marksEarned ?? (snap.feedback.correct ? (q.structured ? q.totalMarks : marksForQuestion(q)) : 0));
+                return s + (snap.feedback.marksEarned ?? (snap.feedback.correct ? q.totalMarks : 0));
               }, 0) : 0;
               const atFirst = !mx || mx.idx === 0, atLast = !mx || mx.idx === mx.total - 1;
               const btnStyle = (primary) => ({
@@ -17418,7 +17518,7 @@ ${aBlocks}
 
               {mockProgress && !question.structured && !feedback && (
                 <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", marginTop: -10, marginBottom: 12 }}>
-                  [{marksForQuestion(question)} mark{marksForQuestion(question) === 1 ? "" : "s"}]
+                  [{question.totalMarks} mark{question.totalMarks === 1 ? "" : "s"}]
                 </div>
               )}
 
@@ -17587,14 +17687,24 @@ ${aBlocks}
               )}
 
               {!feedback && (() => {
-                const ctx = `${question.hint || ""} ${question.answer || ""}`;
-                const syms = question.symbols ? [...question.symbols] : [];
+                // A structured/cluster question has no top-level hint/answer/
+                // symbols of its own — those live on each PART (see
+                // generateClusterQuestion), so use whichever part currently
+                // has focus (falling back to the first) instead of reading
+                // fields that only exist on a plain single question.
+                const src = question.structured
+                  ? (question.parts.find((p) => p.label === focusedPart) || question.parts[0])
+                  : question;
+                if (!src) return null;
+                const ctx = `${src.hint || ""} ${src.answer || ""}`;
+                const srcTopicId = question.structured ? src.topicId : question.topicId;
+                const syms = src.symbols ? [...src.symbols] : [];
                 if (/π/.test(ctx)) syms.push("π");
                 if (/√|sqrt/i.test(ctx)) syms.push("√");
-                if (question.topicId === "standardform" && /10\^/.test(question.answer || "")) syms.push("×10^");
+                if (srcTopicId === "standardform" && /10\^/.test(src.answer || "")) syms.push("×10^");
                 else if (/\^|²/.test(ctx)) syms.push("^");
-                if (question.topicId === "factorization") syms.push("(", ")", "+", "-");
-                if (question.topicId === "vectors") syms.push("+", "-");
+                if (srcTopicId === "factorization") syms.push("(", ")", "+", "-");
+                if (srcTopicId === "vectors") syms.push("+", "-");
                 if (!syms.length) return null;
                 return (
                   <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
