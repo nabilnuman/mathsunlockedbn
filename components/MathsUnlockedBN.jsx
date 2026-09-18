@@ -8269,6 +8269,8 @@ const ACHIEVEMENTS = [
     // earned" placeholder.
     clue: "What's in the kitchen?", hint: "Type your answer in any answer text box",
     check: (p) => !!p.steamedhams },
+  { id: "mockcredit", tier: "Bronze", name: "Credit Where Credit's Due", icon: "💳", desc: "Score at least a C on a Paper 1 or Paper 2 Mock Exam",
+    check: (p) => Object.values(p.mockBest || {}).some((m) => m >= 60) },
 
   /* ---------------- Silver ---------------- */
   { id: "marathon", tier: "Silver", name: "Marathon Mind", icon: "🏅", desc: "100 correct answers in total",
@@ -8289,10 +8291,10 @@ const ACHIEVEMENTS = [
     check: (p) => allTopicsRankAtLeast(p, TOPICS.slice(29, 30), "A") },
   { id: "triplethreat", tier: "Silver", name: "Triple Threat", icon: "⚠️", desc: "Get 33 Trigonometry questions correct in a row",
     check: (p) => (p.bestTrigStreak || 0) >= 33 },
-  { id: "mockperfectp1", tier: "Silver", name: "Part 1: A New Hope", icon: "🏆", desc: "Score 100% on a Paper 1 Mock Exam",
-    check: (p) => !!p.mockPerfectP1 },
-  { id: "mockperfectp2", tier: "Silver", name: "Part 2: Electric Boogaloo", icon: "🏆", desc: "Score 100% on a Paper 2 Mock Exam",
-    check: (p) => !!p.mockPerfectP2 },
+  { id: "mockperfectp1", tier: "Silver", name: "Part 1: A New Hope", icon: "🏆", desc: "Score an A* on a Paper 1 Mock Exam",
+    check: (p) => ((p.mockBest || {}).p1 || 0) >= 90 },
+  { id: "mockperfectp2", tier: "Silver", name: "Part 2: Electric Boogaloo", icon: "🏆", desc: "Score an A* on a Paper 2 Mock Exam",
+    check: (p) => ((p.mockBest || {}).p2 || 0) >= 90 },
 
   /* ---------------- Gold ---------------- */
   { id: "unstoppable", tier: "Gold", name: "Unstoppable", icon: "🚀", desc: "Reach S+ rank in any topic",
@@ -14263,10 +14265,6 @@ ${aBlocks}
     next.bonusExp = (next.bonusExp || 0) + completionXp;
     next.mockBest = { ...(next.mockBest || {}) };
     next.mockBest[mx.paper.key] = Math.max(prevBest, scaledMarks);
-    if (scaledMarks >= 100) {
-      if (mx.paper.key === "p1") next.mockPerfectP1 = true;
-      if (mx.paper.key === "p2") next.mockPerfectP2 = true;
-    }
     const unlocked = awardAchievements(next);
     saveProfile(next);
 
@@ -19399,19 +19397,15 @@ ${aBlocks}
                     </span>
                   </span>
                 </button>
-                {isAdmin && (
-                  <button onClick={() => go(() => setScreen("mockintro"))} className="mub-card" style={modeBtn(true)}>
-                    <span style={{ fontSize: 28 }}>📝</span>
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                        Mock Exam <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
-                      </span>
-                      <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                        A full, timed past-paper run — choose Paper 1 or Paper 2.
-                      </span>
+                <button onClick={() => go(() => setScreen("mockintro"))} className="mub-card" style={modeBtn(true)}>
+                  <span style={{ fontSize: 28 }}>📝</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Mock Exam</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      A full, timed past-paper run — choose Paper 1 or Paper 2.
                     </span>
-                  </button>
-                )}
+                  </span>
+                </button>
                 <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
                   <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
