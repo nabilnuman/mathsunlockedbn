@@ -7879,11 +7879,68 @@ function tplSimultChain() {
     ],
   };
 }
-const STRUCTURED_TEMPLATES = [tplTrigChain, tplAlgebraChain, tplMensurationChain, tplSimilarityChain, tplStatsChain, tplSimultChain];
+function tplCyclicChain() {
+  // Same gap-generation as the regular single-question "cyclic" theorem,
+  // but instead of giving one angle and asking for its opposite, both A
+  // and B are given so parts (a)/(b) each read a different opposite pair
+  // off the same shared diagram (angA+angC = angB+angD = 180° since the
+  // four gaps sum to 360°).
+  let g;
+  do {
+    const opts = [58, 64, 70, 76, 82, 88, 94, 100, 106];
+    const g1 = opts[randInt(0, opts.length - 1)], g2 = opts[randInt(0, opts.length - 1)], g3 = opts[randInt(0, opts.length - 1)];
+    g = [g1, g2, g3, 360 - g1 - g2 - g3];
+  } while (g[3] < 52 || g[3] > 118);
+  const angA = (g[1] + g[2]) / 2, angB = (g[2] + g[3]) / 2;
+  const angC = 180 - angA, angD = 180 - angB;
+  return {
+    context: `ABCD is a cyclic quadrilateral. Angle A = ${angA}° and angle B = ${angB}°.`,
+    topicId: "circles", topicName: "Circles", topicIcon: "⭕",
+    circle: { type: "cyclic", gaps: g, marks: [{ i: 0, t: `${angA}°` }, { i: 1, t: `${angB}°` }, { i: 2, t: `?` }, { i: 3, t: `?` }] },
+    parts: [
+      { label: "(a)", prompt: "Find the angle marked C.", marks: 2, answer: `${angC}`, check: numCheck(angC, 0), hint: "Opposite angles in a cyclic quadrilateral add up to 180°.", steps: [`Angle C = 180° − ${angA}° = ${angC}°`] },
+      { label: "(b)", prompt: "Find the angle marked D.", marks: 2, answer: `${angD}`, check: numCheck(angD, 0), hint: "Opposite angles in a cyclic quadrilateral add up to 180°.", steps: [`Angle D = 180° − ${angB}° = ${angD}°`] },
+    ],
+  };
+}
+function tplTrigAngleChain() {
+  // SSS triangle — all three sides given, all three angles unknown, so
+  // the cosine rule (never the sine rule, which risks the SSA ambiguous
+  // case) reads two angles off the same diagram and the third follows
+  // from the angle sum, same "shared diagram, several parts" shape as
+  // tplCyclicChain above.
+  let a, b, c, angA, angB, angC, ok = false;
+  for (let tries = 0; tries < 200 && !ok; tries++) {
+    a = randInt(6, 14); b = randInt(6, 14); c = randInt(6, 14);
+    if (a + b <= c + 2 || a + c <= b + 2 || b + c <= a + 2) continue;
+    const cosA = (b * b + c * c - a * a) / (2 * b * c);
+    const cosB = (a * a + c * c - b * b) / (2 * a * c);
+    if (cosA <= -1 || cosA >= 1 || cosB <= -1 || cosB >= 1) continue;
+    angA = Math.round((Math.acos(cosA) * 180 / Math.PI) * 10) / 10;
+    angB = Math.round((Math.acos(cosB) * 180 / Math.PI) * 10) / 10;
+    angC = Math.round((180 - angA - angB) * 10) / 10;
+    if (angA < 20 || angA > 140 || angB < 20 || angB > 140 || angC < 20 || angC > 140) continue;
+    ok = true;
+  }
+  const radA = angA * Math.PI / 180;
+  // A at origin, B along +x (AB = c), C placed via angle A and side AC = b.
+  const verts = [[0, 0], [c, 0], [b * Math.cos(radA), -b * Math.sin(radA)]];
+  return {
+    context: `In triangle ABC, AB = ${c} cm, BC = ${a} cm and CA = ${b} cm.`,
+    topicId: "trigonometry", topicName: "Trigonometry", topicIcon: "📐",
+    tri: { verts, sideLabels: [`${a} cm`, `${b} cm`, `${c} cm`], angleLabels: ["", "", ""], vertLabels: ["A", "B", "C"] },
+    parts: [
+      { label: "(a)", prompt: "Use the cosine rule to find angle A.", marks: 3, answer: `${angA}`, check: numCheck(angA, 0.3), hint: "cos A = (b² + c² − a²) ÷ (2bc)", steps: [`cos A = (${b}² + ${c}² − ${a}²) ÷ (2 × ${b} × ${c})`, `A = ${angA}°`] },
+      { label: "(b)", prompt: "Use the cosine rule to find angle B.", marks: 3, answer: `${angB}`, check: numCheck(angB, 0.3), hint: "cos B = (a² + c² − b²) ÷ (2ac)", steps: [`cos B = (${a}² + ${c}² − ${b}²) ÷ (2 × ${a} × ${c})`, `B = ${angB}°`] },
+      { label: "(c)", prompt: "Hence find angle C.", marks: 1, answer: `${angC}`, check: numCheck(angC, 0.3), hint: "angles in a triangle add up to 180°", steps: [`C = 180° − ${angA}° − ${angB}° = ${angC}°`] },
+    ],
+  };
+}
+const STRUCTURED_TEMPLATES = [tplTrigChain, tplAlgebraChain, tplMensurationChain, tplSimilarityChain, tplStatsChain, tplSimultChain, tplCyclicChain, tplTrigAngleChain];
 // Parallel to STRUCTURED_TEMPLATES — each template's topicId is fixed
 // (not randomised), so this can just be listed once rather than generated
 // and thrown away to read it back off.
-const STRUCTURED_TEMPLATE_TOPIC = ["trigonometry", "algebra", "mensuration", "similarity", "statistics", "simultaneous"];
+const STRUCTURED_TEMPLATE_TOPIC = ["trigonometry", "algebra", "mensuration", "similarity", "statistics", "simultaneous", "circles", "trigonometry"];
 function generateStructuredQuestion(templateIdx) {
   const idx = templateIdx != null ? templateIdx : randInt(0, STRUCTURED_TEMPLATES.length - 1);
   const q = STRUCTURED_TEMPLATES[idx]();
