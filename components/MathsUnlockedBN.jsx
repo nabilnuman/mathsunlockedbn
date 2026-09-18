@@ -3060,7 +3060,7 @@ const TOPICS = [
       }
       const dh = Math.floor(dur / 60), dm = dur % 60;
       const askHM = Math.random() < 0.75;
-      return { sub: "duration", who, prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
+      return { sub: "duration", who, carries, prompt: `${who} left at ${fmt(start)} and arrived at ${fmt(end)}. How ${askHM ? "many hours and minutes" : "many minutes"} did the journey take?`,
         answer: askHM ? `${dh} h ${dm} min` : `${dur}`,
         hint: askHM ? "e.g. 2 h 15 min" : "Enter a number.",
         check: (inp) => parseDuration(inp) === dur,
@@ -3563,8 +3563,16 @@ const TOPICS = [
           how: `Every term is a perfect square; the number being squared is ${shift}, so nth term = (${shift})²` };
       };
 
-      const seq = makeSeq();
-      const shown = [1, 2, 3, 4, 5].map(seq.term);
+      // A quadratic sequence can have its first couple of terms coincide
+      // (e.g. n² - 3n + 6 gives 4, 4, 6, 10, 16 — the same number twice in
+      // a row reads like a mistake, not a real sequence) — re-roll rather
+      // than ever show that.
+      let seq, shown;
+      for (let tries = 0; tries < 20; tries++) {
+        seq = makeSeq();
+        shown = [1, 2, 3, 4, 5].map(seq.term);
+        if (shown.every((v, i) => i === 0 || v !== shown[i - 1])) break;
+      }
       const seqStr = `${shown.join(", ")}, ...`;
       const mode = Math.random() < 0.4 ? "next" : Math.random() < 0.5 ? "rule" : "kth";
       // "Find the next term" is its own subtopic only for the classic case
@@ -4770,10 +4778,14 @@ const TOPICS = [
     generate() {
       const pick = (a) => a[randInt(0, a.length - 1)];
       // The ratio used to STATE how similar the two shapes are (givenAs)
-      // and the property being SOLVED FOR (askFor) are picked independently
-      // — 3×3 = 9 combinations, grouped into 3 subtopics by askFor.
+      // and the property being SOLVED FOR (askFor) must be DIFFERENT — if
+      // they were both "length", the question would separately state the
+      // smaller shape's dimension twice under the same name (once as the
+      // "corresponding length", once as "the smaller X has length Y"),
+      // usually with two different, contradictory numbers, since the two
+      // are rolled independently below.
       const askFor = pick(["length", "area", "volume"]);
-      const givenAs = pick(["length", "area", "volume"]);
+      const givenAs = pick(["length", "area", "volume"].filter((k) => k !== askFor));
       // Every shape names its OWN length-type dimension — "corresponding
       // lengths" is meaningless for e.g. a cylinder, which has a height, a
       // radius and a circumference all at once. Area/volume need no such
@@ -4808,13 +4820,14 @@ const TOPICS = [
         ? `Area scale factor = ${k}² = ${k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k} = ${bigAsk} ${unit[askFor]}`
         : `Volume scale factor = ${k}³ = ${k * k * k}.  Larger ${wordFor(askFor)} = ${smallAsk} × ${k * k * k} = ${bigAsk} ${unit[askFor]}`;
 
-      // sub groups by how much scale-factor work the pair actually needs —
-      // volume anywhere (asked or given) needs cubing/cube-rooting the
-      // ratio, area anywhere (with no volume) needs squaring/square-rooting
-      // it, and only a pure length-to-length pair is a single multiply —
-      // so Paper 1 can exclude both the squared and cubed variants and
-      // keep only the straightforward one (see MOCK_PAPERS.p1.excludeSubs).
-      const sub = (askFor === "volume" || givenAs === "volume") ? "volume" : (askFor === "area" || givenAs === "area") ? "area" : "length";
+      // sub groups by how much scale-factor work the pair needs — one of
+      // the two being "length" (lengthlink) needs a single squaring/
+      // cubing step; area<->volume (arvol, askFor and givenAs now always
+      // differ, so this is the only remaining combination without a
+      // length on either side) needs an extra hop through the length
+      // ratio (root one, then raise the other) — see marksForQuestion's
+      // pinnedMarks.
+      const sub = (askFor === "length" || givenAs === "length") ? "lengthlink" : "arvol";
       return {
         sub,
         prompt: `Two similar ${noun} have corresponding ${wordFor(givenAs)}s ${smallGiven} ${unit[givenAs]} and ${bigGiven} ${unit[givenAs]}.\nThe smaller ${nounSing} has ${wordFor(askFor)} ${smallAsk} ${unit[askFor]}. Find the ${wordFor(askFor)} of the larger one`,
@@ -7409,9 +7422,8 @@ const SUBTOPICS = {
     { key: "speedtime", name: "Speed–time graphs" },
   ],
   similarity: [
-    { key: "length", name: "Find a length" },
-    { key: "area", name: "Find an area" },
-    { key: "volume", name: "Find a volume" },
+    { key: "lengthlink", name: "Length ↔ area or volume" },
+    { key: "arvol", name: "Area ↔ volume" },
   ],
   polygons: [
     { key: "interior", name: "Interior angles (total or each)" },
@@ -7567,22 +7579,29 @@ const TOPIC_TIER = {
 // A rough per-question mark value, shown as "[n marks]" — heuristic (this
 // app's questions were never authored with a mark scheme), based only on
 // how much work the question type generally represents.
-function marksForQuestion(q) {
-  // Specific, deliberately-set values first — these are quick, largely
-  // one-step question forms (or, for the coordinate-geometry pair, forms
-  // with a fixed 3-step method: find the gradient, substitute, state the
-  // equation) that the tier-based default below would otherwise over- or
-  // under-value.
+// The deliberately-set values — quick, largely one-step question forms
+// (or, for the coordinate-geometry pair, forms with a fixed 3-step
+// method) that the tier-based default in marksForQuestion would
+// otherwise over- or under-value. Split out from marksForQuestion so
+// buildMockMarksPlan can tell a genuinely-authored mark value apart from
+// the generic tier fallback below — a pinned value here is never
+// touched by apportionment's rounding, only the tier-fallback questions
+// flex to make the paper sum to exactly 100 (see buildMockMarksPlan).
+// Returns null when nothing specific applies (defer to the tier fallback).
+function pinnedMarks(q) {
   if (q.topicId === "symmetry") return 1; // order of rotational / line symmetry
   if (q.topicId === "sequences" && q.sub === "nextterm") return 1;
   if (q.topicId === "limits") return q.sub === "combine" ? 2 : 1; // bounds: single value vs. a combined quantity (area, speed, ...)
-  if (q.topicId === "coordgeo" && (q.sub === "twopoints" || q.sub === "perpendicular")) return 3;
+  if (q.topicId === "coordgeo" && (q.sub === "twopoints" || q.sub === "perpendicular")) return 3; // the full 3-step "find gradient, substitute, state the equation of the line"
+  if (q.topicId === "coordgeo" && (q.sub === "gradient" || q.sub === "perpgradient")) return 2; // just the gradient itself — one formula, one substitution
   if (q.topicId === "indices" && (q.sub === "zeroneg" || q.sub === "fractional")) return 1; // a^0, a^-n, a^(1/n) is one recalled fact (e.g. 9^(1/2) = 3), not a multi-step method
   if (q.topicId === "sets" && q.sub === "shade") return 2; // shading a named region on a Venn diagram
+  if (q.topicId === "circles" && q.sub === "circumference") return 1; // one formula, one substitution
   if (q.topicId === "circles" && q.sub === "area") return 1; // one formula, one substitution
   if (q.topicId === "circles" && q.circle && q.circle.type === "tangents" && (q.circle.textP === "?" || q.circle.textO === "?")) return 1; // one-step: 360 - 90 - 90 - given angle
   if (q.topicId === "statistics" && q.sub === "averages") return 1; // mean/median/mode/range from a list
   if (q.topicId === "statistics" && q.sub === "histogram") return 2; // read the bar, multiply by class width
+  if (q.topicId === "probability" && q.sub === "singlepick") return 1; // a single event, straight favourable/total
   if (q.topicId === "mensuration" && /surface area/i.test(q.prompt || "")) return 2; // surface area of a 3D solid — more steps than a single face
   if (q.topicId === "mensuration" && ["rectangle", "square", "triangle", "parallelogram", "trapezium"].includes(q.sub)) return 1; // a single 2D area/perimeter formula
   if (q.topicId === "mensuration" && q.sub === "cuboid") return 1; // simple volume = l × w × h (surface-area branch already returned above)
@@ -7591,9 +7610,15 @@ function marksForQuestion(q) {
   if (q.topicId === "sequences" && q.seqKind === "quad" && q.mode === "rule") return 3; // deriving a quadratic nth-term rule
   if (q.topicId === "sequences" && q.seqKind === "quad" && q.mode === "kth") return 4; // derive the rule, then substitute
   if (q.topicId === "sequences" && q.seqKind === "arith" && q.mode === "kth") return 3; // derive the rule, then substitute
-  if (q.topicId === "time" && (q.sub === "finish" || q.sub === "start")) return q.carries ? 2 : 1; // 2 when the minutes cross an hour boundary and need a carry/borrow
-  if (q.topicId === "similarity" && q.sub === "length") return 2; // pure length-to-length ratio — one multiply, no squaring/cubing a scale factor
+  if (q.topicId === "time" && (q.sub === "finish" || q.sub === "start" || q.sub === "duration")) return q.carries ? 2 : 1; // 2 when the minutes cross an hour boundary and need a carry/borrow
+  if (q.topicId === "proportionality" && q.sub === "ratio") return 2; // share a total in a given ratio
   if (q.topicId === "proportionality" && (q.sub === "direct" || q.sub === "inverse")) return q.relKind === "x" ? 2 : 3; // plain "y is proportional to x" vs. to x²/√x/x³ (an extra squaring/rooting step)
+  if (q.topicId === "similarity") return q.sub === "lengthlink" ? 2 : 3; // one of the two stated quantities is a length (one squaring/cubing step) vs. neither is (area <-> volume needs a length ratio in between)
+  return null;
+}
+function marksForQuestion(q) {
+  const pinned = pinnedMarks(q);
+  if (pinned != null) return pinned;
   if (q.buildHist) return q.buildHist.lockWidth ? 6 : 8;
   if (q.fields) return Object.keys(q.answers || {}).length >= 2 ? 3 : 2;
   if (q.choices) return 1;
@@ -7611,20 +7636,41 @@ function marksForQuestion(q) {
 
 // Splits `total` whole marks across `weights` (proportionally, largest-
 // remainder rounding) so the parts sum to EXACTLY `total` — every part
-// gets at least 1 (never a 0-mark part). Shared by buildMockMarksPlan
-// (one entry per queue slot) and applyMockMarks (one entry per part of a
-// single structured/cluster question).
-function apportion(weights, total) {
+// gets at least its own minimum (1, unless `mins[i]` says otherwise — a
+// multi-part structured/cluster question needs at least one mark PER
+// PART, so its own top-level share can never be apportioned below its
+// part count). Shared by buildMockMarksPlan (one entry per queue slot,
+// `mins[i]` = that slot's part count) and applyMockMarks (one entry per
+// part of a single structured/cluster question, plain 1-per-part).
+function apportion(weights, total, mins) {
+  const minAt = (i) => (mins ? mins[i] : 1);
   const sum = weights.reduce((s, v) => s + v, 0) || 1;
   const scale = total / sum;
   const floats = weights.map((v) => v * scale);
-  const out = floats.map((v) => Math.max(1, Math.floor(v)));
+  const out = floats.map((v, i) => Math.max(minAt(i), Math.floor(v)));
   let remaining = total - out.reduce((s, v) => s + v, 0);
   const order = floats.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
   let k = 0;
   while (remaining > 0 && k < order.length) { out[order[k].i]++; remaining--; k++; }
   k = order.length - 1;
-  while (remaining < 0 && k >= 0) { if (out[order[k].i] > 1) { out[order[k].i]--; remaining++; } k--; }
+  while (remaining < 0 && k >= 0) { if (out[order[k].i] > minAt(order[k].i)) { out[order[k].i]--; remaining++; } k--; }
+  return out;
+}
+// Like apportion, but any index with pinned[i] true keeps its raw weight
+// EXACTLY — a deliberately-set mark value (see pinnedMarks) never gets
+// nudged by the paper-wide rounding, only the un-pinned (generic tier-
+// fallback) entries flex to make the total come out right. If the
+// pinned entries alone already reach or exceed `total`, everything just
+// keeps its raw weight rather than shrinking a pinned value to fit.
+function apportionPinned(weights, pinned, total, mins) {
+  const out = weights.slice();
+  const flexIdxs = [], flexWeights = [], flexMins = [];
+  let pinnedSum = 0;
+  weights.forEach((w, i) => { if (pinned[i]) pinnedSum += w; else { flexIdxs.push(i); flexWeights.push(w); flexMins.push(mins ? mins[i] : 1); } });
+  const remaining = total - pinnedSum;
+  if (!flexIdxs.length || remaining <= 0) return out;
+  const flexMarks = apportion(flexWeights, remaining, flexMins);
+  flexIdxs.forEach((qi, k) => { out[qi] = flexMarks[k]; });
   return out;
 }
 // Decides, once per Mock Exam (right after the paper's questions are
@@ -7634,27 +7680,59 @@ function apportion(weights, total) {
 // whatever raw total the heuristic happens to land on (previously ~85-
 // 115 depending on the shuffle, silently rescaled for the headline score
 // but NOT for what the review screen showed per question — the two
-// disagreed). Persisted on the run (see persistMockRun) so a slot
-// regenerated after a resume gets the same mark allocation it was
-// always going to get, not a fresh recount against whatever new random
-// content lands there.
+// disagreed, and a deliberately-pinned value like "circumference is
+// always 1 mark" could drift too). Persisted on the run (see
+// persistMockRun) so a slot regenerated after a resume gets the same
+// mark allocation it was always going to get, not a fresh recount
+// against whatever new random content lands there.
 function buildMockMarksPlan(questions) {
   const raw = questions.map((q) => (q.structured ? q.totalMarks : marksForQuestion(q)));
-  return apportion(raw, 100);
+  const pinned = questions.map((q) => {
+    if (!q.structured) return pinnedMarks(q) != null;
+    // A structured/cluster question's own total only counts as pinned if
+    // every one of its parts is (see applyMockMarks) — otherwise its
+    // total is free to flex, same as any other generic question.
+    return !!(q.parts && q.parts.length) && q.parts.every((p) => p.pinned !== false);
+  });
+  // A structured/cluster question's true minimum feasible total isn't
+  // just its part count — any PINNED part's exact value is non-
+  // negotiable too, so the floor is that pinned sum plus 1 per remaining
+  // unpinned part (otherwise the top level could allocate this question
+  // less than its own pinned parts alone already require).
+  const mins = questions.map((q) => {
+    if (!q.structured || !q.parts || !q.parts.length) return 1;
+    const pinnedSum = q.parts.filter((p) => p.pinned !== false).reduce((s, p) => s + p.marks, 0);
+    const unpinnedCount = q.parts.filter((p) => p.pinned === false).length;
+    return Math.max(q.parts.length, pinnedSum + unpinnedCount);
+  });
+  return apportionPinned(raw, pinned, 100, mins);
 }
 // Applies a slot's planned total to the question occupying it — for a
 // structured/cluster question, also re-splits ITS OWN parts (by their
-// own current mark weights) so they sum to that total. Safe to call more
-// than once on the same question (re-apportioning already-apportioned
-// integer marks against the same target is a no-op), so it doesn't need
-// to distinguish a freshly-generated question from an already-answered,
-// previously-normalized one restored from the resume cache.
+// own current mark weights), keeping any pinned part exactly as-is and
+// flexing only the rest to reach that total. A part carries `pinned:
+// false` only when generateClusterQuestion built it from a single
+// question with no deliberately-set mark value (see pinnedMarks) — a
+// hand-authored STRUCTURED_TEMPLATES/vectorChainPair part has no
+// `pinned` field at all and defaults to pinned, since its mark value was
+// already chosen on purpose. Safe to call more than once on the same
+// question (re-apportioning already-apportioned integer marks against
+// the same target is a no-op), so it doesn't need to distinguish a
+// freshly-generated question from an already-answered, previously-
+// normalized one restored from the resume cache.
 function applyMockMarks(q, total) {
-  q.totalMarks = total;
-  if (q.structured && q.parts && q.parts.length) {
-    const partMarks = apportion(q.parts.map((p) => p.marks), total);
-    q.parts.forEach((p, i) => { p.marks = partMarks[i]; });
-  }
+  if (!q.structured || !q.parts || !q.parts.length) { q.totalMarks = total; return; }
+  const weights = q.parts.map((p) => p.marks);
+  const pinned = q.parts.map((p) => p.pinned !== false);
+  const partMarks = apportionPinned(weights, pinned, total);
+  q.parts.forEach((p, i) => { p.marks = partMarks[i]; });
+  // Normally sums to `total` exactly — but if this question's own pinned
+  // parts alone already used up its whole allotted share, there was
+  // nothing left to shrink an unpinned part into (apportionPinned won't
+  // touch pinned marks even then), so totalMarks reflects what the parts
+  // actually add up to rather than the (in that rare case, too-small)
+  // requested total.
+  q.totalMarks = q.parts.reduce((s, p) => s + p.marks, 0);
 }
 
 // Indicative O-Level-style grade bands (U / E / D / C / B / A / A*) — round
@@ -7805,7 +7883,7 @@ const MOCK_PAPERS = {
     key: "p1", name: "Paper 1", calc: false, minutes: 120, structuredCount: 0,
     excludeTopics: ["trigonometry"], // no sine/cosine rule or SOHCAHTOA without a calculator
     excludeSubs: {
-      statistics: ["meantable"], similarity: ["area", "volume"], // mean-from-table and squaring/cubing a scale factor need a calculator
+      statistics: ["meantable"], similarity: ["arvol"], // mean-from-table and an area<->volume conversion (two scale-factor hops) need a calculator
       limits: ["combine"], // bounds of a ÷/× calculation need a calculator; bounds of one measurement don't
       polygons: ["sidesfromsum"], // reverse-solving n from the angle SUM is a harder two-step ask non-calculator
       indices: ["solve"], // solving a^x = a^k can land on a large power (e.g. 4^5 = 1024) that's awkward without a calculator
@@ -12832,7 +12910,7 @@ ${aBlocks}
         const part = {
           label: `(${String.fromCharCode(97 + parts.length)})`,
           prompt: picked.prompt, marks: marksForQuestion(picked), answer: picked.answer, check: picked.check,
-          hint: picked.hint, symbols: picked.symbols, topicId,
+          hint: picked.hint, symbols: picked.symbols, topicId, pinned: pinnedMarks(picked) != null,
           steps: (picked.steps && picked.steps.length) ? picked.steps : (picked.hint ? [picked.hint] : ["Check your working carefully."]),
         };
         for (const k of CLUSTER_VISUAL_KEYS) if (picked[k] !== undefined) part[k] = picked[k];
@@ -17186,7 +17264,7 @@ ${aBlocks}
                     <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
                       {inProgress
                         ? <span style={{ color: "var(--amber)", fontWeight: 700 }}>In progress · Q{mockExamRef.current.idx + 1}/{mockExamRef.current.total}</span>
-                        : <>Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100` : "—"}</strong></>}
+                        : <>Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100 (${gradeForPct(best)})` : "—"}</strong></>}
                     </div>
                     <button
                       onClick={() => { if (inProgress) { setMockResult(null); setScreen("quiz"); loadMockIndex(mockExamRef.current.idx); } else { startMockExam(paper.key); } }}
