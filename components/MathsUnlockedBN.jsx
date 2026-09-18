@@ -9314,59 +9314,63 @@ const CARD_BGS = {
   // box (reads as a flat grey blob) — darkMastery opts that one panel
   // into the same dark treatment Slate's camo uses, without changing
   // the rest of the card (name/stats stay on the light paper as normal).
-  graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)", darkMastery: true },
+  graph:     { name: "Graph paper", grid: true,  bg: "var(--paper)", darkMastery: true, border: "2px solid #B9C6D4" },
   sky:       { name: "Sky",         bg: "linear-gradient(180deg,#2C9AD1 0%,#6FC1E8 30%,#BFE3F2 60%,#F3FAFC 100%)",
-               img: svgBg(skyCloudsSvg("0.010", 12, 3)), size: "cover" },
-  dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px" },
-  blueprint: { name: "Blueprint",   bg: "#D8E6F2", img: "linear-gradient(rgba(18,51,90,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(18,51,90,.35) 1px,transparent 1px)", size: "18px 18px" },
-  sunset:    { name: "Sunset",      bg: "linear-gradient(115deg,#F2977A,#F2CB4E 30%,#3D9DA6 55%,#4FA98C 75%,#2C7F72)" },
+               img: svgBg(skyCloudsSvg("0.010", 12, 3)), size: "cover", border: "2px solid #2C9AD1" },
+  dots:      { name: "Dotted",      bg: "#EFF3F7", img: "radial-gradient(#9DB0C2 1.4px, transparent 1.6px)", size: "11px 11px", border: "2px solid #9DB0C2" },
+  blueprint: { name: "Blueprint",   bg: "#D8E6F2", img: "linear-gradient(rgba(18,51,90,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(18,51,90,.35) 1px,transparent 1px)", size: "18px 18px", border: "2px solid #12335A" },
+  sunset:    { name: "Sunset",      bg: "linear-gradient(115deg,#F2977A,#F2CB4E 30%,#3D9DA6 55%,#4FA98C 75%,#2C7F72)", border: "2px solid #F2977A" },
   slate:     { name: "Slate",       dark: true, bg: "#0A0A0A",
-               img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover" },
-  stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)" },
+               img: svgBg(camoSvg("0.020", 55, 4, [[0x0a, 0x0a, 0x0a], [0x2b, 0x2b, 0x2b], [0x4a, 0x4a, 0x4a], [0x6b, 0x6b, 0x6b]])), size: "cover", border: "2px solid #6B6B6B" },
+  stripes:   { name: "Stripes",     bg: "#EFF3F7", img: "repeating-linear-gradient(45deg,#B9C6D4 0 1.5px,transparent 1.5px 12px)", border: "2px solid #8FA3B8" },
   aurora:    { name: "Aurora",      ach: "steamedhams", dark: true, bg: "linear-gradient(180deg,#050912 0%,#0A1830 55%,#0B2440 100%)",
-               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.050 0.010", 11, 3, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.61, 0.85))}`, size: "130px 130px, cover" },
-  gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)" },
+               img: `${svgBg(starsSvg("0.9", 7))}, ${svgBg(auroraGlowSvg("0.050 0.010", 11, 3, [[0x0a, 0x2a, 0x28], [0x0f, 0x5c, 0x52], [0x1f, 0xaf, 0x95], [0x6c, 0xf0, 0xda]], 0.61, 0.85))}`, size: "130px 130px, cover", border: "2px solid #1FAF95" },
+  gold:      { name: "Gold leaf",   bg: "linear-gradient(120deg,#5C3D0A 0%,#A6791E 10%,#F6D580 22%,#FFF4CE 30%,#C9932E 42%,#7A5313 52%,#F2C158 64%,#FFEFC0 74%,#8A6212 86%,#4A3208 100%)", border: "2px solid #C9932E" },
   arcade:    { name: "Arcade",      ach: "konami", dark: true,
-               bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)" },
+               bg: "linear-gradient(115deg,#FF4DE1,#A06BFF 35%,#63EEF7 60%,#3D2A73 80%,#B31FC6)", border: "2px solid #63EEF7" },
   // --- Proposed level-gated backgrounds, admin-preview only (StyleModal)
   //     until approved and wired into the real per-level unlock system ---
-  chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px" },
-  notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)" },
+  chalkboard: { name: "Chalkboard", dark: true, bg: "#1B3A2E", img: "radial-gradient(rgba(255,255,255,.06) 1px,transparent 1.2px)", size: "9px 9px", border: "2px solid #6B4A2C" },
+  notebook:   { name: "Notebook",   bg: "#F7F2E4", img: "repeating-linear-gradient(#E4DEC8 0 1px,transparent 1px 17px)", border: "2px solid #C9BFA0" },
   tiger:      { name: "Tiger",      dark: true, bg: "#1A0F05",
-                img: svgBg(camoSvg("0.020 0.045", 25, 4, [[0, 0, 0], [0xea, 0x66, 0x08]])), size: "cover" },
+                img: svgBg(camoSvg("0.020 0.045", 25, 4, [[0, 0, 0], [0xea, 0x66, 0x08]])), size: "cover", border: "2px solid #EA6608" },
   camo:       { name: "Camo",       dark: true, bg: "#141709",
-                img: svgBg(camoSvg("0.014", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x9a, 0x94, 0x5c]])), size: "cover" },
-  neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px" },
+                img: svgBg(camoSvg("0.014", 4, 4, [[0x14, 0x17, 0x09], [0x4a, 0x4a, 0x26], [0x6b, 0x4d, 0x29], [0x9a, 0x94, 0x5c]])), size: "cover", border: "2px solid #9A945C" },
+  neongrid:   { name: "Neon grid",  dark: true, bg: "#170A2E", img: "linear-gradient(rgba(255,60,220,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,220,.35) 1px,transparent 1px)", size: "16px 16px", border: "2px solid #FF3CDC" },
   terracotta: { name: "Terracotta",
-                img: svgBg(tileSvg(35, 3, ["#C9836A", "#A9614A", "#8B4A3A", "#D9A98C", "#B8735A", "#96543F", "#E0B49A", "#7A4535"], 5, 5, 3)), bg: "#C9A98C", size: "175px 175px" },
+                img: svgBg(tileSvg(35, 3, ["#C9836A", "#A9614A", "#8B4A3A", "#D9A98C", "#B8735A", "#96543F", "#E0B49A", "#7A4535"], 5, 5, 3)), bg: "#C9A98C", size: "175px 175px", border: "2px solid #8B4A3A" },
   nebula:     { name: "Nebula",     dark: true, bg: "radial-gradient(circle at 30% 30%,#4A2E7A,#160B2E 70%)",
-                img: svgBg(starsSvg("0.9", 3)), size: "130px 130px" },
+                img: svgBg(starsSvg("0.9", 3)), size: "130px 130px", border: "2px solid #7C5CFF" },
   stealth:    { name: "Stealth",    dark: true, bg: "#333941",
-                img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover" },
-  circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px" },
+                img: svgBg(camoSvg("0.03", 9, 3, [[0x33, 0x39, 0x41], [0x59, 0x62, 0x6e], [0x87, 0x92, 0x9d], [0xb8, 0xc0, 0xc9]])), size: "cover", border: "2px solid #B8C0C9" },
+  circuit:    { name: "Circuit",    dark: true, bg: "#0C1B33", img: "linear-gradient(rgba(90,170,230,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(90,170,230,.28) 1px,transparent 1px)", size: "14px 14px", border: "2px solid #5AAAE6" },
   vortex:     { name: "Vortex",     dark: true, bg: "linear-gradient(115deg,#3B2E8C,#123258 45%,#1E8F6E 100%)",
-                img: svgBg(vortexSvg("0.014", 68, 3, 22, 0.013, 3)), size: "cover" },
+                img: svgBg(vortexSvg("0.014", 68, 3, 22, 0.013, 3)), size: "cover", border: "2px solid #1E8F6E" },
   crimson:    { name: "Crimson",    dark: true, bg: "#0D0604",
-                img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover" },
+                img: svgBg(camoSvg("0.020 0.045", 40, 4, [[0x0d, 0x06, 0x04], [0xc2, 0x1f, 0x2b]])), size: "cover", border: "2px solid #C21F2B" },
   navy:       { name: "Navy",       dark: true, bg: "#0A1830",
-                img: svgBg(camoSvg("0.020", 15, 4, [[0x0a, 0x18, 0x30], [0x1e, 0x4d, 0x8c], [0x4a, 0x8f, 0xd4]])), size: "cover" },
+                img: svgBg(camoSvg("0.020", 15, 4, [[0x0a, 0x18, 0x30], [0x1e, 0x4d, 0x8c], [0x4a, 0x8f, 0xd4]])), size: "cover", border: "2px solid #4A8FD4" },
   fall:       { name: "Fall",       dark: true, bg: "#1A1006",
-                img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover" },
+                img: svgBg(camoSvg("0.014", 20, 4, [[0x1a, 0x10, 0x06], [0xb5, 0x4a, 0x12], [0xd9, 0x9a, 0x1e], [0x8c, 0x1f, 0x12]])), size: "cover", border: "2px solid #D99A1E" },
   hollow:     { name: "Hollow",     ach: "honoredone", dark: true, bg: "linear-gradient(90deg,#B0142F 0%,#3A1030 45%,#123A6B 100%)",
-                img: svgBg(hollowSvg()), size: "cover" },
+                img: svgBg(hollowSvg()), size: "cover", border: "2px solid #D8CFE8" },
   berryshake: { name: "Berryshake",
-                img: svgBg(camoSvg("0.020", 70, 4, [[0xf5, 0xd9, 0xe0], [0xf2, 0xa8, 0xc0], [0xe8, 0x57, 0x8f], [0xc2, 0x35, 0x70]])), bg: "#F5D9E0", size: "cover" },
+                img: svgBg(camoSvg("0.020", 70, 4, [[0xf5, 0xd9, 0xe0], [0xf2, 0xa8, 0xc0], [0xe8, 0x57, 0x8f], [0xc2, 0x35, 0x70]])), bg: "#F5D9E0", size: "cover", border: "2px solid #C23570" },
 };
 const CARD_BG_IDS = Object.keys(CARD_BGS);
 const PREVIEW_CARD_BG_IDS = ["chalkboard", "notebook", "tiger", "camo", "neongrid", "terracotta", "nebula", "stealth", "circuit", "vortex", "crimson", "navy", "fall", "hollow", "berryshake"];
 const cardBgOf = (p) => CARD_BGS[(p && p.cardBg)] || CARD_BGS.graph;
 // Build a clean style object — never emit `backgroundImage: undefined`,
 // which React turns into `= ''` and wipes a `background:` gradient.
+// Each background's own complementary `border` (see CARD_BGS) ships
+// together with it and only applies to the real card — never to a
+// swatch, whose border is the picker's own selection ring.
 function cardBgStyle(b, swatch, center) {
+  const borderStyle = !swatch && b.border ? { border: b.border } : {};
   if (b.grid) {
     return swatch
       ? { backgroundColor: "var(--paper)", backgroundImage: "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)", backgroundSize: "9px 9px" }
-      : {};
+      : { ...borderStyle };
   }
   if (b.img) {
     // `background` and `backgroundImage` both resolve to the same CSS
@@ -9389,9 +9393,9 @@ function cardBgStyle(b, swatch, center) {
     // much more prominent, stretched-looking spot than intended.
     if (center) s.backgroundPosition = "center";
     if (!isGradient) s.backgroundColor = b.bg;
-    return s;
+    return { ...s, ...borderStyle };
   }
-  return { background: b.bg };
+  return { background: b.bg, ...borderStyle };
 }
 // The weekly PNG graphics are plain SVG rasterised to canvas — no CSS custom
 // properties, no CSS background-image — so a CARD_BGS entry's `bg` string
@@ -10515,80 +10519,6 @@ function dailyChallenge(dayKey) {
     Math.random = orig;
   }
 }
-
-/* ---- Mathle — a daily "guess the equation" (Nerdle-style). One
-   8-character equation a day, seeded from the Brunei calendar day;
-   6 guesses, green / present / absent feedback per tile. ADMIN-ONLY
-   for now (Special Modes → Mathle, gated on isAdmin). ------------- */
-const MATHLE_LEN = 8;
-const MATHLE_ROWS = 6;
-const MATHLE_XP = 30 * XP_SCALE; // 2026-09 rescale missed this too
-const MATHLE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "−", "×", "÷", "="];
-
-// LHS value as a non-negative integer, or null.
-function _mathleLhs(lhs) {
-  const r = calcEval(lhs, 0);
-  if (!r || r.error) return null;
-  const v = r.value;
-  return Number.isFinite(v) && Number.isInteger(v) && v >= 0 ? v : null;
-}
-// Is `eq` a legal Mathle answer/guess? 8 chars, one "=", a plain integer
-// on the right, num (op num)+ on the left with no leading-zero numbers,
-// and the two sides equal.
-function mathleValid(eq) {
-  if (typeof eq !== "string" || eq.length !== MATHLE_LEN) return false;
-  if (!/^[0-9+\-−×÷=]+$/.test(eq)) return false;
-  const parts = eq.split("=");
-  if (parts.length !== 2) return false;
-  const [lhs, rhs] = parts;
-  if (!/^\d+$/.test(rhs) || (rhs.length > 1 && rhs[0] === "0")) return false;
-  const toks = lhs.match(/(\d+|[+\-−×÷])/g);
-  if (!toks || toks.join("") !== lhs) return false;
-  let wantNum = true, ops = 0;
-  for (const t of toks) {
-    const isNum = /^\d+$/.test(t);
-    if (isNum !== wantNum) return false;
-    if (isNum && t.length > 1 && t[0] === "0") return false;
-    if (!isNum) ops++;
-    wantNum = !wantNum;
-  }
-  if (wantNum || ops < 1) return false; // ended on an operator / no operator
-  const v = _mathleLhs(lhs);
-  return v !== null && v === Number(rhs);
-}
-// Per-tile feedback with Wordle-style duplicate handling.
-function mathleScore(guess, answer) {
-  const res = Array(MATHLE_LEN).fill("absent");
-  const left = {};
-  for (const c of answer) left[c] = (left[c] || 0) + 1;
-  for (let i = 0; i < MATHLE_LEN; i++) if (guess[i] === answer[i]) { res[i] = "correct"; left[guess[i]]--; }
-  for (let i = 0; i < MATHLE_LEN; i++) if (res[i] === "absent" && left[guess[i]] > 0) { res[i] = "present"; left[guess[i]]--; }
-  return res;
-}
-function dailyMathle(dayKey) {
-  const rnd = _mulberry32(_hashStr("mub-mathle::" + dayKey));
-  const ri = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
-  const build = () => {
-    const form = ri(0, 5);
-    if (form === 0) { const a = ri(10, 80), b = ri(10, 99 - a); return `${a}+${b}=${a + b}`; }
-    if (form === 1) { const a = ri(21, 98), b = ri(10, a - 10); return `${a}−${b}=${a - b}`; }
-    if (form === 2) { const a = ri(1, 9), b = ri(1, 9), c = ri(1, 9); return a + b + c >= 10 ? `${a}+${b}+${c}=${a + b + c}` : null; }
-    if (form === 3) {
-      const a = ri(2, 9), b = ri(2, 9);
-      if (rnd() < 0.5) { const c = ri(1, 9), v = a * b + c; return v >= 10 && v <= 99 ? `${a}×${b}+${c}=${v}` : null; }
-      const c = ri(1, 9), v = a * b - c; return v >= 10 && v <= 99 ? `${a}×${b}−${c}=${v}` : null;
-    }
-    if (form === 4) { const c = ri(2, 9), a = ri(Math.max(10, Math.ceil(100 / c)), Math.min(99, Math.floor(999 / c))), v = a * c; return v >= 100 && v <= 999 ? `${a}×${c}=${v}` : null; }
-    const c = ri(2, 9), b = ri(Math.max(10, Math.ceil(100 / c)), Math.min(99, Math.floor(999 / c))), a = b * c;
-    return a >= 100 && a <= 999 ? `${a}÷${c}=${b}` : null;
-  };
-  for (let i = 0; i < 5000; i++) {
-    const eq = build();
-    if (eq && eq.length === MATHLE_LEN && mathleValid(eq)) return eq;
-  }
-  return "12+34=46";
-}
-const MATHLE_EMOJI = { correct: "🟩", present: "🟪", absent: "⬛" };
 
 /* ---- Weekly focus — one topic a week scores double XP. Deterministic
    from the Monday week key, picked from broadly-accessible topics. --- */
@@ -12091,6 +12021,7 @@ export default function MathsUnlockedBN() {
   const [sfbDone, setSfbDone] = useState(false);
   const [groupOpen, setGroupOpen] = useState(null); // dashboard: which of the 5 topic groups is expanded
   const [modesOpen, setModesOpen] = useState(false); // dashboard: Special Modes overlay
+  const [dailyModesOpen, setDailyModesOpen] = useState(false); // dashboard: Daily Challenge overlay (NumShift + Math Bite)
   // Guided lessons (Special Modes → Learn)
   const [lessonPickerOpen, setLessonPickerOpen] = useState(false);
   const [lessonId, setLessonId] = useState(null);
@@ -12117,14 +12048,6 @@ export default function MathsUnlockedBN() {
   const [dailyPrevRows, setDailyPrevRows] = useState(null); // yesterday's final board (top 10 shown)
   const [dailyPeople, setDailyPeople] = useState({}); // uid -> full profile, so board names open a profile
   const [streakBoard, setStreakBoard] = useState(null); // { topicId, rows: null | [{uid,name,best,full}] }
-  // Mathle (admin-only daily equation game)
-  const [mathleAns, setMathleAns] = useState("");
-  const [mathleGuesses, setMathleGuesses] = useState([]); // [{ eq, score }]
-  const [mathleInput, setMathleInput] = useState("");
-  const [mathleState, setMathleState] = useState("playing"); // playing | win | lose
-  const [mathleMsg, setMathleMsg] = useState("");
-  const [mathleXp, setMathleXp] = useState(null); // { xp, lv } on a win
-  const [mathleShared, setMathleShared] = useState(false);
   const [dailyWrong, setDailyWrong] = useState(0);
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
@@ -12520,7 +12443,7 @@ export default function MathsUnlockedBN() {
   useEffect(() => {
     if (!ready) return;
     const adminOk = teacherActive && teacherAccount && teacherAccount.admin;
-    if (!adminOk && (screen === "admin" || screen === "weeklygfx" || screen === "mathle")) {
+    if (!adminOk && (screen === "admin" || screen === "weeklygfx")) {
       setScreen(profile.name ? "dashboard" : "login");
     }
     // Question Bank itself is open to any licensed teacher (its worksheet
@@ -12547,24 +12470,6 @@ export default function MathsUnlockedBN() {
 
   useEffect(() => { if (screen !== "quiz") setRankJump(null); }, [screen]);
 
-  // Mathle — physical keyboard support while the screen is open.
-  useEffect(() => {
-    if (screen !== "mathle") return;
-    const onKey = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key;
-      if (k === "Enter") { e.preventDefault(); mathleKey("ENTER"); }
-      else if (k === "Backspace") { e.preventDefault(); mathleKey("DEL"); }
-      else if (/^[0-9]$/.test(k)) mathleKey(k);
-      else if (k === "+") mathleKey("+");
-      else if (k === "-") mathleKey("−");
-      else if (k === "*" || k === "x" || k === "X") mathleKey("×");
-      else if (k === "/") mathleKey("÷");
-      else if (k === "=") mathleKey("=");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [screen, mathleState, mathleInput, mathleGuesses, mathleAns]);
   // Drop the saved calculator working whenever the question changes so it
   // only persists across a close/reopen on the *same* question.
   useEffect(() => { calcSessionRef.current = null; }, [question, dailyQ, lessonQuizQ, screen]);
@@ -13391,7 +13296,7 @@ ${aBlocks}
 
   // Daily Challenge — one shared question, ranked by clean-solve time.
   async function startDaily() {
-    setModesOpen(false);
+    setDailyModesOpen(false);
     const key = bruneiDayKey();
     setDailyInput(""); setDailyWrong(0); setDailyBoardRows(null); setDailyBusy(false);
     setDailyPrevRows(null); setDailyXp(null);
@@ -13525,6 +13430,12 @@ ${aBlocks}
       bumpWeek(n, DAILY_SOLVE_XP);
       dxp = DAILY_SOLVE_XP;
       dlv = creditLevelUps(n, before);
+      // Consecutive-day streak, same shape as Mathle's old one: extends only
+      // if the last recorded clear was yesterday, otherwise restarts at 1.
+      const yday = bruneiDayKey(Date.now() - 86400000);
+      n.dailyStreak = (n.dailyLast === yday ? (n.dailyStreak || 0) : 0) + 1;
+      n.dailyBest = Math.max(n.dailyBest || 0, n.dailyStreak);
+      n.dailyLast = dailyQ.dayKey;
     }
     setDailyXp({ xp: dxp, lv: dlv });
     saveProfile(n);
@@ -13549,7 +13460,7 @@ ${aBlocks}
     return -1;
   }
   async function startSlide() {
-    setModesOpen(false);
+    setDailyModesOpen(false);
     const key = bruneiDayKey();
     setSlideBoardRows(null); setSlideXp(null); setSlideHintPos(null); setSlideSolving(false);
     getLeaderboard(true).then((all) => {
@@ -13618,6 +13529,12 @@ ${aBlocks}
       bumpWeek(n, SLIDE_SOLVE_XP);
       dxp = SLIDE_SOLVE_XP;
       dlv = creditLevelUps(n, before);
+      // Consecutive-day streak, same shape as Mathle's old one: extends only
+      // if the last recorded clear was yesterday, otherwise restarts at 1.
+      const yday = bruneiDayKey(Date.now() - 86400000);
+      n.slideStreak = (n.slideLast === yday ? (n.slideStreak || 0) : 0) + 1;
+      n.slideBest = Math.max(n.slideBest || 0, n.slideStreak);
+      n.slideLast = key;
     }
     setSlideXp({ xp: dxp, lv: dlv });
     saveProfile(n);
@@ -13690,79 +13607,6 @@ ${aBlocks}
         .slice(0, 100);
       setStreakBoard({ topicId, rows });
     } catch (e) { setStreakBoard({ topicId, rows: [] }); }
-  }
-
-  // ---- Mathle (admin trial) ----
-  function startMathle() {
-    setModesOpen(false);
-    const day = bruneiDayKey();
-    const ans = dailyMathle(day);
-    setMathleAns(ans);
-    setMathleInput(""); setMathleMsg(""); setMathleShared(false); setMathleXp(null);
-    const run = profile.mathleRun && profile.mathleRun.day === day ? profile.mathleRun : null;
-    if (run) {
-      setMathleGuesses((run.guesses || []).map((eq) => ({ eq, score: mathleScore(eq, ans) })));
-      setMathleState(run.state || "playing");
-    } else {
-      setMathleGuesses([]); setMathleState("playing");
-    }
-    setScreen("mathle");
-  }
-  function mathleKey(k) {
-    if (mathleState !== "playing") return;
-    setMathleMsg("");
-    if (k === "DEL") { setMathleInput((s) => s.slice(0, -1)); return; }
-    if (k === "ENTER") { mathleSubmit(); return; }
-    setMathleInput((s) => (s.length >= MATHLE_LEN ? s : s + k));
-  }
-  function mathleSubmit() {
-    if (mathleState !== "playing") return;
-    const g = mathleInput;
-    if (g.length !== MATHLE_LEN) { setMathleMsg(`Fill all ${MATHLE_LEN} tiles.`); return; }
-    if (!mathleValid(g)) { setMathleMsg("Not a correct equation."); playWrong(); return; }
-    const score = mathleScore(g, mathleAns);
-    const next = [...mathleGuesses, { eq: g, score }];
-    const won = g === mathleAns;
-    const lost = !won && next.length >= MATHLE_ROWS;
-    const state = won ? "win" : lost ? "lose" : "playing";
-    setMathleGuesses(next);
-    setMathleInput("");
-    setMathleState(state);
-    const day = bruneiDayKey();
-    const n = JSON.parse(JSON.stringify(profileRef.current));
-    n.mathleRun = { day, guesses: next.map((x) => x.eq), state };
-    if (state !== "playing" && n.mathleLast !== day) {
-      const yday = bruneiDayKey(Date.now() - 86400000);
-      if (won) {
-        n.mathleStreak = (n.mathleLast === yday ? (n.mathleStreak || 0) : 0) + 1;
-        n.mathleBest = Math.max(n.mathleBest || 0, n.mathleStreak);
-        const before = totalExp(n);
-        n.bonusExp = (n.bonusExp || 0) + MATHLE_XP;
-        bumpWeek(n, MATHLE_XP);
-        const lv = creditLevelUps(n, before);
-        setMathleXp({ xp: MATHLE_XP, lv });
-        if (lv) setTimeout(() => playJingle(true), 300);
-      } else {
-        n.mathleStreak = 0;
-      }
-      n.mathleLast = day;
-    }
-    saveProfile(n);
-    if (won) playJingle(true);
-    else if (lost) playWrong();
-    else playCorrect();
-  }
-  async function shareMathle() {
-    const n = mathleGuesses.length;
-    const head = `Mathle · ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short" })}  ${mathleState === "win" ? n : "X"}/${MATHLE_ROWS}`;
-    const grid = mathleGuesses.map((x) => x.score.map((s) => MATHLE_EMOJI[s]).join("")).join("\n");
-    const streak = profile.mathleStreak ? `\n🔥 ${profile.mathleStreak}` : "";
-    const url = typeof window !== "undefined" ? window.location.origin : "";
-    const text = `${head}\n${grid}${streak}\n${url}`;
-    if (typeof navigator !== "undefined" && navigator.share) {
-      try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
-    }
-    try { await navigator.clipboard.writeText(text); setMathleShared(true); setTimeout(() => setMathleShared(false), 2000); } catch (e) { /* ignore */ }
   }
 
   // Challenge a friend: I play first, my questions + score seed the row.
@@ -16635,20 +16479,28 @@ ${aBlocks}
               );
             })()}
 
-            {/* Special Modes */}
-            <button onClick={() => setModesOpen(true)} className="mub-card" style={{
-              position: "relative",
-              width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 14,
-              border: "1px solid var(--grid)", background: "var(--card)", cursor: "pointer", marginBottom: 16, textAlign: "left",
-            }}>
-              {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--page-bg)", boxSizing: "border-box" }} />}
-              <span style={{ fontSize: 22 }}>🎮</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Special Modes</span>
-                <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)" }}>Mixed Review, Blitz &amp; more</span>
-              </span>
-              <span style={{ fontSize: 13, color: "var(--blue)", fontWeight: 700 }}>Open →</span>
-            </button>
+            {/* Daily Challenge + Special Modes */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <button onClick={() => setDailyModesOpen(true)} className="mub-card" style={{
+                position: "relative", flex: 1, minWidth: 0,
+                display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, padding: "12px 14px", borderRadius: 14,
+                border: "1px solid var(--grid)", background: "var(--card)", cursor: "pointer", textAlign: "left",
+              }}>
+                {(dailyDoneToday === false || slideDoneToday === false) && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--page-bg)", boxSizing: "border-box" }} />}
+                <span style={{ fontSize: 20 }}>📅</span>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--ink)" }}>Daily Challenge</span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>NumShift &amp; Math Bite</span>
+              </button>
+              <button onClick={() => setModesOpen(true)} className="mub-card" style={{
+                position: "relative", flex: 1, minWidth: 0,
+                display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, padding: "12px 14px", borderRadius: 14,
+                border: "1px solid var(--grid)", background: "var(--card)", cursor: "pointer", textAlign: "left",
+              }}>
+                <span style={{ fontSize: 20 }}>🎮</span>
+                <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--ink)" }}>Special Modes</span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>Mixed Review, Blitz &amp; more</span>
+              </button>
+            </div>
 
             {/* This week's focus topic — double XP */}
             {(() => {
@@ -16993,7 +16845,7 @@ ${aBlocks}
                 <ArrowLeft size={14} /> back
               </button>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>📅 Daily Challenge</div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🔢 Math Bite</div>
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
               </div>
 
@@ -17129,7 +16981,7 @@ ${aBlocks}
                 <ArrowLeft size={14} /> back
               </button>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🛝 Daily Slide</div>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🛝 NumShift</div>
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
               </div>
 
@@ -17225,82 +17077,6 @@ ${aBlocks}
                       </Tag>
                     );
                   })}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
-        {/* MATHLE (admin preview) */}
-        {screen === "mathle" && (() => {
-          const done = mathleState !== "playing";
-          const rank = { correct: 3, present: 2, absent: 1 };
-          const keySt = {};
-          for (const gg of mathleGuesses) for (let i = 0; i < MATHLE_LEN; i++) {
-            const c = gg.eq[i], s = gg.score[i];
-            if (!keySt[c] || rank[s] > rank[keySt[c]]) keySt[c] = s;
-          }
-          const tc = (s) => s === "correct" ? { background: "var(--green)", color: "#fff", borderColor: "var(--green)" }
-            : s === "present" ? { background: "#7A5AF8", color: "#fff", borderColor: "#7A5AF8" }
-            : s === "absent" ? { background: "var(--muted)", color: "#fff", borderColor: "var(--muted)" }
-            : { background: "var(--card)", color: "var(--ink)", borderColor: "var(--grid)" };
-          const gridRows = [];
-          for (let r = 0; r < MATHLE_ROWS; r++) {
-            if (r < mathleGuesses.length) gridRows.push({ chars: mathleGuesses[r].eq.split(""), score: mathleGuesses[r].score });
-            else if (r === mathleGuesses.length && !done) gridRows.push({ chars: mathleInput.padEnd(MATHLE_LEN).split("").map((c) => (c === " " ? "" : c)), live: true });
-            else gridRows.push({ chars: Array(MATHLE_LEN).fill("") });
-          }
-          const PX = "'Silkscreen', ui-monospace, monospace";
-          return (
-            <div>
-              <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}><ArrowLeft size={14} /> back</button>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🔢 Mathle</div>
-                <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px" }}>ADMIN PREVIEW</span>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
-              </div>
-              <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", lineHeight: 1.5 }}>
-                Guess the hidden 8-tile equation in {MATHLE_ROWS} tries. 🟩 right tile · 🟪 in the equation, wrong spot · ⬛ not used. × ÷ are worked out before + −. Solving earns +{MATHLE_XP} XP once a day.
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "center", marginBottom: 12 }}>
-                {gridRows.map((row, ri) => (
-                  <div key={ri} style={{ display: "grid", gridTemplateColumns: `repeat(${MATHLE_LEN}, 1fr)`, gap: 5, width: "100%", maxWidth: 344 }}>
-                    {row.chars.map((ch, ci) => {
-                      const s = row.score ? tc(row.score[ci]) : tc(null);
-                      return (
-                        <div key={ci} style={{ aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: PX, fontSize: 17, fontWeight: 700, borderRadius: 6, border: `2px solid ${row.live && ch ? "var(--ink)" : s.borderColor}`, background: s.background, color: s.color }}>{ch}</div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-
-              {mathleMsg && <div style={{ textAlign: "center", fontSize: 12.5, fontWeight: 700, color: "var(--red)", marginBottom: 10 }}>{mathleMsg}</div>}
-
-              {done ? (
-                <div style={{ maxWidth: 344, margin: "0 auto", background: mathleState === "win" ? "color-mix(in srgb, var(--green) 10%, var(--card))" : "var(--card)", border: `1px solid ${mathleState === "win" ? "var(--green)" : "var(--grid)"}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
-                  <div className="mub-display" style={{ fontWeight: 800, fontSize: 17 }}>{mathleState === "win" ? `Solved in ${mathleGuesses.length}/${MATHLE_ROWS}` : "Out of guesses"}</div>
-                  {mathleState === "lose" && <div className="mub-mono" style={{ fontSize: 19, fontWeight: 700, marginTop: 6 }}>{mathleAns}</div>}
-                  {mathleXp && mathleXp.xp > 0 && <div style={{ fontSize: 12.5, color: "var(--green)", fontWeight: 700, marginTop: 4 }}>+{mathleXp.xp} XP{mathleXp.lv ? ` · ⭐ Level ${mathleXp.lv}!` : ""}</div>}
-                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4 }}>🔥 {profile.mathleStreak || 0} day streak{profile.mathleBest ? ` · best ${profile.mathleBest}` : ""}</div>
-                  <button onClick={shareMathle} style={{ marginTop: 12, fontSize: 13, fontWeight: 700, color: "var(--on-accent)", background: "var(--blue)", border: "none", borderRadius: 8, padding: "9px 18px", cursor: "pointer" }}>{mathleShared ? "Copied!" : "Share result"}</button>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>Come back tomorrow for a new one.</div>
-                </div>
-              ) : (
-                <div style={{ maxWidth: 344, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
-                  {[["1", "2", "3", "4", "5"], ["6", "7", "8", "9", "0"], ["+", "−", "×", "÷", "="]].map((kr, ri) => (
-                    <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-                      {kr.map((k) => {
-                        const kc = keySt[k] ? tc(keySt[k]) : { background: "var(--card)", color: "var(--ink)", borderColor: "var(--grid)" };
-                        return <button key={k} onClick={() => mathleKey(k)} style={{ padding: "13px 0", fontFamily: PX, fontSize: 16, fontWeight: 700, borderRadius: 6, border: `1px solid ${kc.borderColor}`, background: kc.background, color: kc.color, cursor: "pointer" }}>{k}</button>;
-                      })}
-                    </div>
-                  ))}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                    <button onClick={() => mathleKey("DEL")} style={{ padding: "13px 0", fontSize: 13, fontWeight: 700, borderRadius: 6, border: "1px solid var(--grid)", background: "var(--card)", color: "var(--ink)", cursor: "pointer" }}>DELETE</button>
-                    <button onClick={() => mathleKey("ENTER")} disabled={mathleInput.length !== MATHLE_LEN} style={{ padding: "13px 0", fontSize: 13, fontWeight: 700, borderRadius: 6, border: "none", background: "var(--green)", color: "var(--on-accent)", cursor: "pointer", opacity: mathleInput.length !== MATHLE_LEN ? 0.5 : 1 }}>ENTER</button>
-                  </div>
                 </div>
               )}
             </div>
@@ -19853,6 +19629,46 @@ ${aBlocks}
         );
       })()}
 
+      {/* Daily Challenge overlay — the two daily games */}
+      {dailyModesOpen && (() => {
+        const go = (fn) => { setDailyModesOpen(false); fn(); };
+        const modeBtn = { width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14, border: "1px solid var(--blue)", background: "var(--card)" };
+        return (
+          <div onClick={() => setDailyModesOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 440, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 18, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span className="mub-display" style={{ fontSize: 17, fontWeight: 700 }}>📅 Daily Challenge</span>
+                <button onClick={() => setDailyModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => go(startSlide)} className="mub-card" style={{ ...modeBtn, position: "relative" }}>
+                  {slideDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                  <span style={{ fontSize: 28 }}>🛝</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>NumShift</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      One sliding puzzle, same for everyone. Fastest clean solve tops the board. +{SLIDE_SOLVE_XP} XP.
+                    </span>
+                  </span>
+                  {(profile.slideStreak || 0) > 0 && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--amber)" }}>🔥 {profile.slideStreak}</span>}
+                </button>
+                <button onClick={() => go(startDaily)} className="mub-card" style={{ ...modeBtn, position: "relative" }}>
+                  {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                  <span style={{ fontSize: 28 }}>🔢</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Math Bite</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      One question, same for everyone. Fastest clean solve tops the board. +{DAILY_SOLVE_XP} XP.
+                    </span>
+                  </span>
+                  {(profile.dailyStreak || 0) > 0 && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--amber)" }}>🔥 {profile.dailyStreak}</span>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Special Modes overlay */}
       {modesOpen && (() => {
         const lvl = levelFromExp(totalExp(profile));
@@ -19873,25 +19689,20 @@ ${aBlocks}
                 <button onClick={() => setModesOpen(false)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button onClick={() => go(startDaily)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
-                  {dailyDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                  <span style={{ fontSize: 28 }}>📅</span>
+                <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
+                  <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
                   <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Challenge</span>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Blitz {blitzOpen ? "" : `🔒 Level ${BLITZ_UNLOCK_LEVEL}`}</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      One question, same for everyone. Fastest clean solve tops the board. +{DAILY_SOLVE_XP} XP.
+                      {blitzOpen ? `${BLITZ_SECONDS} seconds, tap-only questions — answer as many as you can.` : `Unlocks at Level ${BLITZ_UNLOCK_LEVEL}.`}
                     </span>
                   </span>
-                </button>
-                <button onClick={() => go(startSlide)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
-                  {slideDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                  <span style={{ fontSize: 28 }}>🛝</span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Slide</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      One sliding puzzle, same for everyone. Fastest clean solve tops the board. +{SLIDE_SOLVE_XP} XP.
+                  {blitzOpen && (
+                    <span style={{ flexShrink: 0, textAlign: "center" }}>
+                      <span style={{ display: "block", fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Best</span>
+                      <span className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--blue)" }}>{profile.blitzBest || 0}</span>
                     </span>
-                  </span>
+                  )}
                 </button>
                 <button onClick={() => go(startMixed)} disabled={!mixedOpen} className={mixedOpen ? "mub-card" : ""} style={modeBtn(mixedOpen)}>
                   <span style={{ fontSize: 28, filter: mixedOpen ? "none" : "grayscale(1)" }}>🎲</span>
@@ -19911,21 +19722,6 @@ ${aBlocks}
                     </span>
                   </span>
                 </button>
-                <button onClick={() => go(startBlitz)} disabled={!blitzOpen} className={blitzOpen ? "mub-card" : ""} style={modeBtn(blitzOpen)}>
-                  <span style={{ fontSize: 28, filter: blitzOpen ? "none" : "grayscale(1)" }}>⚡</span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Blitz {blitzOpen ? "" : `🔒 Level ${BLITZ_UNLOCK_LEVEL}`}</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
-                      {blitzOpen ? `${BLITZ_SECONDS} seconds, tap-only questions — answer as many as you can.` : `Unlocks at Level ${BLITZ_UNLOCK_LEVEL}.`}
-                    </span>
-                  </span>
-                  {blitzOpen && (
-                    <span style={{ flexShrink: 0, textAlign: "center" }}>
-                      <span style={{ display: "block", fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>Best</span>
-                      <span className="mub-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--blue)" }}>{profile.blitzBest || 0}</span>
-                    </span>
-                  )}
-                </button>
                 <button onClick={() => { setModesOpen(false); setLessonPickerOpen(true); }} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
                   {LESSON_IDS.some((id) => !((profile.lessons || {})[id] || {}).done) && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--blue)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                   <span style={{ fontSize: 28 }}>🎓</span>
@@ -19941,23 +19737,6 @@ ${aBlocks}
                     {LESSON_IDS.filter((id) => ((profile.lessons || {})[id] || {}).done).length}/{LESSON_IDS.length}
                   </span>
                 </button>
-                {isAdmin && (() => {
-                  const r = profile.mathleRun;
-                  const doneToday = r && r.day === bruneiDayKey() && r.state !== "playing";
-                  return (
-                    <button onClick={() => go(startMathle)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
-                      {!doneToday && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                      <span style={{ fontSize: 28 }}>🔢</span>
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
-                          Mathle <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.5, color: "var(--on-accent)", background: "var(--amber)", borderRadius: 4, padding: "1px 5px", verticalAlign: "middle" }}>ADMIN</span>
-                        </span>
-                        <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>Guess today's hidden equation in 6 tries.</span>
-                      </span>
-                      {(profile.mathleStreak || 0) > 0 && <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "var(--amber)" }}>🔥 {profile.mathleStreak}</span>}
-                    </button>
-                  );
-                })()}
               </div>
             </div>
           </div>
