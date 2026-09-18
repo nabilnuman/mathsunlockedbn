@@ -1107,3 +1107,44 @@ as $$
 $$;
 revoke all on function public.get_daily_active_students() from public, anon;
 grant execute on function public.get_daily_active_students() to authenticated;
+
+-- ============================================================
+--  18. ACHIEVEMENT RARITY
+--     How many real (named, non-teacher) students hold each
+--     achievement, out of how many such profiles exist — powers the
+--     "X% of players have this" rarity line on the Achievements
+--     panel. Unlike the admin-only metrics above, this is an
+--     aggregate with no per-student detail exposed, so it's open to
+--     any signed-in user (same spirit as daily_board). An
+--     achievement nobody's ever unlocked just doesn't appear in
+--     `counts` — the client treats a missing id as 0.
+-- ============================================================
+create or replace function public.get_achievement_stats()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with profiles as (
+    select scope, value::jsonb as v
+    from kv_store
+    where key = 'profile'
+      and value is not null and value <> ''
+      and (value::jsonb) ? 'name'
+      and coalesce((value::jsonb ->> 'name'), '') <> ''
+      and scope not in (select uid::text from teachers)
+      and coalesce((value::jsonb ->> 'teacherSignup')::boolean, false) = false
+  ),
+  unlocked as (
+    select p.scope, elem.id
+    from profiles p
+    cross join lateral jsonb_array_elements_text(coalesce(p.v -> 'achievements', '[]'::jsonb)) as elem(id)
+  )
+  select jsonb_build_object(
+    'total', (select count(*) from profiles),
+    'counts', coalesce((select jsonb_object_agg(id, cnt) from (select id, count(*) as cnt from unlocked group by id) t), '{}'::jsonb)
+  )
+$$;
+revoke all on function public.get_achievement_stats() from public, anon;
+grant execute on function public.get_achievement_stats() to authenticated;

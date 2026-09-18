@@ -16,7 +16,7 @@ import {
   sendFeedback, recentFeedback,
   savePushSubscription, deletePushSubscription, notifyPush,
   submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers, adminEngagementMetrics, adminDailyActive,
-  getParentLinkFor,
+  getParentLinkFor, achievementStats,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
 import {
@@ -11563,6 +11563,8 @@ export default function MathsUnlockedBN() {
   const [achOpen, setAchOpen] = useState(false); // Achievements overlay
   const [achFocusId, setAchFocusId] = useState(null); // scrolled/highlighted when jumped to from a locked swatch
   const [achHideDone, setAchHideDone] = useState(false); // hide earned achievements
+  const [achSort, setAchSort] = useState("tier"); // "tier" (grouped, default order) or "rarity" (flat, rarest first)
+  const [achStats, setAchStats] = useState(null); // achievementStats(); null = not loaded, {error} on failure, else {total, counts}
   const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
@@ -15178,6 +15180,19 @@ ${aBlocks}
     const el = document.getElementById(`ach-row-${achFocusId}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [achOpen, achFocusId]);
+  // Rarity stats ("X% of players have this") — fetched once per session,
+  // the first time the panel opens, not on every open.
+  useEffect(() => {
+    if (!achOpen || achStats !== null) return;
+    achievementStats().then(setAchStats);
+  }, [achOpen, achStats]);
+  // Lower % = fewer holders = rarer — same real-world PS/Xbox-style bands.
+  const rarityLabel = (pct) => pct == null ? "" : pct < 5 ? "Ultra Rare" : pct < 10 ? "Very Rare" : pct < 25 ? "Rare" : pct < 50 ? "Uncommon" : "Common";
+  // null = stats not loaded/unavailable (caller falls back to hiding the rarity UI).
+  const achPct = (id) => {
+    if (!achStats || achStats.error || !achStats.total) return null;
+    return Math.round((1000 * (achStats.counts[id] || 0)) / achStats.total) / 10; // one decimal place
+  };
   const myLevel = levelFromExp(totalExp(profile));
   // Level-gated tools (calculator / rough-working / handwriting) stay
   // unlocked after prestige — see hasLevelUnlock.
@@ -19223,67 +19238,111 @@ ${aBlocks}
               </span>
               <button onClick={closeAch} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
             </div>
-            <button onClick={() => setAchHideDone((v) => !v)} style={{
-              fontSize: 12, fontWeight: 600, marginBottom: 14, cursor: "pointer",
-              color: achHideDone ? "var(--on-accent)" : "var(--muted)",
-              background: achHideDone ? "var(--blue)" : "none",
-              border: `1px solid ${achHideDone ? "var(--blue)" : "var(--grid)"}`, borderRadius: 999, padding: "5px 12px",
-            }}>{achHideDone ? "✓ Hiding completed" : "Hide completed"}</button>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {TIERS.map((tier) => {
-                const all = ACHIEVEMENTS.filter((a) => a.tier === tier);
-                const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
-                if (tier === "Diamond" && earned === 0) return null; // whole tier stays hidden until unlocked
-                const items = achHideDone ? all.filter((a) => !(profile.achievements || []).includes(a.id)) : all;
-                if (!items.length) return null;
-                const tc = TIER_COLOR[tier];
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              <button onClick={() => setAchHideDone((v) => !v)} style={{
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+                color: achHideDone ? "var(--on-accent)" : "var(--muted)",
+                background: achHideDone ? "var(--blue)" : "none",
+                border: `1px solid ${achHideDone ? "var(--blue)" : "var(--grid)"}`, borderRadius: 999, padding: "5px 12px",
+              }}>{achHideDone ? "✓ Hiding completed" : "Hide completed"}</button>
+              <div style={{ display: "flex", border: "1px solid var(--grid)", borderRadius: 999, overflow: "hidden", marginLeft: "auto" }}>
+                {[["tier", "Sort: Tier"], ["rarity", "Sort: Rarity"]].map(([k, label]) => (
+                  <button key={k} onClick={() => setAchSort(k)} style={{
+                    fontSize: 11.5, fontWeight: 700, padding: "5px 12px", cursor: "pointer", border: "none",
+                    background: achSort === k ? "var(--blue)" : "none",
+                    color: achSort === k ? "var(--on-accent)" : "var(--muted)",
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const renderAchRow = (a) => {
+                const unlocked = (profile.achievements || []).includes(a.id);
+                const hidden = a.secret && !unlocked;
+                const focused = a.id === achFocusId; // jumped to from a locked swatch — reveal the real name + a themed clue
+                const nameHidden = hidden && !a.showName && !focused;
+                const fresh = unlocked && newAchIds.includes(a.id);
+                const tc = TIER_COLOR[a.tier];
+                const pct = achPct(a.id);
                 return (
-                  <div key={tier}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
-                      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{all.length}</span>
+                  <div key={a.id} id={`ach-row-${a.id}`} style={{
+                    position: "relative",
+                    display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
+                    background: unlocked ? "var(--card)" : "transparent",
+                    border: `1px solid ${focused ? tc : unlocked ? tc : "var(--grid)"}`,
+                    boxShadow: focused ? `0 0 0 2px ${tc}, 0 0 14px ${tc}88` : unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
+                    opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
+                  }}>
+                    {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                    <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700 }}>{nameHidden ? "???" : a.name}</div>
+                      <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
+                        {focused && hidden && a.clue ? (
+                          <>
+                            <div>{a.clue}</div>
+                            {a.hint && <div style={{ marginTop: 2 }}><i>{a.hint}</i></div>}
+                          </>
+                        ) : hidden ? "Secret — revealed when earned" : a.desc}
+                      </div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {items.map((a) => {
-                        const unlocked = (profile.achievements || []).includes(a.id);
-                        const hidden = a.secret && !unlocked;
-                        const focused = a.id === achFocusId; // jumped to from a locked swatch — reveal the real name + a themed clue
-                        const nameHidden = hidden && !a.showName && !focused;
-                        const fresh = unlocked && newAchIds.includes(a.id);
-                        return (
-                          <div key={a.id} id={`ach-row-${a.id}`} style={{
-                            position: "relative",
-                            display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
-                            background: unlocked ? "var(--card)" : "transparent",
-                            border: `1px solid ${focused ? tc : unlocked ? tc : "var(--grid)"}`,
-                            boxShadow: focused ? `0 0 0 2px ${tc}, 0 0 14px ${tc}88` : unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
-                            opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
-                          }}>
-                            {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
-                            <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700 }}>{nameHidden ? "???" : a.name}</div>
-                              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>
-                                {focused && hidden && a.clue ? (
-                                  <>
-                                    <div>{a.clue}</div>
-                                    {a.hint && <div style={{ marginTop: 2 }}><i>{a.hint}</i></div>}
-                                  </>
-                                ) : hidden ? "Secret — revealed when earned" : a.desc}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {pct != null && (
+                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: tc, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}>{rarityLabel(pct)}</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{pct}%</div>
+                      </div>
+                    )}
                   </div>
                 );
-              })}
-              {achHideDone && (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length === ACHIEVEMENTS.length && (
-                <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "8px 0" }}>Every achievement earned. 🎉</div>
-              )}
-            </div>
+              };
+              const diamondEarned = ACHIEVEMENTS.some((a) => a.tier === "Diamond" && (profile.achievements || []).includes(a.id));
+              const allVisible = ACHIEVEMENTS.filter((a) => a.tier !== "Diamond" || diamondEarned);
+              const noneLeft = achHideDone && (profile.achievements || []).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length === ACHIEVEMENTS.length;
+
+              if (achSort === "rarity") {
+                const items = (achHideDone ? allVisible.filter((a) => !(profile.achievements || []).includes(a.id)) : allVisible)
+                  .slice()
+                  .sort((a, b) => {
+                    const pa = achPct(a.id), pb = achPct(b.id);
+                    if (pa == null && pb == null) return 0;
+                    if (pa == null) return 1; // stats still loading — keep at the end rather than block the sort
+                    if (pb == null) return -1;
+                    return pa - pb; // rarest (lowest %) first
+                  });
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {items.map(renderAchRow)}
+                    {noneLeft && <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "8px 0" }}>Every achievement earned. 🎉</div>}
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {TIERS.map((tier) => {
+                    const all = ACHIEVEMENTS.filter((a) => a.tier === tier);
+                    const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
+                    if (tier === "Diamond" && earned === 0) return null; // whole tier stays hidden until unlocked
+                    const items = achHideDone ? all.filter((a) => !(profile.achievements || []).includes(a.id)) : all;
+                    if (!items.length) return null;
+                    const tc = TIER_COLOR[tier];
+                    return (
+                      <div key={tier}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ width: 9, height: 9, background: tc, transform: "rotate(45deg)", display: "inline-block" }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: tc }}>{tier}</span>
+                          <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{earned}/{all.length}</span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {items.map(renderAchRow)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {noneLeft && <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "8px 0" }}>Every achievement earned. 🎉</div>}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
