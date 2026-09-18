@@ -11700,6 +11700,7 @@ export default function MathsUnlockedBN() {
   const [achSort, setAchSort] = useState("tier"); // "tier" (grouped) or "rarity" (flat)
   const [achSortDir, setAchSortDir] = useState("asc"); // "asc": Bronze→Diamond / rarest→most common. Click the active sort again to flip.
   const [achStats, setAchStats] = useState(null); // achievementStats(); null = not loaded, {error} on failure, else {total, counts}
+  const [achViewersId, setAchViewersId] = useState(null); // admin-only: achievement id whose "who's unlocked this" list is open
   const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
   const [hintShown, setHintShown] = useState(false);       // Hint coin spent on this question
@@ -14842,6 +14843,15 @@ ${aBlocks}
     setAdminLoading(false);
   }
 
+  // Admin-only: "who's unlocked this trophy" — reuses the same full-roster
+  // fetch as the Admin -> Students tab (every profile already carries its
+  // own .achievements/.achievedAt), refreshed fresh on each open since
+  // unlocks happen live as students play.
+  async function openAchViewers(achId) {
+    setAchViewersId(achId);
+    await loadStudents();
+  }
+
   async function loadAdminTeachers() {
     setAdminLoading(true);
     try {
@@ -15417,6 +15427,7 @@ ${aBlocks}
   const closeAch = () => {
     setAchOpen(false);
     setAchFocusId(null);
+    setAchViewersId(null);
     if (newAchIds.length) patchProfile((p) => ({ seenAch: [...new Set([...(p.seenAch || []), ...(p.achievements || [])])] }));
   };
   const showAchievement = (id) => { setStylePickerOpen(false); setAchFocusId(id); setAchOpen(true); };
@@ -17612,7 +17623,22 @@ ${aBlocks}
                             <span className="mub-mono" style={{ fontWeight: 800, fontSize: 14, color: "var(--ink)" }}>{p.label}</span>
                             <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginLeft: "auto", flexShrink: 0 }}>[{p.marks} mark{p.marks === 1 ? "" : "s"}]</span>
                           </div>
-                          <div className="mub-mono" style={{ fontSize: 13.5, color: "var(--ink)", marginTop: 3, overflowWrap: "break-word" }}><MathText text={p.prompt} /></div>
+                          {(() => {
+                            // Same "Instruction: expression" split as the single-question
+                            // card (see splitPrompt/exprSize below) — without it, a longer
+                            // "Solve the inequality: ..." part wraps mid-expression instead
+                            // of the instruction and the expression sitting on their own
+                            // lines like a real exam paper.
+                            const { lead, expr } = splitPrompt(p.prompt);
+                            const widestLine = expr ? Math.max(...expr.split("\n").map((ln) => ln.length)) : 0;
+                            const exprSize = expr ? Math.max(12, Math.min(15, Math.round(220 / (widestLine * 0.62)))) : 13.5;
+                            return (
+                              <>
+                                <div className="mub-mono" style={{ fontSize: expr ? 13 : 13.5, color: expr ? "var(--muted)" : "var(--ink)", marginTop: 3, overflowWrap: "break-word" }}><MathText text={lead} /></div>
+                                {expr && <div className="mub-mono" style={{ fontSize: exprSize, fontWeight: 600, marginTop: 3, color: "var(--ink)", overflowWrap: "break-word" }}><MathText text={expr} /></div>}
+                              </>
+                            );
+                          })()}
                         </div>
                         {CLUSTER_VISUAL_KEYS.some((k) => p[k]) && <div style={{ marginBottom: 8 }}><QuestionFigure q={p} /></div>}
                         <input
@@ -19550,13 +19576,13 @@ ${aBlocks}
                 const tc = TIER_COLOR[a.tier];
                 const pct = achPct(a.id);
                 return (
-                  <div key={a.id} id={`ach-row-${a.id}`} style={{
+                  <div key={a.id} id={`ach-row-${a.id}`} onClick={isAdmin ? () => openAchViewers(a.id) : undefined} style={{
                     position: "relative",
                     display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10,
                     background: unlocked ? "var(--card)" : "transparent",
                     border: `1px solid ${focused ? tc : unlocked ? tc : "var(--grid)"}`,
                     boxShadow: focused ? `0 0 0 2px ${tc}, 0 0 14px ${tc}88` : unlocked ? `inset 0 0 0 2px ${tc}22` : "none",
-                    opacity: unlocked ? 1 : 0.45, fontSize: 12.5,
+                    opacity: unlocked ? 1 : 0.45, fontSize: 12.5, cursor: isAdmin ? "pointer" : "default",
                   }}>
                     {fresh && <span style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
                     <span style={{ fontSize: 18, flexShrink: 0, filter: unlocked ? "none" : "grayscale(1)" }}>{hidden ? "❔" : a.icon}</span>
@@ -19632,6 +19658,43 @@ ${aBlocks}
           </div>
         </div>
       )}
+
+      {/* ACHIEVEMENTS — ADMIN: who's unlocked this trophy */}
+      {achViewersId && (() => {
+        const a = ACHIEVEMENTS.find((x) => x.id === achViewersId);
+        if (!a) return null;
+        const tc = TIER_COLOR[a.tier];
+        const holders = students
+          .filter((s) => (s.achievements || []).includes(achViewersId))
+          .map((s) => ({ name: s.name || "—", at: (s.achievedAt || {})[achViewersId] }))
+          .sort((x, y) => (y.at || 0) - (x.at || 0)); // most recently earned first
+        return (
+          <div onClick={() => setAchViewersId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 80, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...vars, width: "100%", maxWidth: 400, background: "var(--card)", color: "var(--ink)", border: "1px solid var(--grid)", borderRadius: 16, padding: 20, boxShadow: "0 14px 44px var(--shadow)", fontFamily: "Inter, sans-serif" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 20 }}>{a.icon}</span>
+                <span className="mub-display" style={{ fontSize: 15.5, fontWeight: 700, flex: 1, minWidth: 0 }}>{a.name}</span>
+                <button onClick={() => setAchViewersId(null)} aria-label="Close" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", display: "flex", padding: 2 }}><XIcon size={16} /></button>
+              </div>
+              <div style={{ fontSize: 11.5, color: tc, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>{a.tier} · {holders.length} student{holders.length === 1 ? "" : "s"}</div>
+              {adminLoading ? (
+                <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "16px 0" }}>Loading roster…</div>
+              ) : holders.length ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 360, overflowY: "auto" }}>
+                  {holders.map((h, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 10px", borderRadius: 8, background: "var(--paper)" }}>
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.name}</span>
+                      <span style={{ color: "var(--muted)", fontSize: 11, flexShrink: 0 }}>{h.at ? new Date(h.at).toLocaleDateString() : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center", padding: "16px 0" }}>No one's unlocked this yet.</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {unlocksOpen && (
         <div onClick={() => setUnlocksOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
