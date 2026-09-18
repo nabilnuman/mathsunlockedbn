@@ -11563,7 +11563,8 @@ export default function MathsUnlockedBN() {
   const [achOpen, setAchOpen] = useState(false); // Achievements overlay
   const [achFocusId, setAchFocusId] = useState(null); // scrolled/highlighted when jumped to from a locked swatch
   const [achHideDone, setAchHideDone] = useState(false); // hide earned achievements
-  const [achSort, setAchSort] = useState("tier"); // "tier" (grouped, default order) or "rarity" (flat, rarest first)
+  const [achSort, setAchSort] = useState("tier"); // "tier" (grouped) or "rarity" (flat)
+  const [achSortDir, setAchSortDir] = useState("asc"); // "asc": Bronze→Diamond / rarest→most common. Click the active sort again to flip.
   const [achStats, setAchStats] = useState(null); // achievementStats(); null = not loaded, {error} on failure, else {total, counts}
   const [inventoryOpen, setInventoryOpen] = useState(false); // Inventory overlay
   const [unlocksOpen, setUnlocksOpen] = useState(false);   // per-level Unlocks screen
@@ -11647,11 +11648,13 @@ export default function MathsUnlockedBN() {
   // generated questions, current index, per-slot answer snapshots, start
   // time); mockProgress mirrors the bits the banner needs to re-render on.
   // mockResult is the finished-run summary shown on the results screen,
-  // including the per-question review list. The run itself is a single-
-  // session practice thing (nothing mid-run is saved if you close the
-  // app), but completing one now does persist: profile.mockBest (per
-  // paper, ratcheted) and the two 100%-only achievements — see
-  // finishMockExam.
+  // including the per-question review list. Completing one persists:
+  // profile.mockBest (per paper, ratcheted) and the two 100%-only
+  // achievements — see finishMockExam. The in-progress run ITSELF is also
+  // persisted (localStorage, see persistMockRun/resumeMockRun) so leaving
+  // the quiz screen or reloading the page doesn't lose or abandon it — the
+  // deadline is real wall-clock time regardless, so the only ways a paper
+  // actually ends are time running out or Finish Paper.
   const mockExamRef = useRef(null);
   const [mockProgress, setMockProgress] = useState(null); // { idx, total, deadline }
   const [mockResult, setMockResult] = useState(null);      // { correct, total, elapsedSec, targetSec, review, ... }
@@ -12255,6 +12258,25 @@ export default function MathsUnlockedBN() {
     try { window.localStorage.setItem("mub_lessonrun", JSON.stringify(r)); } catch (e) { /* ignore */ }
     setLessonRun(r);
   }, [screen, lessonId, lessonPhase, lessonIdx, lessonRight]);
+
+  // Pick a Mock Exam run back up after a reload (accidental refresh, tab
+  // closed and reopened, ...) — waits for the real profile to be loaded
+  // first since resuming can score and save it (finishMockExam) if the
+  // deadline already passed while the student was away. Runs once; a
+  // fresh startMockExam/finishMockExam always leaves this in sync anyway.
+  // Only fires into the normal "dashboard" landing — never hijacks a
+  // parent link, a pending teacher activation, PIN reset, or onboarding,
+  // which route to their own screen on the very same load.
+  useEffect(() => {
+    if (!ready || !profile.name || screen !== "dashboard") return;
+    try {
+      const raw = window.localStorage.getItem("mub_mockrun");
+      if (!raw) return;
+      const run = JSON.parse(raw);
+      if (!run || !MOCK_PAPERS[run.paperKey] || !Array.isArray(run.queue)) { window.localStorage.removeItem("mub_mockrun"); return; }
+      resumeMockRun(run);
+    } catch (e) { try { window.localStorage.removeItem("mub_mockrun"); } catch (e2) { /* ignore */ } }
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Roll over the daily tasks at (local) midnight / on a new day, and the
   // weekly-XP bucket on a new week.
@@ -13870,6 +13892,18 @@ ${aBlocks}
   // once that's been caught, remember the exact question so it follows
   // the student back in instead of re-rolling (see startTopic).
   function leaveQuizUnanswered() {
+    if (mockExamRef.current) {
+      // Mock Exam in progress — "back" only steps out to the dashboard, it
+      // doesn't abandon the paper: the run (and its real wall-clock
+      // deadline) keeps going in the background. mockintro offers a Resume
+      // button back in, and a reload picks it up automatically too (see
+      // the mub_mockrun-restoring mount effect below).
+      commitMockAnswer();
+      persistMockRun();
+      setMockProgress(null);
+      setScreen("dashboard");
+      return;
+    }
     if (!feedback && activeTopic && question) {
       const tid = activeTopic.id;
       const next = JSON.parse(JSON.stringify(profile));
@@ -13878,9 +13912,63 @@ ${aBlocks}
       if (next.dodgeLocked) next.dodgeStuck = { ...(next.dodgeStuck || {}), [tid]: question };
       saveProfile(next);
     }
-    mockExamRef.current = null;
-    setMockProgress(null);
     setScreen("dashboard");
+  }
+
+  // Strip functions (question.check, a structured part's check, ...) out
+  // of a Mock Exam value before it goes into localStorage — everything
+  // else a generator returns (prompt, answer, venn/draw/figure data, ...)
+  // is plain JSON-safe data. A stripped, already-ANSWERED question is
+  // still fine to redisplay read-only after a resume (its check is never
+  // called again — the input's already disabled once feedback exists).
+  function mockSafeClone(obj) {
+    if (obj == null) return obj;
+    try { return JSON.parse(JSON.stringify(obj, (k, v) => (typeof v === "function" ? undefined : v))); }
+    catch (e) { return null; }
+  }
+  // Saves the in-progress run (or clears it once there's nothing to save)
+  // so a reload or a "back to topics" doesn't lose it. Only the queue
+  // (plain topic/type descriptors), the per-slot answer snapshots, and a
+  // cache of already-ANSWERED questions' display content go to storage —
+  // never-visited slots are cheap to regenerate fresh on resume since the
+  // student never saw the original anyway (see resumeMockRun).
+  function persistMockRun() {
+    const mx = mockExamRef.current;
+    try {
+      if (!mx) { window.localStorage.removeItem("mub_mockrun"); return; }
+      window.localStorage.setItem("mub_mockrun", JSON.stringify({
+        paperKey: mx.paper.key, queue: mx.queue, idx: mx.idx, total: mx.total,
+        startedAt: mx.startedAt, deadline: mx.deadline,
+        snapshots: mx.snapshots.map((s) => (s ? mockSafeClone(s) : null)),
+        questionCache: mx.questionCache || {},
+      }));
+    } catch (e) { /* ignore — storage full/unavailable, worst case a refresh loses the run */ }
+  }
+  // Rebuilds mockExamRef from a saved run (a fresh page load, typically).
+  // Unanswered slots regenerate fresh (genMockItem, same as a first start);
+  // answered ones reuse their cached exact content so revisiting one on
+  // resume shows what was actually submitted, not a re-rolled question.
+  // If the deadline's already passed while the student was away, the
+  // paper is over — finish and score it now rather than dangle a stale
+  // "in progress" run, same as if time ran out while they were watching.
+  function resumeMockRun(run) {
+    const paper = MOCK_PAPERS[run.paperKey];
+    if (!paper) { try { window.localStorage.removeItem("mub_mockrun"); } catch (e) { /* ignore */ } return; }
+    const cache = run.questionCache || {};
+    const questions = run.queue.map((item, i) => cache[i] || genMockItem(item, paper));
+    mockExamRef.current = {
+      paper, queue: run.queue, questions, idx: run.idx, total: run.total,
+      snapshots: run.snapshots, questionCache: cache,
+      startedAt: run.startedAt, deadline: run.deadline,
+    };
+    if (run.deadline <= Date.now()) {
+      mockExamRef.current.stoppedAt = run.deadline; // score as of when time actually ran out, not "now"
+      finishMockExam();
+    } else {
+      setMockResult(null);
+      setScreen("quiz");
+      loadMockIndex(Math.max(0, Math.min(run.total - 1, run.idx)));
+    }
   }
 
   // Start a Mock Exam: a fixed-length, timed run across a shuffled queue
@@ -13896,7 +13984,7 @@ ${aBlocks}
     const queue = buildMockQueue(paper);
     const questions = queue.map((item) => genMockItem(item, paper));
     const deadline = Date.now() + paper.minutes * 60 * 1000;
-    mockExamRef.current = { paper, queue, questions, idx: 0, total: queue.length, snapshots: new Array(queue.length).fill(null), startedAt: Date.now(), deadline };
+    mockExamRef.current = { paper, queue, questions, idx: 0, total: queue.length, snapshots: new Array(queue.length).fill(null), questionCache: {}, startedAt: Date.now(), deadline };
     loadMockIndex(0);
     setMockResult(null);
     setScreen("quiz");
@@ -13939,6 +14027,7 @@ ${aBlocks}
     setFeedback(snap ? snap.feedback : null);
     startTimeRef.current = Date.now();
     setMockProgress({ paper: mx.paper, idx: i, total: mx.total, deadline: mx.deadline });
+    persistMockRun();
   }
 
   // Move to a specific slot in the paper (Back / Skip / Next all funnel
@@ -13966,6 +14055,9 @@ ${aBlocks}
     const mx = mockExamRef.current;
     if (!mx || !feedback) return;
     mx.snapshots[mx.idx] = { feedback, answerInput, structParts, multiInput, mcPick, vennPressed, vennPlace, drawPts, drawTri, barBuild };
+    mx.questionCache = mx.questionCache || {};
+    mx.questionCache[mx.idx] = mockSafeClone(mx.questions[mx.idx]); // so a resume shows this exact question, not a re-roll
+    persistMockRun();
   }
 
   // Ends the Mock Exam — commits whatever's currently on screen, then
@@ -14032,6 +14124,7 @@ ${aBlocks}
     mockExamRef.current = null;
     setMockProgress(null);
     setScreen("mockresult");
+    try { window.localStorage.removeItem("mub_mockrun"); } catch (e) { /* ignore */ }
     if (unlocked.length) playJingle(true);
   }
 
@@ -16976,23 +17069,34 @@ ${aBlocks}
             <div className="mub-display" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 10px" }}>Mock Exam</div>
             <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6, marginBottom: 22 }}>
               A full, timed past-paper-style run. Skip a question and come back to it, go back and forth freely,
-              then review every answer once you're done.
+              then review every answer once you're done. Stepping out (or an accidental reload) doesn't lose it —
+              the clock keeps running for real, so pick up right where you left off.
             </div>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
               {[MOCK_PAPERS.p1, MOCK_PAPERS.p2].map((paper) => {
                 const best = (profile.mockBest || {})[paper.key];
+                const runningPaper = mockExamRef.current ? mockExamRef.current.paper.key : null;
+                const inProgress = runningPaper === paper.key;
+                const blocked = runningPaper && !inProgress;
                 return (
-                  <div key={paper.key} style={{ flex: "1 1 210px", maxWidth: 230, background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 14, padding: 18 }}>
+                  <div key={paper.key} style={{ flex: "1 1 210px", maxWidth: 230, background: "var(--card)", border: `1px solid ${inProgress ? "var(--amber)" : "var(--grid)"}`, borderRadius: 14, padding: 18, opacity: blocked ? 0.55 : 1 }}>
                     <div className="mub-display" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{paper.name}</div>
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>
                       {paper.calc ? "Calculator" : "Non-calculator"} · {paper.minutes % 60 === 0 ? `${paper.minutes / 60}h` : `${Math.floor(paper.minutes / 60)}h ${paper.minutes % 60}m`} · {mockQuestionCount(paper)} questions
                     </div>
                     <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>
-                      Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100` : "—"}</strong>
+                      {inProgress
+                        ? <span style={{ color: "var(--amber)", fontWeight: 700 }}>In progress · Q{mockExamRef.current.idx + 1}/{mockExamRef.current.total}</span>
+                        : <>Your best: <strong style={{ color: "var(--ink)" }}>{best != null ? `${best}/100` : "—"}</strong></>}
                     </div>
-                    <button onClick={() => startMockExam(paper.key)} style={{ width: "100%", padding: "10px 0", background: "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                      Start
+                    <button
+                      onClick={() => { if (inProgress) { setMockResult(null); setScreen("quiz"); loadMockIndex(mockExamRef.current.idx); } else { startMockExam(paper.key); } }}
+                      disabled={blocked}
+                      style={{ width: "100%", padding: "10px 0", background: inProgress ? "var(--amber)" : "var(--blue)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: blocked ? "default" : "pointer", opacity: blocked ? 0.6 : 1 }}
+                    >
+                      {inProgress ? "Resume" : "Start"}
                     </button>
+                    {blocked && <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8 }}>Finish or step away from your {MOCK_PAPERS[runningPaper].name} run first.</div>}
                   </div>
                 );
               })}
@@ -17138,7 +17242,6 @@ ${aBlocks}
                 return s + (snap.feedback.marksEarned ?? (snap.feedback.correct ? (q.structured ? q.totalMarks : marksForQuestion(q)) : 0));
               }, 0) : 0;
               const atFirst = !mx || mx.idx === 0, atLast = !mx || mx.idx === mx.total - 1;
-              const answeredHere = mx && mx.snapshots[mx.idx] !== null;
               const btnStyle = (primary) => ({
                 fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 7, cursor: "pointer",
                 border: `1px solid ${primary ? col : "var(--grid)"}`, background: primary ? col : "var(--paper)",
@@ -17156,7 +17259,7 @@ ${aBlocks}
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     <button type="button" disabled={atFirst} onClick={() => goToMockIndex(mx.idx - 1)} style={{ ...btnStyle(false), opacity: atFirst ? 0.4 : 1, cursor: atFirst ? "default" : "pointer" }}>◂ Prev</button>
                     <button type="button" disabled={atLast} onClick={() => goToMockIndex(mx.idx + 1)} style={{ ...btnStyle(false), opacity: atLast ? 0.4 : 1, cursor: atLast ? "default" : "pointer" }}>
-                      {answeredHere ? "Next ▸" : "Skip ▸"}
+                      Next ▸
                     </button>
                     <button type="button" onClick={finishMockExam} style={{ ...btnStyle(true), marginLeft: "auto" }}>Finish paper ✓</button>
                   </div>
@@ -19247,11 +19350,11 @@ ${aBlocks}
               }}>{achHideDone ? "✓ Hiding completed" : "Hide completed"}</button>
               <div style={{ display: "flex", border: "1px solid var(--grid)", borderRadius: 999, overflow: "hidden", marginLeft: "auto" }}>
                 {[["tier", "Sort: Tier"], ["rarity", "Sort: Rarity"]].map(([k, label]) => (
-                  <button key={k} onClick={() => setAchSort(k)} style={{
+                  <button key={k} onClick={() => { if (achSort === k) setAchSortDir((d) => (d === "asc" ? "desc" : "asc")); else { setAchSort(k); setAchSortDir("asc"); } }} style={{
                     fontSize: 11.5, fontWeight: 700, padding: "5px 12px", cursor: "pointer", border: "none",
                     background: achSort === k ? "var(--blue)" : "none",
                     color: achSort === k ? "var(--on-accent)" : "var(--muted)",
-                  }}>{label}</button>
+                  }}>{label}{achSort === k ? (achSortDir === "asc" ? " ▲" : " ▼") : ""}</button>
                 ))}
               </div>
             </div>
@@ -19305,9 +19408,9 @@ ${aBlocks}
                   .sort((a, b) => {
                     const pa = achPct(a.id), pb = achPct(b.id);
                     if (pa == null && pb == null) return 0;
-                    if (pa == null) return 1; // stats still loading — keep at the end rather than block the sort
+                    if (pa == null) return 1; // stats still loading — keep at the end regardless of direction
                     if (pb == null) return -1;
-                    return pa - pb; // rarest (lowest %) first
+                    return achSortDir === "asc" ? pa - pb : pb - pa; // asc = rarest (lowest %) first
                   });
                 return (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -19317,9 +19420,10 @@ ${aBlocks}
                 );
               }
 
+              const tierOrder = achSortDir === "asc" ? TIERS : [...TIERS].reverse(); // asc = Bronze→Diamond
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {TIERS.map((tier) => {
+                  {tierOrder.map((tier) => {
                     const all = ACHIEVEMENTS.filter((a) => a.tier === tier);
                     const earned = all.filter((a) => (profile.achievements || []).includes(a.id)).length;
                     if (tier === "Diamond" && earned === 0) return null; // whole tier stays hidden until unlocked
