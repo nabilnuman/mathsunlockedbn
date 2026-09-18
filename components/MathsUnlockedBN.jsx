@@ -17,8 +17,10 @@ import {
   savePushSubscription, deletePushSubscription, notifyPush,
   submitDailyResult, dailyBoard, myDailyResult, adminStudents, adminTeachers, adminEngagementMetrics, adminDailyActive,
   getParentLinkFor, achievementStats,
+  submitSlideResult, slideBoard, mySlideResult,
 } from "../lib/auth";
 import { recognizeHandwriting, hasInk } from "../lib/handwriting";
+import { isSolved as slideIsSolved, tileMovableAt as slideTileMovableAt, moveTileAt as slideMoveTileAt, dailySlidePuzzle } from "../lib/slidepuzzle";
 import {
   registerServiceWorker, onInstallAvailable, promptInstall, isStandalone, isIos,
   pushConfigured, pushSupported, pushPermission, isPushSubscribed, subscribeToPush, unsubscribeFromPush,
@@ -10446,6 +10448,7 @@ function lockedReason(topic) {
 const DAILY_XP = { showup: 5 * XP_SCALE, task: 40 * XP_SCALE };  // show-up is deliberately tiny — can't reach Level 2 alone
 const MILESTONE_XP = 50 * XP_SCALE;
 const DAILY_SOLVE_XP = 50 * XP_SCALE;  // for clearing the Daily Challenge (once a day)
+const SLIDE_SOLVE_XP = 50 * XP_SCALE;  // for clearing the Daily Slide (once a day)
 
 function todayKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -12125,6 +12128,21 @@ export default function MathsUnlockedBN() {
   const [dailyBusy, setDailyBusy] = useState(false);
   const [dailyDoneToday, setDailyDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
   const [dailyStart, setDailyStart] = useState(0); // anchored start time (ms) of the current daily run
+  // Daily Slide (sliding-tile puzzle)
+  const [slideStartBoard, setSlideStartBoard] = useState(null); // today's fixed scrambled start (for refresh)
+  const [slidePath, setSlidePath] = useState(null); // full [start...GOAL] state sequence, for hints
+  const [slideBoardState, setSlideBoardState] = useState(null); // current board the player sees
+  const [slideFurthest, setSlideFurthest] = useState(0); // furthest index along slidePath ever reached
+  const [slideElapsed, setSlideElapsed] = useState(0);
+  const [slideDone, setSlideDone] = useState(null); // seconds once cleared / already played
+  const [slideXp, setSlideXp] = useState(null);
+  const [slideBoardRows, setSlideBoardRows] = useState(null);
+  const [slidePeople, setSlidePeople] = useState({});
+  const [slideDoneToday, setSlideDoneToday] = useState(null); // null=unknown, false=not done, number=cleared
+  const [slideStart, setSlideStart] = useState(0); // anchored start time (ms) of the current run
+  const [slideHintPos, setSlideHintPos] = useState(null); // board position glowing as "move this one"
+  const [slideHintReadyAt, setSlideHintReadyAt] = useState(0); // ms timestamp hint next becomes usable
+  const slideHintTimerRef = useRef(null);
   const [gfx, setGfx] = useState(null); // admin weekly-schools graphic: null | { rows, activeTotal, weekLabel }
   const [gfxBusy, setGfxBusy] = useState(false);
   const gfxRef = useRef(null);
@@ -12180,6 +12198,19 @@ export default function MathsUnlockedBN() {
     myDailyResult().then((v) => { if (live) setDailyDoneToday(v == null ? false : v); });
     return () => { live = false; };
   }, [ready, profile.name, dailyDoneToday, screen]);
+
+  // Whether today's Daily Slide is still outstanding — same red-dot pattern
+  // as the Daily Challenge check just above.
+  const slideCheckDayRef = useRef(null);
+  useEffect(() => {
+    if (!ready || !profile.name) return;
+    const today = bruneiDayKey();
+    if (slideDoneToday !== null && slideCheckDayRef.current === today) return;
+    slideCheckDayRef.current = today;
+    let live = true;
+    mySlideResult().then((v) => { if (live) setSlideDoneToday(v == null ? false : v); });
+    return () => { live = false; };
+  }, [ready, profile.name, slideDoneToday, screen]);
 
   // Blitz leaderboard — load once whenever the Blitz screen opens.
   useEffect(() => {
@@ -12237,6 +12268,14 @@ export default function MathsUnlockedBN() {
     const t = setInterval(() => setDailyElapsed(Math.max(0, (Date.now() - dailyStart) / 1000)), 100);
     return () => clearInterval(t);
   }, [screen, dailyDone, dailyStart]);
+
+  // Daily Slide live timer — also drives the hint cooldown countdown
+  // (both just read Date.now() against a stored timestamp on every tick).
+  useEffect(() => {
+    if (screen !== "slide" || slideDone != null || !slideStart) return;
+    const t = setInterval(() => setSlideElapsed(Math.max(0, (Date.now() - slideStart) / 1000)), 100);
+    return () => clearInterval(t);
+  }, [screen, slideDone, slideStart]);
 
   async function togglePush() {
     if (pushBusy) return;
@@ -13496,6 +13535,139 @@ ${aBlocks}
     setDailyBoardRows(board);
     if (board.length && board[0].uid && board[0].uid === authUid) celebrate("daily1");
     setDailyBusy(false);
+  }
+
+  // Daily Slide — a sliding-tile number puzzle, one shared board a day
+  // (see lib/slidepuzzle.js), ranked by clean-solve time exactly like
+  // Daily Challenge above.
+  function slidePathIndexOf(board) {
+    if (!slidePath) return -1;
+    const k = board.join("");
+    for (let i = 0; i < slidePath.length; i++) if (slidePath[i].join("") === k) return i;
+    return -1;
+  }
+  async function startSlide() {
+    setModesOpen(false);
+    const key = bruneiDayKey();
+    setSlideBoardRows(null); setSlideXp(null); setSlideHintPos(null);
+    getLeaderboard(true).then((all) => {
+      const m = {};
+      for (const p of all || []) if (p && p.uid) m[p.uid] = p;
+      setSlidePeople(m);
+    });
+    const { start, path } = dailySlidePuzzle("mub-slide::" + key);
+    setSlideStartBoard(start);
+    setSlidePath(path);
+    // Same profile-anchoring trick as Daily Challenge: startedAt (and the
+    // in-progress board) live in the profile so leaving/reloading can't
+    // reset the clock or lose the player's place in the puzzle. Set
+    // synchronously (before the server round-trip below) so the board
+    // renders immediately, exactly like Daily Challenge's question card.
+    const run = profile.slideRun && profile.slideRun.day === key ? profile.slideRun : null;
+    const alreadyCleared = run && typeof run.cleared === "number" ? run.cleared : null;
+    if (alreadyCleared != null) {
+      setSlideDone(alreadyCleared);
+      setSlideDoneToday(alreadyCleared);
+      setSlideElapsed(alreadyCleared);
+      setSlideStart(0);
+      setSlideBoardState(run.board || path[path.length - 1]);
+      setSlideFurthest(path.length - 1);
+    } else {
+      setSlideDone(null);
+      const anchored = run || { day: key, startedAt: Date.now(), board: start, furthest: 0 };
+      if (!run) patchProfile(() => ({ slideRun: anchored }));
+      setSlideStart(anchored.startedAt);
+      setSlideElapsed(Math.max(0, (Date.now() - anchored.startedAt) / 1000));
+      setSlideBoardState(anchored.board || start);
+      setSlideFurthest(anchored.furthest || 0);
+      setSlideHintReadyAt(anchored.startedAt + 5000);
+    }
+    setScreen("slide");
+    slideBoard().then(setSlideBoardRows);
+    // The server is the source of truth on whether today's already been
+    // cleared (covers a solve from another device) — flips the screen to
+    // the cleared panel once this resolves, if the local guess above
+    // (profile.slideRun) said otherwise.
+    const server = await mySlideResult();
+    if (server != null && alreadyCleared == null) {
+      setSlideDone(server);
+      setSlideDoneToday(server);
+      setSlideElapsed(server);
+      setSlideStart(0);
+      setSlideFurthest(path.length - 1);
+      patchProfile((p) => ({ slideRun: { ...(p.slideRun || {}), day: key, cleared: server, paid: true } }));
+    } else if (server == null && alreadyCleared == null) {
+      setSlideDoneToday(false);
+    }
+  }
+  async function finishSlide(board) {
+    const run = profileRef.current.slideRun;
+    const key = bruneiDayKey();
+    const startedAt = run && run.day === key ? run.startedAt : Date.now();
+    const secs = Math.max(0.1, (Date.now() - startedAt) / 1000);
+    const alreadyPaid = run && run.day === key && run.paid;
+    const n = JSON.parse(JSON.stringify(profileRef.current));
+    const before = totalExp(n);
+    n.slideRun = { day: key, startedAt, cleared: secs, paid: true, board, furthest: slidePath.length - 1 };
+    let dxp = 0, dlv = null;
+    if (!alreadyPaid) {
+      n.bonusExp = (n.bonusExp || 0) + SLIDE_SOLVE_XP;
+      bumpWeek(n, SLIDE_SOLVE_XP);
+      dxp = SLIDE_SOLVE_XP;
+      dlv = creditLevelUps(n, before);
+    }
+    setSlideXp({ xp: dxp, lv: dlv });
+    saveProfile(n);
+    if (dlv) setTimeout(() => playJingle(true), 260);
+    setSlideDone(secs);
+    setSlideDoneToday(secs);
+    setSlideElapsed(secs);
+    await submitSlideResult(secs, profile.name);
+    const rows = await slideBoard();
+    setSlideBoardRows(rows);
+  }
+  function slideTap(pos) {
+    if (slideDone != null || !slideBoardState) return;
+    if (slideTileMovableAt(slideBoardState, pos) === -1) return;
+    playCorrect();
+    const next = slideMoveTileAt(slideBoardState, pos);
+    setSlideBoardState(next);
+    setSlideHintPos(null);
+    const idx = slidePathIndexOf(next);
+    const furthest = Math.max(slideFurthest, idx);
+    setSlideFurthest(furthest);
+    patchProfile((p) => ({ slideRun: { ...(p.slideRun || {}), day: bruneiDayKey(), board: next, furthest } }));
+    if (slideIsSolved(next)) finishSlide(next);
+  }
+  function slideHint() {
+    if (Date.now() < slideHintReadyAt || !slidePath || !slideBoardState) return;
+    setSlideHintReadyAt(Date.now() + 5000);
+    const idx = slidePathIndexOf(slideBoardState);
+    if (idx !== slideFurthest) {
+      // Strayed off the best point reached — snap back to it.
+      const back = slidePath[slideFurthest];
+      setSlideBoardState(back);
+      patchProfile((p) => ({ slideRun: { ...(p.slideRun || {}), day: bruneiDayKey(), board: back, furthest: slideFurthest } }));
+      return;
+    }
+    if (slideFurthest + 1 >= slidePath.length) return; // already solved
+    const cur = slideBoardState, next = slidePath[slideFurthest + 1];
+    let pos = -1;
+    for (let k = 0; k < 9; k++) if (cur[k] !== next[k] && cur[k] !== 0) pos = k;
+    setSlideHintPos(pos);
+    clearTimeout(slideHintTimerRef.current);
+    slideHintTimerRef.current = setTimeout(() => setSlideHintPos(null), 2500);
+  }
+  function slideRefresh() {
+    if (slideDone != null || !slideStartBoard) return;
+    const now = Date.now();
+    setSlideBoardState(slideStartBoard);
+    setSlideFurthest(0);
+    setSlideHintPos(null);
+    setSlideHintReadyAt(now + 5000);
+    setSlideStart(now);
+    setSlideElapsed(0);
+    patchProfile(() => ({ slideRun: { day: bruneiDayKey(), startedAt: now, board: slideStartBoard, furthest: 0 } }));
   }
 
   // Per-topic "Top Streaks" board — longest correct run in one topic.
@@ -15761,6 +15933,9 @@ ${aBlocks}
         .mub-wobble { animation: wobble 0.35s ease-in-out; }
         .mub-rankpop { animation: rankPop 0.55s cubic-bezier(.2,.9,.3,1.25), rankGlow 0.7s ease-out 0.2s; }
         .mub-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        @keyframes hintPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 55%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--blue) 25%, transparent); } }
+        .mub-hint-pulse { animation: hintPulse 1s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .mub-hint-pulse { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 40%, transparent); } }
         .mub-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px var(--shadow); }
         .mub-grid input, .mub-grid textarea, .mub-grid select { color: var(--ink); background: var(--card); }
         .mub-grid input::placeholder, .mub-grid textarea::placeholder { color: var(--muted); }
@@ -16926,6 +17101,101 @@ ${aBlocks}
                       );
                     })}
                   </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* DAILY SLIDE */}
+        {screen === "slide" && slideBoardState && (() => {
+          const rows = slideBoardRows || [];
+          const myRank = rows.findIndex((r) => r.uid === authUid);
+          const hintWait = Math.max(0, Math.ceil((slideHintReadyAt - Date.now()) / 1000));
+          return (
+            <div>
+              <button onClick={() => setScreen("dashboard")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--muted)", fontSize: 13, cursor: "pointer", marginBottom: 14 }}>
+                <ArrowLeft size={14} /> back
+              </button>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <div className="mub-display" style={{ fontSize: 20, fontWeight: 700 }}>🧩 Daily Slide</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</div>
+              </div>
+
+              {slideDone == null ? (
+                <>
+                  <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 14px", lineHeight: 1.5 }}>
+                    Slide the tiles back into order, 1 to 8 — the same board for every player today. Solving it earns +{SLIDE_SOLVE_XP} XP. Stuck? Hint is free and ready every 5 seconds.
+                  </div>
+                  <div style={{ border: "1px solid var(--grid)", borderRadius: 16, padding: 18, background: "var(--card)", marginBottom: 18 }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                      <span className="mub-mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--blue)" }}>{slideElapsed.toFixed(1)}s</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, maxWidth: 300, margin: "0 auto 16px" }}>
+                      {slideBoardState.map((val, pos) => (
+                        <button key={pos} onClick={() => slideTap(pos)} disabled={val === 0}
+                          className={`mub-display${slideHintPos === pos ? " mub-hint-pulse" : ""}`}
+                          style={{
+                            aspectRatio: "1 / 1", display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 32, fontWeight: 800, borderRadius: 14,
+                            border: `1px solid ${slideHintPos === pos ? "var(--blue)" : "var(--grid)"}`,
+                            background: val === 0 ? "var(--locked)" : "var(--card)",
+                            color: "var(--ink)", cursor: val === 0 ? "default" : "pointer",
+                            boxShadow: val === 0 ? "none" : "0 1px 4px var(--shadow-soft)",
+                          }}>
+                          {val !== 0 ? val : ""}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={slideHint} disabled={hintWait > 0}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--ink)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 12px", cursor: hintWait > 0 ? "not-allowed" : "pointer", opacity: hintWait > 0 ? 0.6 : 1 }}>
+                        💡 {hintWait > 0 ? `Hint (${hintWait}s)` : "Hint"}
+                      </button>
+                      <button onClick={slideRefresh}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, fontWeight: 700, color: "var(--muted)", background: "var(--card)", border: "1px solid var(--grid)", borderRadius: 10, padding: "10px 14px", cursor: "pointer" }}>
+                        <RotateCcw size={14} /> Restart
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ background: "color-mix(in srgb, var(--green) 10%, var(--card))", border: "1px solid var(--green)", borderRadius: 14, padding: 16, margin: "10px 0 16px" }}>
+                  <div className="mub-display" style={{ fontWeight: 800, fontSize: 17 }}>✓ Cleared in {slideDone.toFixed(1)}s</div>
+                  {slideXp && slideXp.xp > 0 && (
+                    <div style={{ fontSize: 12.5, color: "var(--green)", fontWeight: 700, marginTop: 3 }}>
+                      +{slideXp.xp} XP{slideXp.lv ? ` · ⭐ Level ${slideXp.lv}!` : ""}
+                    </div>
+                  )}
+                  {myRank >= 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>#{myRank + 1} of {rows.length} today{myRank === 0 ? " — fastest so far 🏆" : ""}</div>}
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Today's board · fastest first</div>
+                <button onClick={() => slideBoard().then(setSlideBoardRows)} style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><RotateCcw size={12} /> refresh</button>
+              </div>
+              {slideBoardRows == null ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+              ) : rows.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>{slideDone == null ? "Nobody's cleared it yet today — be the first." : "You're first on the board. Nice."}</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {rows.slice(0, 100).map((r, i) => {
+                    const mine = r.uid === authUid;
+                    const full = !mine && r.uid ? slidePeople[r.uid] : null;
+                    const Tag = full ? "button" : "div";
+                    return (
+                      <Tag key={r.uid || i}
+                        onClick={full ? () => { setRosterProfile(full); markMilestone("friendview"); } : undefined}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, width: "100%", textAlign: "left", cursor: full ? "pointer" : "default", color: "var(--ink)",
+                        background: mine ? "color-mix(in srgb, var(--blue) 12%, var(--card))" : "var(--card)", border: `1px solid ${mine ? "var(--blue)" : "var(--grid)"}` }}>
+                        <span className="mub-display" style={{ fontSize: 14, fontWeight: 700, minWidth: 24, color: i < 3 ? ["#D4A017", "#9AA3AE", "#B07437"][i] : "var(--muted)" }}>#{i + 1}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: full ? "underline" : "none", textDecorationColor: "var(--grid)", textUnderlineOffset: 2 }}>{r.name || "Someone"}{mine ? " · you" : ""}</span>
+                        <span className="mub-mono" style={{ fontWeight: 700 }}>{Number(r.seconds).toFixed(1)}s</span>
+                      </Tag>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -19581,6 +19851,16 @@ ${aBlocks}
                     <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Challenge</span>
                     <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
                       One question, same for everyone. Fastest clean solve tops the board. +{DAILY_SOLVE_XP} XP.
+                    </span>
+                  </span>
+                </button>
+                <button onClick={() => go(startSlide)} className="mub-card" style={{ ...modeBtn(true), position: "relative" }}>
+                  {slideDoneToday === false && <span style={{ position: "absolute", top: -4, right: -4, width: 11, height: 11, borderRadius: "50%", background: "var(--red)", border: "2px solid var(--card)", boxSizing: "border-box" }} />}
+                  <span style={{ fontSize: 28 }}>🧩</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ display: "block", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>Daily Slide</span>
+                    <span style={{ display: "block", fontSize: 12, color: "var(--muted)" }}>
+                      One sliding puzzle, same for everyone. Fastest clean solve tops the board. +{SLIDE_SOLVE_XP} XP.
                     </span>
                   </span>
                 </button>

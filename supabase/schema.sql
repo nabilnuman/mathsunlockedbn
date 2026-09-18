@@ -1148,3 +1148,57 @@ as $$
 $$;
 revoke all on function public.get_achievement_stats() from public, anon;
 grant execute on function public.get_achievement_stats() to authenticated;
+
+-- ============================================================
+--  19. DAILY SLIDE
+--     A sliding-tile number puzzle, one board a day, same for
+--     everyone (the client seeds the scramble from the Brunei
+--     calendar day — see lib/slidepuzzle.js). One result per
+--     player per day; the time is final. Same shape as §13
+--     Daily Challenge, just a different game.
+-- ============================================================
+create table if not exists slide_results (
+  day date not null default ((now() at time zone 'Asia/Brunei')::date),
+  uid uuid not null default auth.uid(),
+  name text,
+  seconds numeric not null check (seconds > 0 and seconds < 86400),
+  created_at timestamptz not null default now(),
+  primary key (day, uid)
+);
+alter table slide_results enable row level security;
+
+-- insert your own row, for today only, once (PK blocks a second)
+drop policy if exists sr_insert on slide_results;
+create policy sr_insert on slide_results for insert to authenticated
+  with check (uid = auth.uid()
+              and day = (now() at time zone 'Asia/Brunei')::date
+              and seconds > 0);
+
+-- read your own rows directly; the board comes from slide_board()
+drop policy if exists sr_own on slide_results;
+create policy sr_own on slide_results for select to authenticated
+  using (uid = auth.uid());
+
+create or replace function public.slide_board(d date default null)
+returns setof jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object('uid', r.uid, 'name', coalesce(r.name, ''), 'seconds', r.seconds)
+  from slide_results r
+  where r.day = coalesce(d, (now() at time zone 'Asia/Brunei')::date)
+  order by r.seconds asc, r.created_at asc
+  limit 300
+$$;
+revoke all on function public.slide_board(date) from public, anon;
+grant execute on function public.slide_board(date) to authenticated;
+
+create or replace function public.my_slide()
+returns numeric
+language sql stable security definer set search_path = public
+as $$
+  select seconds from slide_results
+  where uid = auth.uid() and day = (now() at time zone 'Asia/Brunei')::date
+  limit 1
+$$;
+revoke all on function public.my_slide() from public, anon;
+grant execute on function public.my_slide() to authenticated;
